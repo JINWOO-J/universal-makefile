@@ -1,0 +1,241 @@
+# ================================================================
+# Project Configuration Template
+# Copy this file to project.mk and customize for your project
+# ================================================================
+
+# ================================================================
+# 기본 프로젝트 정보 (필수)
+# ================================================================
+
+# Docker 레지스트리 및 프로젝트 정보
+REPO_HUB = mycompany
+NAME = myproject
+VERSION = v1.0.0
+
+# ================================================================
+# Git 워크플로우 설정
+# ================================================================
+
+# 기본 브랜치 설정
+MAIN_BRANCH = main
+DEVELOP_BRANCH = develop
+
+# 또는 전통적인 명명 사용
+# MAIN_BRANCH = master
+# DEVELOP_BRANCH = devel
+
+# ================================================================
+# Docker 설정
+# ================================================================
+
+# Dockerfile 경로
+DOCKERFILE_PATH = Dockerfile
+# 또는 특정 경로: docker/Dockerfile.app
+
+# Docker 빌드 인자 (선택사항)
+DOCKER_BUILD_ARGS = --build-arg NODE_ENV=production
+# 예시: DOCKER_BUILD_ARGS = --build-arg VERSION=$(VERSION) --build-arg BUILD_DATE=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Docker 레지스트리 설정 (선택사항)
+DOCKER_REGISTRY_URL = 
+DOCKER_REGISTRY_USER = 
+# 비밀번호는 환경변수로: export DOCKER_REGISTRY_PASS=your_password
+
+# ================================================================
+# Docker Compose 설정
+# ================================================================
+
+# 기본 Compose 파일
+COMPOSE_FILE = docker-compose.yml
+
+# 환경별 Compose 파일
+DEV_COMPOSE_FILE = docker-compose.dev.yml
+PROD_COMPOSE_FILE = docker-compose.prod.yml
+
+# Compose 프로젝트 이름 (선택사항)
+# COMPOSE_PROJECT_NAME = $(NAME)
+
+# ================================================================
+# 버전 관리 설정
+# ================================================================
+
+# 버전 업데이트 도구 (auto-detect, yarn, npm, poetry, cargo, go, generic)
+VERSION_UPDATE_TOOL = auto-detect
+
+# 버전 파일 경로 (버전 정보가 저장된 파일)
+VERSION_FILE = package.json
+# 다른 예시: VERSION_FILE = pyproject.toml, VERSION_FILE = Cargo.toml, VERSION_FILE = VERSION
+
+# ================================================================
+# 환경 설정
+# ================================================================
+
+# 기본 환경
+ENV = development
+
+# 환경별 설정 파일이 있는 경우 (선택사항)
+# DEVELOPMENT_CONFIG = config/development.yml
+# PRODUCTION_CONFIG = config/production.yml
+
+# ================================================================
+# 빌드 및 테스트 설정
+# ================================================================
+
+# 테스트 명령어 (선택사항)
+TEST_COMMAND = npm test
+# 다른 예시: TEST_COMMAND = pytest, TEST_COMMAND = cargo test, TEST_COMMAND = go test ./...
+
+# 린트 명령어 (선택사항)
+LINT_COMMAND = npm run lint
+# 다른 예시: LINT_COMMAND = flake8, LINT_COMMAND = cargo clippy, LINT_COMMAND = golangci-lint run
+
+# 빌드 아티팩트 디렉토리 (정리할 때 사용)
+BUILD_DIR = dist
+# 다른 예시: BUILD_DIR = build, BUILD_DIR = target/release
+
+# ================================================================
+# 배포 설정
+# ================================================================
+
+# 배포 대상 (선택사항)
+DEPLOY_TARGET = production
+# 또는: DEPLOY_TARGET = staging, DEPLOY_TARGET = kubernetes
+
+# Kubernetes 네임스페이스 (선택사항)
+# K8S_NAMESPACE = default
+
+# AWS 설정 (선택사항)
+# AWS_REGION = us-west-2
+# AWS_ACCOUNT_ID = 123456789012
+
+# ================================================================
+# 프로젝트별 커스텀 타겟들
+# ================================================================
+
+# 예시: 커스텀 배포 타겟
+custom-deploy: ## 🚀 Deploy to custom infrastructure
+	@echo "Deploying $(NAME) to custom infrastructure..."
+	@# 여기에 배포 로직 추가
+	@# 예: kubectl apply -f k8s/
+	@# 예: aws ecs update-service --service $(NAME) --force-new-deployment
+	@$(call success, "Custom deployment completed")
+
+# 예시: 프로젝트별 테스트
+custom-test: ## 🧪 Run project-specific tests
+	@echo "Running custom tests for $(NAME)..."
+	@# 여기에 테스트 로직 추가
+	@# 예: npm run test:e2e
+	@# 예: pytest tests/integration/
+	@$(call success, "Custom tests completed")
+
+# 예시: 데이터베이스 마이그레이션
+db-migrate: ## 🗄️ Run database migrations
+	@echo "Running database migrations..."
+	@# 여기에 마이그레이션 로직 추가
+	@# 예: npm run migrate
+	@# 예: python manage.py migrate
+	@$(call success, "Database migrations completed")
+
+# 예시: 정적 파일 처리
+build-assets: ## 🎨 Build static assets
+	@echo "Building static assets..."
+	@# 여기에 에셋 빌드 로직 추가
+	@# 예: npm run build
+	@# 예: yarn build
+	@$(call success, "Static assets built")
+
+# 예시: 보안 스캔
+security-audit: ## 🔒 Run security audit
+	@echo "Running security audit..."
+	@# 여기에 보안 감사 로직 추가
+	@# 예: npm audit
+	@# 예: cargo audit
+	@# 예: safety check
+	@$(call success, "Security audit completed")
+
+# 예시: 성능 테스트
+performance-test: ## ⚡ Run performance tests
+	@echo "Running performance tests..."
+	@# 여기에 성능 테스트 로직 추가
+	@# 예: artillery run artillery.yml
+	@# 예: k6 run performance-test.js
+	@$(call success, "Performance tests completed")
+
+# ================================================================
+# 환경별 커스터마이징 (선택사항)
+# ================================================================
+
+# 개발 환경에서만 실행되는 타겟
+ifeq ($(ENV),development)
+dev-seed: ## 🌱 Seed development database
+	@echo "Seeding development database..."
+	@# 개발 데이터 시딩 로직
+	@$(call success, "Development database seeded")
+endif
+
+# 프로덕션 환경에서만 실행되는 타겟
+ifeq ($(ENV),production)
+prod-backup: ## 💾 Backup production data
+	@echo "Backing up production data..."
+	@# 프로덕션 백업 로직
+	@$(call success, "Production backup completed")
+endif
+
+# ================================================================
+# 프로젝트별 변수 재정의 (고급)
+# ================================================================
+
+# Docker 빌드 옵션 확장
+# DOCKER_BUILD_OPTION += --build-arg CUSTOM_ARG=value
+
+# 색상 커스터마이징 (선택사항)
+# CUSTOM_COLOR := $(shell tput setaf 5 2>/dev/null || echo "")
+
+# 커스텀 로깅 함수 (선택사항)
+# define custom_log
+# @if [ -n "$(CUSTOM_COLOR)" ]; then \
+#     echo "$(CUSTOM_COLOR)🎯 $(1)$(RESET)"; \
+# else \
+#     echo "CUSTOM: $(1)"; \
+# fi
+# endef
+
+# ================================================================
+# 주석 처리된 고급 예시들
+# ================================================================
+
+# 조건부 설정 예시
+# ifeq ($(shell uname -s),Darwin)
+#     # macOS 특정 설정
+#     SED = sed -E -i ''
+# else
+#     # Linux 특정 설정
+#     SED = sed -i
+# endif
+
+# 동적 변수 생성 예시
+# BUILD_TIME := $(shell date -u +%Y%m%d_%H%M%S)
+# IMAGE_TAG_WITH_TIME := $(REPO_HUB)/$(NAME):$(VERSION)-$(BUILD_TIME)
+
+# 외부 설정 파일 로드 예시
+# ifneq (,$(wildcard config.local.mk))
+#     include config.local.mk
+# endif
+
+# ================================================================
+# 템플릿 사용법
+# ================================================================
+
+# 1. 이 파일을 project.mk로 복사:
+#    cp templates/project.mk.template project.mk
+#
+# 2. 프로젝트에 맞게 기본 정보 수정:
+#    - REPO_HUB: Docker 레지스트리 조직/사용자명
+#    - NAME: 프로젝트명
+#    - VERSION: 초기 버전
+#
+# 3. 필요에 따라 커스텀 타겟 추가
+#
+# 4. 사용하지 않는 섹션은 삭제하거나 주석 처리
+#
+# 5. make help 명령으로 사용 가능한 타겟 확인

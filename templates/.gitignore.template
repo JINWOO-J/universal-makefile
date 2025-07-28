@@ -1,0 +1,435 @@
+# ================================================================
+# Universal Makefile System - .gitignore Template
+# ================================================================
+
+# ================================================================
+# Universal Makefile System Files
+# ================================================================
+
+# 로컬 개발자별 설정 (공유하지 않음)
+.project.local.mk
+
+# 임시 버전 파일
+.NEW_VERSION.tmp
+
+# 환경 파일들
+.env
+.env.local
+.env.*.local
+environments/*.local.mk
+
+# 버전 정보 파일 (필요시 주석 해제)
+# version-info.json
+
+# ================================================================
+# 운영 체제별 파일들
+# ================================================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.nfs*
+
+# ================================================================
+# 에디터 및 IDE 파일들
+# ================================================================
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Eclipse
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.recommenders
+.project
+.classpath
+
+# ================================================================
+# 빌드 및 패키지 관리자 파일들
+# ================================================================
+
+# 일반적인 빌드 디렉토리
+build/
+dist/
+out/
+target/
+.build/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python - 테스트 및 커버리지
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Java
+*.class
+*.log
+*.ctxt
+.mtj.tmp/
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Gradle
+.gradle
+**/build/
+!src/**/build/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+.gradletasknamecache
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# C/C++
+*.o
+*.a
+*.so
+*.dylib
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# Ruby
+*.gem
+*.rbc
+/.config
+/coverage/
+/InstalledFiles
+/pkg/
+/spec/reports/
+/spec/examples.txt
+/test/tmp/
+/test/version_tmp/
+/tmp/
+.bundle/
+vendor/bundle
+
+# PHP
+/vendor/
+composer.phar
+composer.lock
+.env.local
+.env.local.php
+.env.*.local
+
+# ================================================================
+# 데이터베이스 파일들
+# ================================================================
+
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# ================================================================
+# 로그 및 임시 파일들
+# ================================================================
+
+# 로그 파일들
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# 임시 파일들
+*.tmp
+*.temp
+*.bak
+*.backup
+*~
+
+# ================================================================
+# Docker 관련 (선택사항)
+# ================================================================
+
+# Docker Compose override 파일 (로컬 개발용)
+docker-compose.override.yml
+
+# Docker 볼륨 데이터 (로컬 개발 시)
+# .docker/
+# docker-data/
+
+# ================================================================
+# 테스트 관련
+# ================================================================
+
+# 테스트 결과
+test-results/
+coverage/
+.nyc_output/
+junit.xml
+*.cover
+*.lcov
+
+# ================================================================
+# 보안 관련 (중요!)
+# ================================================================
+
+# 인증서 및 키 파일들
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+
+# AWS 인증 정보
+.aws/
+aws-credentials
+
+# SSH 키
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# 기타 민감한 정보
+secrets/
+.secrets
+credentials.json
+service-account.json
+
+# ================================================================
+# 백업 파일들
+# ================================================================
+
+backups/
+*.backup
+*.bak
+
+# ================================================================
+# 캐시 파일들
+# ================================================================
+
+.cache/
+*.cache
+
+# ================================================================
+# 문서 생성 파일들
+# ================================================================
+
+# Sphinx documentation
+docs/_build/
+
+# MkDocs
+site/
+
+# Jekyll
+_site/
+.sass-cache/
+.jekyll-cache/
+.jekyll-metadata
+
+# ================================================================
+# 프로젝트별 커스터마이징 영역
+# ================================================================
+
+# 여기에 프로젝트별 무시할 파일들을 추가하세요
+# 예시:
+# config/local.yml
+# uploads/
+# storage/
+
+# ================================================================
+# 설정 예시들 (필요시 주석 해제)
+# ================================================================
+
+# 특정 환경의 설정 파일들
+# config/development.local.yml
+# config/production.local.yml
+# config/staging.local.yml
+
+# 로컬 데이터 폴더들
+# data/
+# uploads/
+# storage/app/
+# public/storage
+
+# 개발용 스크립트들
+# scripts/local/
+# bin/local/
+
+# 테스트 데이터
+# fixtures/local/
+# test-data/
+
+# ================================================================
+# 네거티브 패턴 (특정 파일들은 추적하고 싶을 때)
+# ================================================================
+
+# 예시: dist 폴더는 무시하지만 특정 파일은 포함
+# !dist/important-file.js
+
+# 예시: node_modules는 무시하지만 특정 모듈은 포함
+# !node_modules/custom-module/
+
+# ================================================================
+# 사용법 안내
+# ================================================================
+
+# 이 템플릿을 프로젝트에 적용하려면:
+# 1. cp templates/.gitignore.template .gitignore
+# 2. 프로젝트에 맞지 않는 섹션 제거
+# 3. 프로젝트별 파일들을 "프로젝트별 커스터마이징 영역"에 추가
+# 4. git add .gitignore && git commit -m "Add .gitignore"

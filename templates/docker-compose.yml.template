@@ -1,0 +1,371 @@
+# ================================================================
+# Docker Compose Template for Universal Makefile System
+# ================================================================
+
+version: '3.8'
+
+# ================================================================
+# Services Definition
+# ================================================================
+
+services:
+  # ================================================================
+  # Main Application Service
+  # ================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VERSION=${VERSION:-v1.0.0}
+        - BUILD_DATE=${BUILD_DATE}
+    image: ${REPO_HUB:-mycompany}/${NAME:-myproject}:${VERSION:-v1.0.0}
+    container_name: ${NAME:-myproject}-app
+    restart: unless-stopped
+    
+    # 포트 매핑
+    ports:
+      - "3000:3000"
+      # 필요에 따라 추가: - "8080:8080"
+    
+    # 환경 변수
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=3000
+      - DATABASE_URL=${DATABASE_URL}
+      # 추가 환경 변수들
+      # - API_KEY=${API_KEY}
+      # - REDIS_URL=redis://redis:6379
+    
+    # 환경 파일 로드 (있는 경우)
+    env_file:
+      - .env
+    
+    # 볼륨 마운트
+    volumes:
+      # 애플리케이션 데이터 (필요시)
+      # - app_data:/app/data
+      
+      # 로그 디렉토리 (필요시)
+      # - ./logs:/app/logs
+      
+      # 설정 파일 (필요시)
+      # - ./config:/app/config:ro
+    
+    # 네트워크
+    networks:
+      - app_network
+    
+    # 다른 서비스에 대한 의존성
+    depends_on:
+      - db
+      - redis
+    
+    # 헬스체크 (선택사항)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # 리소스 제한 (선택사항)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ================================================================
+  # Database Service (PostgreSQL 예시)
+  # ================================================================
+  db:
+    image: postgres:15-alpine
+    container_name: ${NAME:-myproject}-db
+    restart: unless-stopped
+    
+    environment:
+      - POSTGRES_DB=${DB_NAME:-myproject}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --locale=C
+    
+    ports:
+      # 개발 시에만 포트 노출 (프로덕션에서는 주석 처리)
+      - "5432:5432"
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # 초기화 스크립트 (필요시)
+      # - ./database/init:/docker-entrypoint-initdb.d:ro
+    
+    networks:
+      - app_network
+    
+    # 헬스체크
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-myproject}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ================================================================
+  # Redis Service (캐싱/세션 스토어)
+  # ================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: ${NAME:-myproject}-redis
+    restart: unless-stopped
+    
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    
+    ports:
+      # 개발 시에만 포트 노출
+      - "6379:6379"
+    
+    volumes:
+      - redis_data:/data
+      # Redis 설정 파일 (필요시)
+      # - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    
+    networks:
+      - app_network
+    
+    # 헬스체크
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ================================================================
+  # Nginx Reverse Proxy (선택사항)
+  # ================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: ${NAME:-myproject}-nginx
+    restart: unless-stopped
+    
+    ports:
+      - "80:80"
+      - "443:443"
+    
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      # SSL 인증서 (HTTPS 사용 시)
+      # - ./ssl:/etc/nginx/ssl:ro
+      # 정적 파일 서빙 (필요시)
+      # - ./public:/var/www/html:ro
+    
+    networks:
+      - app_network
+    
+    depends_on:
+      - app
+    
+    # 헬스체크
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ================================================================
+  # 추가 서비스 예시들 (필요시 주석 해제)
+  # ================================================================
+
+  # Elasticsearch (검색 엔진)
+  # elasticsearch:
+  #   image: elasticsearch:8.8.0
+  #   container_name: ${NAME:-myproject}-elasticsearch
+  #   restart: unless-stopped
+  #   environment:
+  #     - discovery.type=single-node
+  #     - ES_JAVA_OPTS=-Xms512m -Xmx512m
+  #     - xpack.security.enabled=false
+  #   ports:
+  #     - "9200:9200"
+  #   volumes:
+  #     - elasticsearch_data:/usr/share/elasticsearch/data
+  #   networks:
+  #     - app_network
+
+  # RabbitMQ (메시지 큐)
+  # rabbitmq:
+  #   image: rabbitmq:3-management-alpine
+  #   container_name: ${NAME:-myproject}-rabbitmq
+  #   restart: unless-stopped
+  #   environment:
+  #     - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
+  #     - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-password}
+  #   ports:
+  #     - "5672:5672"   # AMQP port
+  #     - "15672:15672" # Management UI
+  #   volumes:
+  #     - rabbitmq_data:/var/lib/rabbitmq
+  #   networks:
+  #     - app_network
+
+  # MongoDB (NoSQL 데이터베이스)
+  # mongodb:
+  #   image: mongo:6
+  #   container_name: ${NAME:-myproject}-mongodb
+  #   restart: unless-stopped
+  #   environment:
+  #     - MONGO_INITDB_ROOT_USERNAME=${MONGO_USER:-admin}
+  #     - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-password}
+  #     - MONGO_INITDB_DATABASE=${MONGO_DB:-myproject}
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongodb_data:/data/db
+  #   networks:
+  #     - app_network
+
+  # Grafana (모니터링 대시보드)
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: ${NAME:-myproject}-grafana
+  #   restart: unless-stopped
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+  #     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+  #   ports:
+  #     - "3001:3000"
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #   networks:
+  #     - app_network
+
+  # Prometheus (메트릭 수집)
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: ${NAME:-myproject}-prometheus
+  #   restart: unless-stopped
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+  #     - '--web.console.libraries=/etc/prometheus/console_libraries'
+  #     - '--web.console.templates=/etc/prometheus/consoles'
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #     - prometheus_data:/prometheus
+  #   networks:
+  #     - app_network
+
+# ================================================================
+# Volumes Definition
+# ================================================================
+
+volumes:
+  # 데이터베이스 볼륨
+  postgres_data:
+    driver: local
+  
+  # Redis 데이터 볼륨
+  redis_data:
+    driver: local
+  
+  # 애플리케이션 데이터 볼륨 (필요시)
+  # app_data:
+  #   driver: local
+  
+  # 추가 볼륨들 (필요시 주석 해제)
+  # elasticsearch_data:
+  #   driver: local
+  # rabbitmq_data:
+  #   driver: local
+  # mongodb_data:
+  #   driver: local
+  # grafana_data:
+  #   driver: local
+  # prometheus_data:
+  #   driver: local
+
+# ================================================================
+# Networks Definition
+# ================================================================
+
+networks:
+  app_network:
+    driver: bridge
+    # 커스텀 서브넷 (필요시)
+    # ipam:
+    #   config:
+    #     - subnet: 172.20.0.0/16
+
+# ================================================================
+# Configuration Examples for Different Environments
+# ================================================================
+
+# 이 파일은 기본 프로덕션 설정입니다.
+# 환경별 설정을 위해 다음 파일들을 생성하세요:
+
+# docker-compose.dev.yml (개발 환경):
+# - 개발용 포트 노출
+# - 볼륨 마운트로 코드 동기화
+# - 디버깅 도구 추가
+# - 핫 리로드 설정
+
+# docker-compose.test.yml (테스트 환경):
+# - 테스트 데이터베이스
+# - 테스트용 환경 변수
+# - 테스트 도구들
+
+# docker-compose.prod.yml (프로덕션 환경):
+# - 포트 최소화
+# - 보안 강화 설정
+# - 리소스 제한
+# - 로그 수집 설정
+
+# ================================================================
+# Usage Examples
+# ================================================================
+
+# 기본 실행:
+# docker-compose up -d
+
+# 특정 환경으로 실행:
+# docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+# 빌드와 함께 실행:
+# docker-compose up -d --build
+
+# 로그 확인:
+# docker-compose logs -f
+
+# 서비스 상태 확인:
+# docker-compose ps
+
+# 정리:
+# docker-compose down -v
+
+# ================================================================
+# Environment Variables Reference
+# ================================================================
+
+# 이 Compose 파일에서 사용되는 환경 변수들:
+# VERSION - 애플리케이션 버전 (기본값: v1.0.0)
+# REPO_HUB - Docker 레지스트리 (기본값: mycompany)  
+# NAME - 프로젝트명 (기본값: myproject)
+# NODE_ENV - Node.js 환경 (기본값: production)
+# DATABASE_URL - 데이터베이스 URL
+# DB_NAME, DB_USER, DB_PASSWORD - PostgreSQL 설정
+# REDIS_PASSWORD - Redis 비밀번호
+# BUILD_DATE - 빌드 날짜
+
+# .env 파일 예시:
+# VERSION=v1.2.0
+# REPO_HUB=mycompany
+# NAME=myproject
+# NODE_ENV=production
+# DB_NAME=myproject
+# DB_USER=postgres
+# DB_PASSWORD=secretpassword
+# REDIS_PASSWORD=redispassword
