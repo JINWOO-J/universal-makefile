@@ -8,7 +8,7 @@ include $(MAKEFILE_DIR)/makefiles/colors.mk
 
 # 버전 업데이트 도구 설정 (project.mk에서 오버라이드 가능)
 VERSION_UPDATE_TOOL ?= auto-detect
-VERSION_FILE ?= package.json
+VERSION_FILES ?= project.mk package.json pyproject.toml Cargo.toml VERSION
 
 # ================================================================
 # 기본 버전 관리 타겟들
@@ -107,52 +107,76 @@ _update_version_with_tool:
 # 버전 파일 관리
 # ================================================================
 
+# Update version in files
 update-version-file: ## 🔧 Update version in specific file
-	@if [ -z "$(NEW_VERSION)" ]; then \
-		$(call error, "NEW_VERSION is required. Usage: make update-version-file NEW_VERSION=v1.2.3"); \
+	@$(eval VERSION_TO_UPDATE := $(or $(NEW_VERSION),$(shell cat .NEW_VERSION.tmp 2>/dev/null)))
+	@if [ -z "$(VERSION_TO_UPDATE)" ]; then \
+		echo "$(RED)Error: NEW_VERSION is not set and .NEW_VERSION.tmp not found$(RESET)" >&2; \
 		exit 1; \
-	fi; \
-	$(call colorecho, "📝 Updating version to $(NEW_VERSION) in $(VERSION_FILE)..."); \
-	case "$(VERSION_FILE)" in \
-		package.json) \
-			$(SED) 's/"version": "[^"]*"/"version": "$(NEW_VERSION:v%=%)"/' $(VERSION_FILE); \
-			;; \
-		pyproject.toml) \
-			$(SED) 's/version = "[^"]*"/version = "$(NEW_VERSION:v%=%)"/' $(VERSION_FILE); \
-			;; \
-		Cargo.toml) \
-			$(SED) 's/version = "[^"]*"/version = "$(NEW_VERSION:v%=%)"/' $(VERSION_FILE); \
-			;; \
-		VERSION) \
-			echo "$(NEW_VERSION)" > $(VERSION_FILE); \
-			;; \
-		*) \
-			$(call warn, "Unknown version file format: $(VERSION_FILE)"); \
-			echo "Please update $(VERSION_FILE) manually to $(NEW_VERSION)"; \
-			;; \
-	esac; \
-	$(call success, "Version file updated")
+	fi
+	@echo "$(BLUE)📝 Updating version to $(VERSION_TO_UPDATE)...$(RESET)"
+	@success=false; \
+	for file in $(VERSION_FILES); do \
+		if [ -f "$$file" ]; then \
+			echo "$(BLUE)Updating version in $$file...$(RESET)"; \
+			case "$$file" in \
+				package.json) \
+					$(SED) 's/"version": "[^"]*"/"version": "$(VERSION_TO_UPDATE:v%=%)"/' "$$file" 2>/dev/null && success=true; \
+					;; \
+				pyproject.toml) \
+					$(SED) 's/version = "[^"]*"/version = "$(VERSION_TO_UPDATE:v%=%)"/' "$$file" 2>/dev/null && success=true; \
+					;; \
+				Cargo.toml) \
+					$(SED) 's/version = "[^"]*"/version = "$(VERSION_TO_UPDATE:v%=%)"/' "$$file" 2>/dev/null && success=true; \
+					;; \
+				VERSION) \
+					echo "$(VERSION_TO_UPDATE)" > "$$file" 2>/dev/null && success=true; \
+					;; \
+				project.mk) \
+					$(SED) 's/^VERSION=.*/VERSION=$(VERSION_TO_UPDATE)/' "$$file" 2>/dev/null && success=true; \
+					;; \
+			esac; \
+			if [ "$$success" = "true" ]; then \
+				echo "$(GREEN)✅ Updated version in $$file$(RESET)"; \
+				break; \
+			fi; \
+		fi; \
+	done; \
+	if [ "$$success" = "false" ]; then \
+		echo "$(YELLOW)Warning: No suitable version file found. Creating VERSION file...$(RESET)"; \
+		echo "$(VERSION_TO_UPDATE)" > VERSION && \
+		echo "$(GREEN)✅ Created VERSION file with new version$(RESET)"; \
+	fi
+
+.PHONY: update-version-file
+
 
 # ================================================================
 # 버전 태깅
 # ================================================================
 
 version-tag: ## 🔧 Create version tag without release
-	@if [ -z "$(TAG_VERSION)" ]; then \
-		TAG_VERSION=$(VERSION); \
-	fi; \
-	$(call colorecho, "🏷️  Creating version tag: $$TAG_VERSION"); \
-	if git tag -l | grep -q "^$$TAG_VERSION$$"; then \
-		$(call warn, "Tag $$TAG_VERSION already exists"); \
+	@$(eval TAG_VERSION := $(or $(TAG_VERSION),$(VERSION)))
+	@echo "$(BLUE)🏷️  Creating version tag: $(TAG_VERSION)$(RESET)"
+	@if git tag -l | grep -q "^$(TAG_VERSION)$$"; then \
+		echo "$(YELLOW)⚠️  Tag $(TAG_VERSION) already exists$(RESET)"; \
 	else \
-		git tag -a $$TAG_VERSION -m "Version $$TAG_VERSION"; \
-		$(call success, "Tag $$TAG_VERSION created"); \
+		if git tag -a $(TAG_VERSION) -m "Version $(TAG_VERSION)"; then \
+			echo "$(GREEN)✅ Tag $(TAG_VERSION) created$(RESET)"; \
+		else \
+			echo "$(RED)❌ Failed to create tag$(RESET)" >&2; \
+			exit 1; \
+		fi \
 	fi
 
 push-tags: ## 🔧 Push all tags to remote
-	@$(call colorecho, "📤 Pushing tags to remote...")
-	@git push --tags
-	@$(call success, "Tags pushed successfully")
+	@echo "$(BLUE)📤 Pushing tags to remote...$(RESET)"
+	@if git push --tags; then \
+		echo "$(GREEN)✅ Tags pushed successfully$(RESET)"; \
+	else \
+		echo "$(RED)❌ Failed to push tags$(RESET)" >&2; \
+		exit 1; \
+	fi
 
 delete-tag: ## 🔧 Delete version tag (usage: make delete-tag TAG=v1.0.0)
 	@if [ -z "$(TAG)" ]; then \

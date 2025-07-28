@@ -226,7 +226,7 @@ get-release-version:
 	fi
 
 # Create release branch
-create-release-branch: ensure-develop-branch get-release-version ## 🌿 Create release branch
+create-release-branch: bump-version ensure-develop-branch get-release-version ## 🌿 Create release branch
 	@echo "$(BLUE)🌿 Creating release branch...$(RESET)"
 	@echo "$(BLUE)Using version: $(RELEASE_VERSION)$(RESET)"
 	@RELEASE_BRANCH="release/$(RELEASE_VERSION)"; \
@@ -311,30 +311,58 @@ finish-release: ## 🚀 Complete release process (merge to main and develop, cre
 
 # Auto release process
 auto-release: ## 🚀 Automated release process
-	@$(call colorecho, "🚀 [auto-release] Starting automated release...")
-	@$(MAKE) bump-version NEW_VERSION=$(NEW_VERSION)
-	@$(MAKE) create-release-branch
-	@$(MAKE) update-version-file
-	@$(MAKE) version-tag TAG_VERSION=$(NEW_VERSION)
-	@$(MAKE) merge-release
-	@$(call success, "🎉 Auto-release completed successfully!")
+	@echo "$(BLUE)🚀 [auto-release] Starting automated release...$(RESET)"
+	@if [ -n "$(VERSION)" ]; then \
+		export NEW_VERSION="$(VERSION)"; \
+	fi; \
+	$(MAKE) bump-version NEW_VERSION="$$NEW_VERSION" && \
+	if [ -f .NEW_VERSION.tmp ]; then \
+		NEXT_VERSION=$$(cat .NEW_VERSION.tmp); \
+		echo "$(BLUE)Using version: $$NEXT_VERSION$(RESET)"; \
+		$(MAKE) create-release-branch NEW_VERSION="$$NEXT_VERSION" && \
+		$(MAKE) update-version-file NEW_VERSION="$$NEXT_VERSION" && \
+		$(MAKE) version-tag TAG_VERSION="$$NEXT_VERSION" && \
+		$(MAKE) merge-release; \
+	else \
+		echo "$(RED)Error: Failed to determine version$(RESET)" >&2; \
+		exit 1; \
+	fi; \
+	echo "$(GREEN)🎉 Auto-release completed successfully!$(RESET)"
+
 
 # Merge release branch
 merge-release: ## 🔄 Merge release branch to main branches
-	@$(call colorecho, "🔄 Merging release branch...")
+	@echo "$(BLUE)🔄 Merging release branch...$(RESET)"
 	@CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-	if [[ $$CUR_BRANCH != release/* ]]; then \
-		$(call error, "Not on a release branch. Current branch: $$CUR_BRANCH"); \
+	if ! echo "$$CUR_BRANCH" | grep -q "^release/"; then \
+		echo "$(RED)Error: Not on a release branch. Current branch: $$CUR_BRANCH$(RESET)" >&2; \
 		exit 1; \
 	fi; \
-	$(call colorecho, "Merging to main..."); \
-	git checkout main && \
-	git merge --no-ff "$$CUR_BRANCH" -m "🔀 Merge release $$CUR_BRANCH into main" && \
-	$(call colorecho, "Merging to develop..."); \
-	git checkout develop && \
-	git merge --no-ff "$$CUR_BRANCH" -m "🔀 Merge release $$CUR_BRANCH into develop" && \
+	echo "$(BLUE)Merging to main...$(RESET)"; \
+	if ! git rev-parse --verify main >/dev/null 2>&1; then \
+		echo "$(BLUE)Creating main branch...$(RESET)"; \
+		git checkout -b main; \
+	else \
+		git checkout main; \
+	fi && \
+	if ! git merge --no-ff "$$CUR_BRANCH" -m "🔀 Merge release $$CUR_BRANCH into main"; then \
+		echo "$(RED)Error: Failed to merge into main$(RESET)" >&2; \
+		exit 1; \
+	fi; \
+	echo "$(BLUE)Merging to develop...$(RESET)"; \
+	if ! git checkout develop; then \
+		echo "$(RED)Error: Failed to checkout develop branch$(RESET)" >&2; \
+		exit 1; \
+	fi && \
+	if ! git merge --no-ff "$$CUR_BRANCH" -m "🔀 Merge release $$CUR_BRANCH into develop"; then \
+		echo "$(RED)Error: Failed to merge into develop$(RESET)" >&2; \
+		exit 1; \
+	fi && \
+	echo "$(BLUE)Cleaning up release branch...$(RESET)" && \
 	git branch -d "$$CUR_BRANCH" && \
-	$(call success, "Release branch successfully merged and cleaned up!")
+	echo "$(GREEN)✅ Release branch successfully merged and cleaned up!$(RESET)"
+
+.PHONY: merge-release
 
 # ================================================================
 # 핫픽스 지원
