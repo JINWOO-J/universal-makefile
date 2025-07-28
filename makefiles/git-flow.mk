@@ -1,3 +1,4 @@
+include $(MAKEFILE_DIR)/makefiles/colors.mk
 # ================================================================
 # Git Flow and Release Management
 # ================================================================
@@ -111,64 +112,140 @@ clean-remote-branches: ## 🧹 Delete merged remote release branches (VERY CAREF
 # 버전 관리
 # ================================================================
 
-bump-version: ## 🌿 Calculate and show next patch version
+bump-version: ## 🔧 Bump version (patch by default)
 	@$(call colorecho, "📋 Calculating next version...")
-	@if [ -z "$$NEW_VERSION" ]; then \
-		$(BUMP_VERSION_LOGIC); \
+	@if [ -z "$(NEW_VERSION)" ]; then \
+		git fetch --tags 2>/dev/null || true; \
+		LATEST_TAG=$$(git describe --tags $$(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0"); \
+		VERSION_NUM=$$(echo $$LATEST_TAG | sed 's/v//'); \
+		MAJOR=$$(echo $$VERSION_NUM | cut -d. -f1); \
+		MINOR=$$(echo $$VERSION_NUM | cut -d. -f2); \
+		PATCH=$$(echo $$VERSION_NUM | cut -d. -f3); \
+		NEW_PATCH=$$((PATCH + 1)); \
+		NEW_VERSION="v$$MAJOR.$$MINOR.$$NEW_PATCH"; \
 		echo "$$NEW_VERSION" > .NEW_VERSION.tmp; \
-		$(call colorecho, "Latest tag     : $$LATEST_TAG"); \
-		$(call colorecho, "Next version   : $$NEW_VERSION"); \
+		echo "Latest tag     : $$LATEST_TAG"; \
+		echo "Next version   : $$NEW_VERSION"; \
 	else \
 		echo "$$NEW_VERSION" > .NEW_VERSION.tmp; \
-		$(call colorecho, "NEW_VERSION is already set: $$NEW_VERSION"); \
+		echo "Using provided version: $$NEW_VERSION"; \
 	fi
 
-bump-major: ## 🌿 Bump major version
-	@$(call colorecho, "📋 Bumping major version...")
-	@git fetch --tags; \
-	LATEST_TAG=$$(git describe --tags `git rev-list --tags --max-count=1` 2>/dev/null || echo "v0.0.0"); \
-	VERSION_NUM=$$(echo $$LATEST_TAG | sed 's/v//'); \
-	MAJOR=$$(echo $$VERSION_NUM | cut -d. -f1); \
-	NEW_MAJOR=$$(($$MAJOR + 1)); \
-	NEW_VERSION="v$$NEW_MAJOR.0.0"; \
-	echo "$$NEW_VERSION" > .NEW_VERSION.tmp; \
-	$(call colorecho, "Latest tag     : $$LATEST_TAG"); \
-	$(call colorecho, "Next version   : $$NEW_VERSION (MAJOR)")
-
-bump-minor: ## 🌿 Bump minor version
+# Bump minor version
+bump-minor: ## 🔧 Bump minor version
 	@$(call colorecho, "📋 Bumping minor version...")
-	@git fetch --tags; \
-	LATEST_TAG=$$(git describe --tags `git rev-list --tags --max-count=1` 2>/dev/null || echo "v0.0.0"); \
+	@git fetch --tags 2>/dev/null || true
+	@LATEST_TAG=$$(git describe --tags $$(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0"); \
 	VERSION_NUM=$$(echo $$LATEST_TAG | sed 's/v//'); \
 	MAJOR=$$(echo $$VERSION_NUM | cut -d. -f1); \
 	MINOR=$$(echo $$VERSION_NUM | cut -d. -f2); \
-	NEW_MINOR=$$(($$MINOR + 1)); \
+	NEW_MINOR=$$((MINOR + 1)); \
 	NEW_VERSION="v$$MAJOR.$$NEW_MINOR.0"; \
 	echo "$$NEW_VERSION" > .NEW_VERSION.tmp; \
-	$(call colorecho, "Latest tag     : $$LATEST_TAG"); \
-	$(call colorecho, "Next version   : $$NEW_VERSION (MINOR)")
+	echo "Latest tag     : $$LATEST_TAG"; \
+	echo "Next version   : $$NEW_VERSION (MINOR)"
 
+# Bump major version
+bump-major: ## 🔧 Bump major version
+	@$(call colorecho, "📋 Bumping major version...")
+	@git fetch --tags 2>/dev/null || true
+	@LATEST_TAG=$$(git describe --tags $$(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0"); \
+	VERSION_NUM=$$(echo $$LATEST_TAG | sed 's/v//'); \
+	MAJOR=$$(echo $$VERSION_NUM | cut -d. -f1); \
+	NEW_MAJOR=$$((MAJOR + 1)); \
+	NEW_VERSION="v$$NEW_MAJOR.0.0"; \
+	echo "$$NEW_VERSION" > .NEW_VERSION.tmp; \
+	echo "Latest tag     : $$LATEST_TAG"; \
+	echo "Next version   : $$NEW_VERSION (MAJOR)"
 # ================================================================
 # 릴리스 프로세스
 # ================================================================
 
-create-release-branch: bump-version ## 🌿 Create new release branch with auto-versioning
-	@$(call colorecho, "🌿 Creating release branch...")
-	@CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-	if [ -z "$$NEW_VERSION" ]; then \
-		NEW_VERSION=$$(cat .NEW_VERSION.tmp); \
-	fi; \
-	RELEASE_BRANCH="release/$$NEW_VERSION"; \
-	if git rev-parse --verify "$$RELEASE_BRANCH" >/dev/null 2>&1; then \
-		$(call colorecho, "Release branch '$$RELEASE_BRANCH' already exists. Removing for idempotency..."); \
-		if [ "$$CUR_BRANCH" = "$$RELEASE_BRANCH" ]; then \
-			git checkout $(DEVELOP_BRANCH); \
+# 🌿 Create release branch
+# Create release branch with version check
+# create-release-branch: ## 🌿 Create release branch
+# 	@$(call colorecho, "🌿 Creating release branch...")
+# 	@if [ -n "$(NEW_VERSION)" ]; then \
+# 		RELEASE_VERSION="$(NEW_VERSION)"; \
+# 	elif [ -f .NEW_VERSION.tmp ]; then \
+# 		RELEASE_VERSION=$$(cat .NEW_VERSION.tmp); \
+# 	else \
+# 		$(call error, "NEW_VERSION is not set and .NEW_VERSION.tmp not found"); \
+# 		exit 1; \
+# 	fi; \
+# 	RELEASE_BRANCH="release/$$RELEASE_VERSION"; \
+# 	CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+# 	if git rev-parse --verify "$$RELEASE_BRANCH" >/dev/null 2>&1; then \
+# 		$(call colorecho, "Release branch '$$RELEASE_BRANCH' already exists. Removing for idempotency..."); \
+# 		if [ "$$CUR_BRANCH" = "$$RELEASE_BRANCH" ]; then \
+# 			git checkout develop; \
+# 		fi; \
+# 		git branch -D "$$RELEASE_BRANCH"; \
+# 	fi; \
+# 	$(call colorecho, "Creating new release branch '$$RELEASE_BRANCH' from 'develop'..."); \
+# 	git checkout -b "$$RELEASE_BRANCH" develop && \
+# 	$(call success, "Successfully created and switched to '$$RELEASE_BRANCH'")
+
+
+# create-release-branch: ## 🌿 Create release branch
+# 		@$(call colorecho, "Debugging version file location...")
+# 		@echo "Current directory: $$(pwd)"
+# 		@echo "NEW_VERSION.tmp exists: $$(test -f .NEW_VERSION.tmp && echo "yes" || echo "no")"
+# 		@echo "File contents if exists: $$(cat .NEW_VERSION.tmp 2>/dev/null || echo "no content")"
+# 		@$(MAKEFILE_DIR)/scripts/create-release-branch.sh
+
+
+# Git repository validation
+check-git-repo:
+	@if ! git rev-parse --git-dir > /dev/null 2>&1; then \
+		echo "$(RED)Error: Not in a git repository. Please run 'git init' first.$(RESET)" >&2; \
+		exit 1; \
+	fi
+
+# Ensure develop branch exists
+ensure-develop-branch: check-git-repo
+	@if ! git rev-parse --verify develop > /dev/null 2>&1; then \
+		echo "$(BLUE)Develop branch not found. Creating develop branch...$(RESET)"; \
+		if git rev-parse --verify main > /dev/null 2>&1; then \
+			git checkout -b develop main; \
+		elif git rev-parse --verify master > /dev/null 2>&1; then \
+			git checkout -b develop master; \
+		else \
+			git checkout -b develop; \
+			git add .; \
+			git commit -m "Initial commit" || true; \
 		fi; \
-		git branch -D $$RELEASE_BRANCH; \
+	fi
+
+# Get release version
+get-release-version:
+	$(eval RELEASE_VERSION := $(if $(NEW_VERSION),$(NEW_VERSION),$(shell cat .NEW_VERSION.tmp 2>/dev/null)))
+	@if [ -z "$(RELEASE_VERSION)" ]; then \
+		echo "$(RED)Error: NEW_VERSION is not set and .NEW_VERSION.tmp not found$(RESET)" >&2; \
+		exit 1; \
+	fi
+
+# Create release branch
+create-release-branch: ensure-develop-branch get-release-version ## 🌿 Create release branch
+	@echo "$(BLUE)🌿 Creating release branch...$(RESET)"
+	@echo "$(BLUE)Using version: $(RELEASE_VERSION)$(RESET)"
+	@RELEASE_BRANCH="release/$(RELEASE_VERSION)"; \
+	if ! git checkout develop; then \
+		echo "$(RED)Error: Failed to checkout develop branch$(RESET)" >&2; \
+		exit 1; \
 	fi; \
-	$(call colorecho, "Creating new release branch '$$RELEASE_BRANCH' from '$(DEVELOP_BRANCH)'..."); \
-	git checkout -b $$RELEASE_BRANCH $(DEVELOP_BRANCH); \
-	$(call success, "Successfully created and switched to '$$RELEASE_BRANCH'")
+	if git rev-parse --verify "release/$(RELEASE_VERSION)" >/dev/null 2>&1; then \
+		echo "$(BLUE)Release branch 'release/$(RELEASE_VERSION)' already exists. Removing for idempotency...$(RESET)"; \
+		git branch -D "release/$(RELEASE_VERSION)"; \
+	fi; \
+	echo "$(BLUE)Creating new release branch 'release/$(RELEASE_VERSION)' from 'develop'...$(RESET)"; \
+	if git checkout -b "release/$(RELEASE_VERSION)"; then \
+		echo "$(GREEN)✅ Successfully created and switched to 'release/$(RELEASE_VERSION)'$(RESET)"; \
+	else \
+		echo "$(RED)Error: Failed to create release branch$(RESET)" >&2; \
+		exit 1; \
+	fi
+
 
 push-release-branch: ## 🌿 Push current release branch to origin
 	@$(call colorecho, "📤 Pushing release branch...")
@@ -232,14 +309,32 @@ finish-release: ## 🚀 Complete release process (merge to main and develop, cre
 # 자동화된 릴리스 프로세스
 # ================================================================
 
-auto-release: ## 🚀 Automated release process (create branch + push + finish)
+# Auto release process
+auto-release: ## 🚀 Automated release process
 	@$(call colorecho, "🚀 [auto-release] Starting automated release...")
+	@$(MAKE) bump-version NEW_VERSION=$(NEW_VERSION)
 	@$(MAKE) create-release-branch
-	@$(call colorecho, "📌 [auto-release] Created release branch successfully")
-	@$(MAKE) push-release-branch  
-	@$(call colorecho, "📤 [auto-release] Pushed release branch successfully")
-	@$(MAKE) finish-release
-	@$(call success, "🎉 [auto-release] Automated release completed!")
+	@$(MAKE) update-version-file
+	@$(MAKE) version-tag TAG_VERSION=$(NEW_VERSION)
+	@$(MAKE) merge-release
+	@$(call success, "🎉 Auto-release completed successfully!")
+
+# Merge release branch
+merge-release: ## 🔄 Merge release branch to main branches
+	@$(call colorecho, "🔄 Merging release branch...")
+	@CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	if [[ $$CUR_BRANCH != release/* ]]; then \
+		$(call error, "Not on a release branch. Current branch: $$CUR_BRANCH"); \
+		exit 1; \
+	fi; \
+	$(call colorecho, "Merging to main..."); \
+	git checkout main && \
+	git merge --no-ff "$$CUR_BRANCH" -m "🔀 Merge release $$CUR_BRANCH into main" && \
+	$(call colorecho, "Merging to develop..."); \
+	git checkout develop && \
+	git merge --no-ff "$$CUR_BRANCH" -m "🔀 Merge release $$CUR_BRANCH into develop" && \
+	git branch -d "$$CUR_BRANCH" && \
+	$(call success, "Release branch successfully merged and cleaned up!")
 
 # ================================================================
 # 핫픽스 지원
