@@ -171,7 +171,7 @@ check_existing_installation() {
         has_existing=true
     fi
 
-    if [[ "$has_existing" == true && "$FORCE_INSTALL" == false ]]; then
+    if [[ "$has_existing" == true && "$FORCE_INSTALL" == false && "$EXISTING_PROJECT" != true ]]; then
         echo ""
         log_warn "Existing installation detected. Options:"
         echo "  1. Use --force to overwrite"
@@ -179,6 +179,7 @@ check_existing_installation() {
         echo "  3. Manually remove existing files first"
         exit 1
     fi
+
 }
 
 # Submodule 방식 설치
@@ -196,9 +197,15 @@ install_submodule() {
 
     # Submodule 추가
     if ! git submodule add "$REPO_URL" "$MAKEFILE_DIR" 2>/dev/null; then
-        log_error "Failed to add submodule. Repository might not exist or already added."
-        exit 1
+        # 이미 서브모듈이 있는지 확인
+        if git config --file .gitmodules --get "submodule.$MAKEFILE_DIR.url" >/dev/null 2>&1; then
+            log_info "Submodule already exists, continuing with installation..."
+        else
+            log_error "Failed to add submodule. Repository might not exist."
+            exit 1
+        fi
     fi
+
 
     # Submodule 초기화 및 업데이트
     git submodule update --init --recursive
@@ -354,7 +361,7 @@ create_project_config() {
 
     # 현재 디렉토리 이름을 기본 프로젝트명으로 사용
     local default_name=$(basename "$(pwd)")
-    
+
     # Git 원격 URL에서 정보 추출 시도
     local default_repo_hub="mycompany"
     if git remote get-url origin >/dev/null 2>&1; then
@@ -382,7 +389,7 @@ DEVELOP_BRANCH = develop
 
 # Docker 설정
 DOCKERFILE_PATH = Dockerfile
-DOCKER_BUILD_ARGS = 
+DOCKER_BUILD_ARGS =
 
 # Docker Compose 설정
 COMPOSE_FILE = docker-compose.yml
@@ -536,7 +543,7 @@ show_completion_message() {
     echo "  make build                # Build your application"
     echo "  make getting-started      # Show detailed getting started guide"
     echo ""
-    
+
     if [[ "$INSTALLATION_TYPE" == "submodule" ]]; then
         echo "${BLUE}Submodule management:${RESET}"
         echo "  make update-makefile-system  # Update to latest version"

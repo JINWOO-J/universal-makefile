@@ -295,20 +295,19 @@ check-version-consistency: ## 🔧 Check version consistency across files
 
 export-version-info: ## 🔧 Export version information to file
 	@$(call colorecho, "📤 Exporting version information...")
-	@cat > version-info.json << EOF
-{
-  "version": "$(VERSION)",
-  "tagname": "$(TAGNAME)",
-  "branch": "$(CURRENT_BRANCH)",
-  "commit": "$$(git rev-parse HEAD 2>/dev/null || echo 'unknown')",
-  "shortCommit": "$$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')",
-  "lastTag": "$$(git describe --tags --abbrev=0 2>/dev/null || echo 'none')",
-  "buildDate": "$$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "project": "$(NAME)",
-  "repository": "$(REPO_HUB)/$(NAME)"
-}
-EOF
+	@echo '{' > version-info.json
+	@echo '  "version": "$(VERSION)",' >> version-info.json
+	@echo '  "tagname": "$(TAGNAME)",' >> version-info.json
+	@echo '  "branch": "$(CURRENT_BRANCH)",' >> version-info.json
+	@echo '  "commit": "'$$(git rev-parse HEAD 2>/dev/null || echo 'unknown')'",' >> version-info.json
+	@echo '  "shortCommit": "'$$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')'",' >> version-info.json
+	@echo '  "lastTag": "'$$(git describe --tags --abbrev=0 2>/dev/null || echo 'none')'",' >> version-info.json
+	@echo '  "buildDate": "'$$(date -u +%Y-%m-%dT%H:%M:%SZ)'",' >> version-info.json
+	@echo '  "project": "$(NAME)",' >> version-info.json
+	@echo '  "repository": "$(REPO_HUB)/$(NAME)"' >> version-info.json
+	@echo '}' >> version-info.json
 	@$(call success, "Version info exported to version-info.json")
+
 
 # ================================================================
 # 개발자 도구
