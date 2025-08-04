@@ -357,7 +357,9 @@ main() {
             [[ "$EXISTING_PROJECT" == false ]] && create_sample_compose
             show_completion_message
             ;;
-        update)    update_makefile_system ;;
+        update)    
+            parse_install_args "$@"
+            update_makefile_system ;;
         uninstall) uninstall ;;
         help|-h|--help|'') usage ;;
         *) log_error "Unknown command: $1"; usage; exit 1 ;;
