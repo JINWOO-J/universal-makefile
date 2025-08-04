@@ -317,16 +317,17 @@ show_completion_message() {
 
 show_changelog() {
     local repo_dir=$1
-    local n=${2:-5}
-    echo ""
-    log_info "Recent changes in Universal Makefile System:"
-    if [[ -d "$repo_dir/.git" || -f "$repo_dir/.git" ]]; then
-        git --no-pager -C "$repo_dir" log --oneline -n "$n"
-    else
-        echo "  (No git history found)"
+    local old_commit="$2"
+    local new_commit="$3"
+
+    if [[ -n "$old_commit" && "$old_commit" != "$new_commit" ]]; then
+        echo ""
+        log_info "Universal Makefile System: Updates applied ($old_commit..$new_commit):"
+        git --no-pager -C "$repo_dir" log --oneline "$old_commit..$new_commit"
+        echo ""
     fi
-    echo ""
 }
+
 
 uninstall() {
     echo "${BLUE}Uninstalling Universal Makefile System...${RESET}"
@@ -361,6 +362,7 @@ update_makefile_system() {
     log_info "Updating Universal Makefile System..."
 
     if [[ "$INSTALLATION_TYPE" == "submodule" && -d "$MAKEFILE_DIR" ]]; then
+        # 1️⃣ 업데이트 전 커밋 해시 저장
         local old_commit
         old_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
 
@@ -377,16 +379,17 @@ update_makefile_system() {
             log_success "Submodule updated with merge."
         fi
 
+        # 2️⃣ 업데이트 후 커밋 해시 저장
         local new_commit
         new_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
 
-        if [[ "$old_commit" != "$new_commit" ]]; then
-            show_changelog "$MAKEFILE_DIR" 5
-        fi
+        # 3️⃣ 변경 커밋만 log로 출력 (실제로 변경됐을 때만)
+        show_changelog "$MAKEFILE_DIR" "$old_commit" "$new_commit"
 
         echo "👉 Don't forget: git add $MAKEFILE_DIR && git commit to update the submodule pointer!"
 
     elif [[ "$INSTALLATION_TYPE" == "copy" && -d "makefiles" ]]; then
+        # 1️⃣ 업데이트 전 커밋 해시 (makefiles에 git 정보가 없다면 old_commit은 "")
         local old_commit=""
         if [[ -d makefiles/.git ]]; then
             old_commit=$(git -C makefiles rev-parse HEAD 2>/dev/null || echo "")
@@ -398,17 +401,19 @@ update_makefile_system() {
         log_info "Cloning latest version from $REPO_URL"
         git clone "$REPO_URL" "$temp_dir/universal-makefile"
 
+        # 2️⃣ 복사
         cp -r "$temp_dir/universal-makefile/makefiles" .
         cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true
         cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true
         [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .
         log_success "Copied latest files from remote."
 
+        # 3️⃣ 업데이트 후 커밋 해시 (temp 디렉토리의 최신 커밋)
         local new_commit
         new_commit=$(git -C "$temp_dir/universal-makefile" rev-parse HEAD 2>/dev/null || echo "")
-        if [[ "$old_commit" != "$new_commit" ]]; then
-            show_changelog "$temp_dir/universal-makefile" 5
-        fi
+
+        # 4️⃣ 변경 커밋만 log로 출력 (실제로 변경됐을 때만)
+        show_changelog "$temp_dir/universal-makefile" "$old_commit" "$new_commit"
 
     else
         log_error "Universal Makefile System installation not found. Cannot update."
