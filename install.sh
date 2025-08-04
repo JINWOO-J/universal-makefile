@@ -315,6 +315,19 @@ show_completion_message() {
     echo ""
 }
 
+show_changelog() {
+    local repo_dir=$1
+    local n=${2:-5}
+    echo ""
+    log_info "Recent changes in Universal Makefile System:"
+    if [[ -d "$repo_dir/.git" ]]; then
+        git -C "$repo_dir" log --oneline -n "$n"
+    else
+        echo "  (No git history found)"
+    fi
+    echo ""
+}
+
 uninstall() {
     echo "${BLUE}Uninstalling Universal Makefile System...${RESET}"
     for f in Makefile Makefile.universal; do
@@ -359,6 +372,8 @@ update_makefile_system() {
                 exit 1
             fi
             log_success "Submodule updated with merge."
+            show_changelog "$MAKEFILE_DIR" 5
+
         fi
         echo "👉 Don't forget: git add $MAKEFILE_DIR && git commit to update the submodule pointer!"
     elif [[ "$INSTALLATION_TYPE" == "copy" && -d "makefiles" ]]; then
@@ -372,6 +387,7 @@ update_makefile_system() {
         cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true
         [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .
         log_success "Copied latest files from remote."
+        show_changelog "$temp_dir/universal-makefile" 5 
     else
         log_error "Universal Makefile System installation not found. Cannot update."
         exit 1
