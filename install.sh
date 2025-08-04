@@ -56,23 +56,7 @@ EOF
 }
 
 
-parse_install_args() {
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --copy)            INSTALLATION_TYPE="copy"; shift ;;
-            --existing-project)EXISTING_PROJECT=true; shift ;;
-            --force)           FORCE_INSTALL=true; shift ;;
-            --help|-h)         usage; exit 0 ;;
-            *) log_error "Unknown option for install: $1"; usage; exit 1 ;;
-        esac
-    done
-    if [[ -z "$INSTALLATION_TYPE" ]]; then
-        INSTALLATION_TYPE="submodule"
-        log_info "Defaulting to submodule installation (recommended)"
-    fi
-}
-
-parse_update_args() {
+parse_common_args() {
     FORCE_INSTALL=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -80,11 +64,48 @@ parse_update_args() {
                 FORCE_INSTALL=true
                 shift ;;
             *)
-                log_error "Unknown option for update: $1"
+                log_error "Unknown option: $1"
                 usage
                 exit 1 ;;
         esac
     done
+}
+
+
+parse_install_args() {
+    INSTALLATION_TYPE="submodule"
+    EXISTING_PROJECT=false
+
+    local POSITIONAL_ARGS=()
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --copy)             
+                INSTALLATION_TYPE="copy"; shift ;;
+            --existing-project) 
+                EXISTING_PROJECT=true; shift ;;
+            --help|-h)          
+                usage; exit 0 ;;
+            --*) # 다른 옵션은 공통 옵션 파서로 넘김
+                POSITIONAL_ARGS+=("$1"); shift ;;
+            *)
+                log_error "Unknown option for install: $1"; 
+                usage; exit 1 ;;
+        esac
+    done
+
+    parse_common_args "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
+
+    log_info "Installation type: $INSTALLATION_TYPE"
+}
+
+
+parse_uninstall_args() {
+    parse_common_args "$@"
+}
+
+
+parse_update_args() {
+    parse_common_args "$@"
 }
 
 
