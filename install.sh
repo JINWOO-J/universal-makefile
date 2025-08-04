@@ -319,7 +319,7 @@ show_changelog() {
     local repo_dir=$1
     local n=${2:-5}
     echo ""
-    log_info "Recent changes in Universal Makefile System:"
+    log_info "Recent changes in Universal Makefile System: $repo_dir/.git"
     if [[ -d "$repo_dir/.git" ]]; then
         git -C "$repo_dir" log --oneline -n "$n"
     else
