@@ -72,6 +72,21 @@ parse_install_args() {
     fi
 }
 
+parse_update_args() {
+    FORCE_INSTALL=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --force)
+                FORCE_INSTALL=true
+                shift ;;
+            *)
+                log_error "Unknown option for update: $1"
+                usage
+                exit 1 ;;
+        esac
+    done
+}
+
 
 check_requirements() {
     log_info "Checking requirements..."
@@ -358,7 +373,7 @@ main() {
             show_completion_message
             ;;
         update)    
-            parse_install_args "$@"
+            parse_update_args "$@"
             update_makefile_system ;;
         uninstall) uninstall ;;
         help|-h|--help|'') usage ;;
