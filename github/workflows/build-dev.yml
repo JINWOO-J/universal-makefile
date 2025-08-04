@@ -3,7 +3,7 @@ name: Build Dev and Notify Slack
 on:
   push:
     branches:
-      - 'devel'
+      - 'develop'
 
 # env:
 #   REPO_HUB: jinwoo
