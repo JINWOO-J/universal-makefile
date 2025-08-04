@@ -31,7 +31,7 @@ log_error() { echo "${RED}❌ $1${RESET}" >&2; }
 REPO_URL="https://github.com/jinwoo-j/universal-makefile"
 MAKEFILE_DIR=".makefile-system"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-INSTALLATION_TYPE=""
+INSTALLATION_TYPE="submodule"
 FORCE_INSTALL=false
 EXISTING_PROJECT=false
 
@@ -125,6 +125,10 @@ check_requirements() {
 check_existing_installation() {
     local has_existing=false
 
+    if [[ -d "$MAKEFILE_DIR" && ! -f Makefile && ! -f project.mk && ! -d makefiles ]]; then
+        return 0
+    fi
+
     [[ -d "$MAKEFILE_DIR" ]] && log_warn "Submodule already exists" && has_existing=true
     [[ -d "makefiles" ]] && log_warn "Makefiles directory exists" && has_existing=true
     [[ -f "Makefile" && "$EXISTING_PROJECT" != true ]] && log_warn "Existing Makefile found" && has_existing=true
@@ -138,6 +142,8 @@ check_existing_installation() {
         exit 1
     fi
 }
+
+
 
 install_submodule() {
     log_info "Installing as git submodule..."
