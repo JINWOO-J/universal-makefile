@@ -39,9 +39,11 @@ Usage: $0 <command> [options]
 
 Commands:
     install             Install the Universal Makefile System (default)
-    update              Update the Universal Makefile System to the latest version
+    update | pull       Update the Universal Makefile System to the latest version
     uninstall           Remove all files created by this installer
     self-update         Update this installer script itself
+    app | setup-app     Setup example app
+    
     help                Show this help message
 
 Common options:
@@ -66,7 +68,7 @@ EOF
 
 parse_common_args() {
     FORCE_INSTALL=false
-    DRY_RUN=false
+    DRY_RUN=fals
     BACKUP=false
 
     while [[ $# -gt 0 ]]; do
@@ -615,6 +617,51 @@ install_github_workflow() {
     log_success "GitHub Actions workflow installed"
 }
 
+setup_app_example() {
+    local app_type="${1:-}"
+
+    local examples_dir="examples"
+    [[ ! -d "$examples_dir" ]] && log_error "examples directory not found!" && exit 1
+
+    if [[ -z "$app_type" ]]; then
+        echo ""
+        log_info "Available example apps:"
+        local apps=()
+        local i=1
+        for dir in "$examples_dir"/*/; do
+            local app_name=$(basename "$dir")
+            apps+=("$app_name")
+            echo "  $i) $app_name"
+            ((i++))
+        done
+        echo ""
+        read -rp "Select example to setup (1-${#apps[@]}) [q to quit]: " choice
+        [[ "$choice" == "q" || "$choice" == "Q" ]] && log_warn "Aborted by user." && exit 0
+        [[ "$choice" =~ ^[0-9]+$ ]] || { log_error "Invalid input"; exit 1; }
+        app_type="${apps[$((choice-1))]}"
+        [[ -z "$app_type" ]] && log_error "Invalid selection" && exit 1
+    fi
+
+    local template_dir="$examples_dir/$app_type"
+    [[ ! -d "$template_dir" ]] && log_error "No template directory for '$app_type'" && exit 1
+
+    log_info "Setting up example for '$app_type'..."
+
+    # 주요 파일 복사 (이미 있으면 확인)
+    for file in "$template_dir"/*; do
+        fname=$(basename "$file")
+        if [[ -e "$fname" && "$FORCE_INSTALL" != true ]]; then
+            read -rp "File $fname already exists. Overwrite? [y/N]: " yn
+            [[ "$yn" =~ ^[Yy]$ ]] || { log_warn "Skipped $fname"; continue; }
+        fi
+        cp -rf "$file" .
+        log_success "Installed $fname"
+    done
+
+    log_success "$app_type example setup complete!"
+    echo "Try: make help"
+}
+
 
 main() {
     local cmd=${1:-install}
@@ -638,7 +685,12 @@ main() {
             install_github_workflow
             show_completion_message
             ;;
-        update)
+        app|setup-app)
+            local app_type="${1:-}"
+            parse_common_args "${@:2}"
+            setup_app_example "$app_type"
+            ;;
+        update|pull)
             parse_update_args "$@"
             update_makefile_system
             ;;
