@@ -329,14 +329,20 @@ uninstall() {
     [[ -d scripts ]] && rm -rf scripts
     [[ -d templates ]] && rm -rf templates
     if [[ -d "$MAKEFILE_DIR" ]]; then
-        git submodule deinit -f "$MAKEFILE_DIR" || true
-        git rm -f "$MAKEFILE_DIR" || true
-        rm -rf ".git/modules/$MAKEFILE_DIR" "$MAKEFILE_DIR"
+        if [[ "$FORCE_INSTALL" == true ]]; then
+            git submodule deinit -f "$MAKEFILE_DIR" || true
+            git rm -f "$MAKEFILE_DIR" || true
+            rm -rf ".git/modules/$MAKEFILE_DIR" "$MAKEFILE_DIR"
+            log_info "Removed submodule directory ($MAKEFILE_DIR)"
+        else
+            log_warn "Submodule directory ($MAKEFILE_DIR) not removed. Use --force option to remove."
+        fi
     fi
     sed -i.bak '/Universal Makefile System/d;/.project.local.mk/d;/\.env/d' .gitignore 2>/dev/null || true
     rm -f .gitignore.bak
     log_success "Uninstallation complete"
 }
+
 
 update_makefile_system() {
     log_info "Updating Universal Makefile System..."
