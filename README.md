@@ -35,7 +35,7 @@ cd your-project
 git submodule add https://github.com/jinwoo-j/universal-makefile .makefile-system
 
 # 설치 및 설정
-./.makefile-system/install.sh --submodule
+./.makefile-system/install.sh
 
 # 프로젝트 설정 (project.mk 편집)
 vim project.mk
