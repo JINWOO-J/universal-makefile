@@ -612,6 +612,7 @@ main() {
             update_gitignore
             create_environments
             [[ "$EXISTING_PROJECT" == false ]] && create_sample_compose
+            install_github_workflow
             show_completion_message
             ;;
         update)

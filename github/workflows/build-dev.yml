@@ -5,10 +5,10 @@ on:
     branches:
       - 'devel'
 
-env:
-  REPO_HUB: jinwoo
-  NAME: box
-  ROLE: frontend
+# env:
+#   REPO_HUB: jinwoo
+#   NAME: box
+#   ROLE: frontend
   
 
 jobs:
@@ -23,6 +23,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+   
+      ############################################################
+      - name: Load project settings
+        id: load_settings
+        run: |
+          # project.mk 파일을 소스하여 환경 변수 설정
+          source project.mk
+          echo "REPO_HUB=${REPO_HUB}" >> $GITHUB_ENV
+          echo "NAME=${NAME}" >> $GITHUB_ENV
+          echo "ROLE=${ROLE}" >> $GITHUB_ENV
+      ############################################################
 
       - name: Set up dynamic variables
         id: vars
