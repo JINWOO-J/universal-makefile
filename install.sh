@@ -381,6 +381,7 @@ update_makefile_system() {
         [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .
 
         log_success "Copied latest files from remote."
+        log_success "Don't forget to git add .makefile-system && git commit to update submodule pointer!"
     else
         log_error "Universal Makefile System installation not found. Cannot update."
         exit 1
