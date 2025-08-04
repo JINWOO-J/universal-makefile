@@ -237,6 +237,7 @@ create_project_config() {
         [[ "$url" =~ github.com[:/]([^/]+) ]] && default_repo_hub="${BASH_REMATCH[1]}"
     fi
     cat > "project.mk" << EOF
+# === Created by Universal Makefile System Installer ===    
 REPO_HUB = $default_repo_hub
 NAME = $default_name
 VERSION = v1.0.0
@@ -275,11 +276,13 @@ create_environments() {
     log_info "Creating environments/..."
     mkdir -p environments
     cat > environments/development.mk << 'EOF'
+# === Created by Universal Makefile System Installer ===
 DEBUG = true
 DOCKER_BUILD_OPTION += --progress=plain
 COMPOSE_FILE = docker-compose.dev.yml
 EOF
     cat > environments/production.mk << 'EOF'
+# === Created by Universal Makefile System Installer ===
 DEBUG = false
 DOCKER_BUILD_OPTION += --no-cache
 COMPOSE_FILE = docker-compose.prod.yml
@@ -291,6 +294,7 @@ create_sample_compose() {
     [[ -f "docker-compose.yml" && "$FORCE_INSTALL" == false ]] && return
     log_info "Creating docker-compose.yml..."
     cat > docker-compose.yml << 'EOF'
+# === Created by Universal Makefile System Installer ===
 version: '3.8'
 services:
   app:
