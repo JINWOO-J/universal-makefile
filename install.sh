@@ -199,7 +199,16 @@ install_copy() {
 
 create_main_makefile() {
     local target_file="Makefile"
-    [[ "$EXISTING_PROJECT" == true && -f "$target_file" ]] && target_file="Makefile.universal"
+    local created_universal=false
+
+    if [[ -f "$target_file" ]]; then
+        target_file="Makefile.universal"
+        created_universal=true
+        log_warn "Existing Makefile detected. Creating $target_file instead."
+        log_info "To use Universal Makefile System rules, add the following line to your Makefile:"
+        echo -e "${YELLOW}include Makefile.universal${RESET}\n"
+    fi
+
     log_info "Creating $target_file..."
     cat > "$target_file" << EOF
 # === Created by Universal Makefile System Installer ===
@@ -235,7 +244,16 @@ include \$(MAKEFILE_DIR)/makefiles/git-flow.mk
 include \$(MAKEFILE_DIR)/makefiles/cleanup.mk
 EOF
     log_success "$target_file created"
+
+    # 설치 안내 메시지 추가
+    if [[ "$created_universal" == true ]]; then
+        echo ""
+        echo -e "${BLUE}To use Universal Makefile System commands, add the following line to your existing Makefile:${RESET}"
+        echo -e "${YELLOW}include Makefile.universal${RESET}"
+        echo ""
+    fi
 }
+
 
 create_project_config() {
     [[ -f "project.mk" && "$FORCE_INSTALL" == false ]] && return
