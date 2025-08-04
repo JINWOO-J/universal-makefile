@@ -144,7 +144,7 @@ check_requirements() {
 
 
 check_existing_installation() {
-    local has_existing=false
+
 
     if [[ -d "$MAKEFILE_DIR" && ! -f Makefile && ! -f project.mk && ! -d makefiles ]]; then
         return 0
@@ -156,12 +156,12 @@ check_existing_installation() {
     if [[ -f "Makefile" && "$EXISTING_PROJECT" != true ]]; then
         if ! has_universal_id "Makefile"; then
             log_warn "Existing Makefile found (not created by universal-makefile)"
-            has_existing=true
+
         fi
     fi
 
 
-    if [[ "$has_existing" == true && "$FORCE_INSTALL" == false && "$EXISTING_PROJECT" != true ]]; then
+    if [[ "$FORCE_INSTALL" == false && "$EXISTING_PROJECT" != true ]]; then
         echo ""
         log_warn "Existing installation detected. Options:"
         echo "  1. Use --force to overwrite"
