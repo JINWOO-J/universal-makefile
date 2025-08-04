@@ -153,10 +153,13 @@ check_existing_installation() {
     [[ -d "$MAKEFILE_DIR" ]] && log_warn "Submodule installation detected at $MAKEFILE_DIR" && has_existing=true
     [[ -d "makefiles" ]] && log_warn "Makefiles directory exists" && has_existing=true
 
-    if [[ -f "Makefile" && "$EXISTING_PROJECT" != true && ! $(has_universal_id "Makefile") ]]; then
-        log_warn "Existing Makefile found (not created by universal-makefile)"
-        has_existing=true
+    if [[ -f "Makefile" && "$EXISTING_PROJECT" != true ]]; then
+        if ! has_universal_id "Makefile"; then
+            log_warn "Existing Makefile found (not created by universal-makefile)"
+            has_existing=true
+        fi
     fi
+
 
     if [[ "$has_existing" == true && "$FORCE_INSTALL" == false && "$EXISTING_PROJECT" != true ]]; then
         echo ""
@@ -421,8 +424,8 @@ uninstall() {
     sed -i.bak '/Universal Makefile System/d;/.project.local.mk/d;/\.env/d' .gitignore 2>/dev/null || true
     rm -f .gitignore.bak
 
-    [[ -f docker-compose.yml ]] && log_warn "docker-compose.yml is not removed (user/project file)."
-    [[ -f project.mk && ! $(has_universal_id project.mk) ]] && log_warn "project.mk is not removed (user/project file)."
+    [[ -f docker-compose.yml ]] && log_warn "docker-compose.yml is not removed (user/project file)."    
+    [[ -f project.mk ]] && ! has_universal_id project.mk && log_warn "project.mk is not removed (user/project file)."
 
     log_warn "User project files such as docker-compose.yml are not removed for safety."
     log_success "Uninstallation complete"
