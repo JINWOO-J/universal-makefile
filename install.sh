@@ -306,9 +306,18 @@ update_makefile_system() {
     log_info "Updating Universal Makefile System..."
 
     if [[ "$INSTALLATION_TYPE" == "submodule" && -d "$MAKEFILE_DIR" ]]; then
-        git -C "$MAKEFILE_DIR" fetch origin $MAIN_BRANCH
-        git -C "$MAKEFILE_DIR" reset --hard origin/$MAIN_BRANCH
-        log_success "Submodule forcibly updated to latest commit from remote."
+        git -C "$MAKEFILE_DIR" fetch origin "$MAIN_BRANCH"
+        if [[ "$FORCE_INSTALL" == true ]]; then
+            git -C "$MAKEFILE_DIR" reset --hard "origin/$MAIN_BRANCH"
+            log_success "Submodule forcibly updated to latest commit from remote."
+        else
+            if ! git -C "$MAKEFILE_DIR" merge "origin/$MAIN_BRANCH"; then
+                log_error "Merge conflict occurred in submodule."
+                log_warn "You can resolve manually, or run update again with --force to overwrite local changes."
+                exit 1
+            fi
+            log_success "Submodule updated with merge."
+        fi
         echo "👉 Don't forget: git add $MAKEFILE_DIR && git commit to update the submodule pointer!"
     elif [[ "$INSTALLATION_TYPE" == "copy" && -d "makefiles" ]]; then
         local temp_dir
