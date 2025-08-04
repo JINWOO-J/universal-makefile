@@ -569,10 +569,11 @@ is_universal_makefile_installed() {
     fi
 
     if [[ -f Makefile ]]; then
+        echo ""
         if ! grep -q '^[[:space:]]*include[[:space:]]\+Makefile\.universal' Makefile; then
             log_warn "Makefile does NOT include 'include Makefile.universal'."
             log_info "Add this line to your Makefile to enable Universal Makefile System:"
-            echo -e "${YELLOW}include Makefile.universal${RESET}"
+            echo -e "${YELLOW}include Makefile.universal${RESET} \n\n"
         fi
     fi
 
