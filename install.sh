@@ -592,7 +592,6 @@ is_universal_makefile_installed() {
 #     cp -rf $MAKEFILE_DIR/github/workflows/* .github/workflows/
 #     log_success "GitHub Actions workflow installed"
 # }
-
 install_github_workflow() {
     log_info "Installing GitHub Actions workflow..."
     mkdir -p .github/workflows
@@ -607,9 +606,15 @@ install_github_workflow() {
         return 0
     fi
 
+    log_info "Copying the following workflow files:"
+    for f in "${files[@]}"; do
+        echo "  - $f"
+    done
+
     cp -rf "${files[@]}" .github/workflows/
     log_success "GitHub Actions workflow installed"
 }
+
 
 main() {
     local cmd=${1:-install}
