@@ -17,7 +17,7 @@
 ## 📦 지원하는 프로젝트 타입
 
 - **Node.js** (npm, yarn)
-- **Python** (poetry, pip)  
+- **Python** (poetry, pip)
 - **Rust** (cargo)
 - **Go** (go modules)
 - **Java** (maven, gradle)
@@ -32,7 +32,7 @@
 ```bash
 # 기존 프로젝트에 추가
 cd your-project
-git submodule add https://github.com/company/universal-makefile .makefile-system
+git submodule add https://github.com/jinwoo-j/universal-makefile .makefile-system
 
 # 설치 및 설정
 ./.makefile-system/install.sh --submodule
@@ -48,10 +48,10 @@ make help
 
 ```bash
 # 원격 설치
-curl -sSL https://raw.githubusercontent.com/company/universal-makefile/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/jinwoo-j/universal-makefile/main/install.sh | bash
 
 # 또는 수동 설치
-wget https://github.com/company/universal-makefile/archive/main.zip
+wget https://github.com/jinwoo-j/universal-makefile/archive/main.zip
 unzip main.zip && cd universal-makefile-main
 ./install.sh --copy
 ```
@@ -60,7 +60,7 @@ unzip main.zip && cd universal-makefile-main
 
 ```bash
 # 기존 Makefile이 있는 프로젝트
-git submodule add https://github.com/company/universal-makefile .makefile-system
+git submodule add https://github.com/jinwoo-j/universal-makefile .makefile-system
 ./.makefile-system/install.sh --existing-project
 ```
 
@@ -145,7 +145,7 @@ your-project/
 ```makefile
 # 기본 정보
 REPO_HUB = mycompany
-NAME = myproject  
+NAME = myproject
 VERSION = v1.0.0
 
 # Git 설정
@@ -195,7 +195,7 @@ dev-seed: ## 🌱 Seed development data
 ```bash
 # 시맨틱 버전 자동 증가
 make version-patch    # 1.0.0 -> 1.0.1
-make version-minor    # 1.0.0 -> 1.1.0  
+make version-minor    # 1.0.0 -> 1.1.0
 make version-major    # 1.0.0 -> 2.0.0
 
 # 릴리스 노트 자동 생성
@@ -322,13 +322,13 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-      
+
       - name: Build and Test
         run: |
           make build
           make test
           make security-scan
-      
+
       - name: Deploy
         if: github.ref == 'refs/heads/main'
         run: make deploy ENV=production
@@ -563,9 +563,8 @@ make help
 
 **💡 도움이 필요하신가요?**
 
-- 📖 [Wiki](https://github.com/company/universal-makefile/wiki)
-- 🐛 [Issues](https://github.com/company/universal-makefile/issues)
-- 💬 [Discussions](https://github.com/company/universal-makefile/discussions)
-- 📧 Email: support@company.com
+- 📖 [Wiki](https://github.com/jinwoo-j/universal-makefile/wiki)
+- 🐛 [Issues](https://github.com/jinwoo-j/universal-makefile/issues)
+- 💬 [Discussions](https://github.com/jinwoo-j/universal-makefile/discussions)
 
 **⭐ 이 프로젝트가 도움이 되었다면 스타를 눌러주세요!**
