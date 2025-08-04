@@ -143,33 +143,56 @@ check_requirements() {
 }
 
 
-check_existing_installation() {
-    local has_existing=false
+# check_existing_installation() {
+#     local has_existing=false
 
-    if [[ -d "$MAKEFILE_DIR" && ! -f Makefile && ! -f project.mk && ! -d makefiles ]]; then
+#     if [[ -d "$MAKEFILE_DIR" && ! -f Makefile && ! -f project.mk && ! -d makefiles ]]; then
+#         log_info "Only submodule detected; proceeding as new installation."
+#         return 0
+#     fi
+
+#     [[ -d "makefiles" ]] && log_warn "Makefiles directory exists" && has_existing=true
+
+#     if [[ -f "Makefile" && "$EXISTING_PROJECT" != true ]]; then
+#         if ! has_universal_id "Makefile"; then
+#             log_warn "Existing Makefile found (not created by universal-makefile)"
+#             has_existing=true
+#         fi
+#     fi
+
+#     log_info "has_existing: $has_existing, FORCE_INSTALL: $FORCE_INSTALL, EXISTING_PROJECT: $EXISTING_PROJECT"
+#     if [[ "$has_existing" == true && "$FORCE_INSTALL" == false && "$EXISTING_PROJECT" != true ]]; then
+#         echo ""
+#         log_warn "Existing installation detected. Options:"
+#         echo "  1. Use --force to overwrite"
+#         echo "  2. Use --existing-project to preserve existing files"
+#         echo "  3. Manually remove existing files"
+#         exit 1
+#     fi
+# }
+
+check_existing_installation() {   
+    if [[ -d "$MAKEFILE_DIR" && ! -f Makefile && ! -f project.mk && ! -d makefiles && ! -f Makefile.universal ]]; then
         log_info "Only submodule detected; proceeding as new installation."
         return 0
     fi
 
-    [[ -d "makefiles" ]] && log_warn "Makefiles directory exists" && has_existing=true
+    if [[ -f "Makefile.universal" && "$FORCE_INSTALL" != true ]]; then
+        log_error "Makefile.universal already exists. Use --force to overwrite."
+        exit 1
+    fi
+
+    [[ -d "makefiles" ]] && log_warn "Makefiles directory exists (will not be overwritten)."
 
     if [[ -f "Makefile" && "$EXISTING_PROJECT" != true ]]; then
         if ! has_universal_id "Makefile"; then
-            log_warn "Existing Makefile found (not created by universal-makefile)"
-            has_existing=true
+            log_warn "Existing Makefile found (not created by universal-makefile, will NOT be overwritten)."
+            log_info "To use Universal Makefile System, add this line to your Makefile:"
+            echo -e "${YELLOW}include Makefile.universal${RESET}"
         fi
     fi
-
-    log_info "has_existing: $has_existing, FORCE_INSTALL: $FORCE_INSTALL, EXISTING_PROJECT: $EXISTING_PROJECT"
-    if [[ "$has_existing" == true && "$FORCE_INSTALL" == false && "$EXISTING_PROJECT" != true ]]; then
-        echo ""
-        log_warn "Existing installation detected. Options:"
-        echo "  1. Use --force to overwrite"
-        echo "  2. Use --existing-project to preserve existing files"
-        echo "  3. Manually remove existing files"
-        exit 1
-    fi
 }
+
 
 
 install_submodule() {
