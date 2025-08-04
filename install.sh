@@ -192,8 +192,8 @@ create_main_makefile() {
     [[ "$EXISTING_PROJECT" == true && -f "$target_file" ]] && target_file="Makefile.universal"
     log_info "Creating $target_file..."
     cat > "$target_file" << EOF
-# See universal-makefile system for details
 # === Created by Universal Makefile System Installer ===
+# See universal-makefile system for details
 
 .DEFAULT_GOAL := help
 
