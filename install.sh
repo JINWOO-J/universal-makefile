@@ -20,6 +20,7 @@ log_error()   { echo "${RED}❌ $1${RESET}" >&2; }
 
 REPO_URL="https://github.com/jinwoo-j/universal-makefile"
 MAKEFILE_DIR=".makefile-system"
+MAIN_BRANCH="master"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 INSTALLATION_TYPE="submodule"
@@ -303,9 +304,11 @@ uninstall() {
 
 update_makefile_system() {
     log_info "Updating Universal Makefile System..."
+
     if [[ "$INSTALLATION_TYPE" == "submodule" && -d "$MAKEFILE_DIR" ]]; then
-        git submodule update --remote --merge "$MAKEFILE_DIR"
-        log_success "Submodule updated to latest commit from remote."
+        git -C "$MAKEFILE_DIR" fetch origin $MAIN_BRANCH
+        git -C "$MAKEFILE_DIR" reset --hard origin/$MAIN_BRANCH
+        log_success "Submodule forcibly updated to latest commit from remote."
         echo "👉 Don't forget: git add $MAKEFILE_DIR && git commit to update the submodule pointer!"
     elif [[ "$INSTALLATION_TYPE" == "copy" && -d "makefiles" ]]; then
         local temp_dir
@@ -323,6 +326,7 @@ update_makefile_system() {
         exit 1
     fi
 }
+
 
 
 main() {
