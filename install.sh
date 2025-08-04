@@ -118,6 +118,11 @@ parse_update_args() {
 }
 
 
+has_universal_id() {
+    local file=$1
+    [[ -f "$file" ]] && grep -q "Universal Makefile System" "$file"
+}
+
 check_requirements() {
     log_info "Checking requirements..."
     if [[ "$INSTALLATION_TYPE" == "submodule" ]]; then
@@ -140,13 +145,18 @@ check_requirements() {
 
 check_existing_installation() {
     local has_existing=false
-    # 신규 프로젝트(submodule만 있을 때)는 계속 진행
+
     if [[ -d "$MAKEFILE_DIR" && ! -f Makefile && ! -f project.mk && ! -d makefiles ]]; then
         return 0
     fi
+
     [[ -d "$MAKEFILE_DIR" ]] && log_warn "Submodule installation detected at $MAKEFILE_DIR" && has_existing=true
     [[ -d "makefiles" ]] && log_warn "Makefiles directory exists" && has_existing=true
-    [[ -f "Makefile" && "$EXISTING_PROJECT" != true ]] && log_warn "Existing Makefile found" && has_existing=true
+
+    if [[ -f "Makefile" && "$EXISTING_PROJECT" != true && ! $(has_universal_id "Makefile") ]]; then
+        log_warn "Existing Makefile found (not created by universal-makefile)"
+        has_existing=true
+    fi
 
     if [[ "$has_existing" == true && "$FORCE_INSTALL" == false && "$EXISTING_PROJECT" != true ]]; then
         echo ""
@@ -157,6 +167,8 @@ check_existing_installation() {
         exit 1
     fi
 }
+
+
 
 install_submodule() {
     log_info "Installing as git submodule..."
@@ -379,11 +391,6 @@ uninstall() {
         mkdir -p "$backup_dir"
         log_info "Backup enabled. Files will be backed up to $backup_dir"
     fi
-
-    has_universal_id() {
-        local file=$1
-        [[ -f "$file" ]] && grep -q "Universal Makefile System" "$file"
-    }
 
     for f in Makefile Makefile.universal project.mk; do
         if has_universal_id "$f"; then
