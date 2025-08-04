@@ -80,7 +80,7 @@ parse_args() {
                 uninstall;
                 exit 0 ;;
             --update|--pull)
-                update_makefile_system
+                update_makefile_system;;
                 exit 0                
             -h|--help)
                 usage
