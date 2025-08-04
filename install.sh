@@ -213,7 +213,7 @@ install_copy() {
 }
 
 create_main_makefile() {
-    local target_file="Makefile"
+    local target_file="Makefile.universal"
     local created_universal=false
 
     if [[ -f "$target_file" ]]; then
@@ -260,8 +260,20 @@ include \$(MAKEFILE_DIR)/makefiles/cleanup.mk
 EOF
     log_success "$target_file created"
 
-    # 설치 안내 메시지 추가
-    if [[ "$created_universal" == true ]]; then
+    # # 설치 안내 메시지 추가
+    # if [[ "$created_universal" == true ]]; then
+    #     echo ""
+    #     echo -e "${BLUE}To use Universal Makefile System commands, add the following line to your existing Makefile:${RESET}"
+    #     echo -e "${YELLOW}include Makefile.universal${RESET}"
+    #     echo ""
+    # fi
+
+    if [[ ! -f Makefile ]]; then
+        echo -e "# Project Makefile\ninclude Makefile.universal\n" > Makefile
+        log_success "Created Makefile with 'include Makefile.universal'"
+    else
+        log_warn "Existing Makefile detected. To use Universal Makefile System, add:"
+        echo -e "${YELLOW}include Makefile.universal${RESET}"
         echo ""
         echo -e "${BLUE}To use Universal Makefile System commands, add the following line to your existing Makefile:${RESET}"
         echo -e "${YELLOW}include Makefile.universal${RESET}"
