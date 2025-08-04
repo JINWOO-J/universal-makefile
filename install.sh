@@ -147,19 +147,20 @@ check_existing_installation() {
     local has_existing=false
 
     if [[ -d "$MAKEFILE_DIR" && ! -f Makefile && ! -f project.mk && ! -d makefiles ]]; then
+        log_info "Only submodule detected; proceeding as new installation."
         return 0
     fi
 
-    [[ -d "$MAKEFILE_DIR" ]] && log_warn "Submodule installation detected at $MAKEFILE_DIR" && has_existing=true
     [[ -d "makefiles" ]] && log_warn "Makefiles directory exists" && has_existing=true
 
     if [[ -f "Makefile" && "$EXISTING_PROJECT" != true ]]; then
         if ! has_universal_id "Makefile"; then
             log_warn "Existing Makefile found (not created by universal-makefile)"
+            has_existing=true
         fi
     fi
 
-
+    log_info "has_existing: $has_existing, FORCE_INSTALL: $FORCE_INSTALL, EXISTING_PROJECT: $EXISTING_PROJECT"
     if [[ "$has_existing" == true && "$FORCE_INSTALL" == false && "$EXISTING_PROJECT" != true ]]; then
         echo ""
         log_warn "Existing installation detected. Options:"
@@ -169,7 +170,6 @@ check_existing_installation() {
         exit 1
     fi
 }
-
 
 
 install_submodule() {
