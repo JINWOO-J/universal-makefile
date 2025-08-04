@@ -620,7 +620,7 @@ install_github_workflow() {
 setup_app_example() {
     local app_type="${1:-}"
 
-    local examples_dir="examples"
+    local examples_dir="$MAKEFILE_DIR/examples"
     [[ ! -d "$examples_dir" ]] && log_error "examples directory not found!" && exit 1
 
     if [[ -z "$app_type" ]]; then
