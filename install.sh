@@ -54,7 +54,6 @@ Repository: $REPO_URL
 EOF
 }
 
-# ------------------ Option parsing for install ------------------
 
 parse_install_args() {
     while [[ $# -gt 0 ]]; do
@@ -72,7 +71,6 @@ parse_install_args() {
     fi
 }
 
-# ------------------ Core functions (변경 없음) ------------------
 
 check_requirements() {
     log_info "Checking requirements..."
@@ -326,7 +324,6 @@ update_makefile_system() {
     fi
 }
 
-# ------------------ Subcommand dispatcher ------------------
 
 main() {
     case "${1:-install}" in
