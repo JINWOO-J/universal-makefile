@@ -294,10 +294,10 @@ EOF
         echo -e "# Project Makefile\ninclude Makefile.universal\n" > Makefile
         log_success "Created Makefile with 'include Makefile.universal'"
     else
-        log_warn "Existing Makefile detected. To use Universal Makefile System, add:"
-        echo -e "${YELLOW}include Makefile.universal${RESET}"
+        # log_warn "Existing Makefile detected. To use Universal Makefile System, add:"
+        # echo -e "${YELLOW}include Makefile.universal${RESET}"
         echo ""
-        echo -e "${BLUE}To use Universal Makefile System commands, add the following line to your existing Makefile:${RESET}"
+        log_info "To use Universal Makefile System commands, add the following line to your existing Makefile:"
         echo -e "${YELLOW}include Makefile.universal${RESET}"
         echo ""
     fi
@@ -545,6 +545,46 @@ update_makefile_system() {
 }
 
 
+is_universal_makefile_installed() {
+    local ok=true
+
+    if [[ ! -d "${MAKEFILE_DIR}" && ! -d "makefiles" ]]; then
+        log_error "Universal Makefile System directory (.makefile-system or makefiles) not found."
+        ok=false
+    fi
+
+    if [[ ! -f "Makefile.universal" ]]; then
+        log_error "Makefile.universal not found."
+        ok=false
+    fi
+
+    if [[ ! -f "project.mk" ]]; then
+        log_error "project.mk not found."
+        ok=false
+    fi
+
+    if [[ ! -d "environments" || -z "$(ls environments/*.mk 2>/dev/null)" ]]; then
+        log_error "No environments/*.mk files found."
+        ok=false
+    fi
+
+    if [[ -f Makefile ]]; then
+        if ! grep -q '^[[:space:]]*include[[:space:]]\+Makefile\.universal' Makefile; then
+            log_warn "Makefile does NOT include 'include Makefile.universal'."
+            log_info "Add this line to your Makefile to enable Universal Makefile System:"
+            echo -e "${YELLOW}include Makefile.universal${RESET}"
+        fi
+    fi
+
+    if [[ "$ok" == true ]]; then
+        log_success "Universal Makefile System is properly installed 🎉"
+        return 0
+    else
+        log_warn "Universal Makefile System is NOT fully installed."
+        return 1
+    fi
+}
+
 main() {
     local cmd=${1:-install}
     shift || true
@@ -576,6 +616,9 @@ main() {
             ;;
         self-update)
             self_update
+            ;;            
+        check)
+            is_universal_makefile_installed
             ;;            
         help|-h|--help|'')
             usage
