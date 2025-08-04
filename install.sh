@@ -586,10 +586,28 @@ is_universal_makefile_installed() {
     fi
 }
 
+# install_github_workflow() {
+#     log_info "Installing GitHub Actions workflow..."
+#     mkdir -p .github/workflows
+#     cp -rf $MAKEFILE_DIR/github/workflows/* .github/workflows/
+#     log_success "GitHub Actions workflow installed"
+# }
+
 install_github_workflow() {
     log_info "Installing GitHub Actions workflow..."
     mkdir -p .github/workflows
-    cp -rf $MAKEFILE_DIR/github/workflows/* .github/workflows/
+
+    local src_dir="$MAKEFILE_DIR/github/workflows"
+    shopt -s nullglob
+    local files=("$src_dir"/*)
+    shopt -u nullglob
+
+    if [[ ${#files[@]} -eq 0 ]]; then
+        log_warn "No workflows to install in $src_dir"
+        return 0
+    fi
+
+    cp -rf "${files[@]}" .github/workflows/
     log_success "GitHub Actions workflow installed"
 }
 
