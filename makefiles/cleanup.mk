@@ -1,10 +1,14 @@
-# ================================================================
-# Cleanup and Utility Operations
-# ================================================================
-
 .PHONY: clean env-clean deep-clean safe-clean
 .PHONY: clean-temp clean-logs clean-cache clean-build
 .PHONY: clean-all-containers clean-all-images clean-all-volumes
+
+safe_rm = \
+	@if [ "$(DRY_RUN)" = "true" ]; then \
+		echo "[Dry run]: Would remove the following files:"; \
+		echo "$$@"; \
+	else \
+		rm -rf "$$@"; \
+	fi
 
 # ================================================================
 # 기본 정리 타겟들
@@ -47,50 +51,50 @@ deep-clean: ## 🧹 Complete cleanup (DANGEROUS - removes all project artifacts)
 
 clean-temp: ## 🧹 Clean temporary files
 	@$(call colorecho, "🗑️  Cleaning temporary files...")
-	@rm -f .NEW_VERSION.tmp || true
-	@rm -f *.tmp || true
-	@rm -f .DS_Store || true
-	@find . -name "*.tmp" -type f -delete 2>/dev/null || true
-	@find . -name ".DS_Store" -type f -delete 2>/dev/null || true
-	@find . -name "Thumbs.db" -type f -delete 2>/dev/null || true
-	@find . -name "*.swp" -type f -delete 2>/dev/null || true
-	@find . -name "*.swo" -type f -delete 2>/dev/null || true
-	@find . -name "*~" -type f -delete 2>/dev/null || true
+	@$(safe_rm) .NEW_VERSION.tmp
+	@$(safe_rm) *.tmp
+	@$(safe_rm) .DS_Store
+	@find . -name "*.tmp" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name ".DS_Store" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "Thumbs.db" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.swp" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.swo" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*~" -type f -print0 | xargs -0 $(safe_rm)
 	@$(call success, "Temporary files cleaned")
 
 clean-logs: ## 🧹 Clean log files
 	@$(call colorecho, "📋 Cleaning log files...")
-	@rm -rf logs/ || true
-	@rm -f *.log || true
-	@find . -name "*.log" -type f -delete 2>/dev/null || true
-	@find . -name "*.log.*" -type f -delete 2>/dev/null || true
+	@$(safe_rm) logs/
+	@$(safe_rm) *.log
+	@find . -name "*.log" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.log.*" -type f -print0 | xargs -0 $(safe_rm)
 	@$(call success, "Log files cleaned")
 
 clean-cache: ## 🧹 Clean cache files and directories
 	@$(call colorecho, "💾 Cleaning cache files...")
-	@rm -rf .cache/ || true
-	@rm -rf __pycache__/ || true
-	@find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-	@find . -name "*.pyc" -type f -delete 2>/dev/null || true
-	@find . -name "*.pyo" -type f -delete 2>/dev/null || true
-	@rm -rf node_modules/.cache/ || true
-	@rm -rf .npm/ || true
-	@rm -rf .yarn/cache/ || true
-	@rm -rf target/debug/ || true
-	@rm -rf target/release/ || true
+	@$(safe_rm) .cache/
+	@$(safe_rm) __pycache__/
+	@find . -name "__pycache__" -type d -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.pyc" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.pyo" -type f -print0 | xargs -0 $(safe_rm)
+	@$(safe_rm) node_modules/.cache/
+	@$(safe_rm) .npm/
+	@$(safe_rm) .yarn/cache/
+	@$(safe_rm) target/debug/
+	@$(safe_rm) target/release/
 	@$(call success, "Cache files cleaned")
 
 clean-build: ## 🧹 Clean build artifacts
 	@$(call colorecho, "🔨 Cleaning build artifacts...")
-	@rm -rf build/ || true
-	@rm -rf dist/ || true
-	@rm -rf out/ || true
-	@rm -rf target/ || true
-	@rm -rf .build/ || true
-	@find . -name "*.o" -type f -delete 2>/dev/null || true
-	@find . -name "*.so" -type f -delete 2>/dev/null || true
-	@find . -name "*.dylib" -type f -delete 2>/dev/null || true
-	@find . -name "*.dll" -type f -delete 2>/dev/null || true
+	@$(safe_rm) build/
+	@$(safe_rm) dist/
+	@$(safe_rm) out/
+	@$(safe_rm) target/
+	@$(safe_rm) .build/
+	@find . -name "*.o" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.so" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.dylib" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.dll" -type f -print0 | xargs -0 $(safe_rm)
 	@$(call success, "Build artifacts cleaned")
 
 # ================================================================
@@ -99,10 +103,10 @@ clean-build: ## 🧹 Clean build artifacts
 
 env-clean: ## 🧹 Clean environment files
 	@$(call colorecho, "🌍 Cleaning environment files...")
-	@rm -f .env || true
-	@rm -f .env.local || true
-	@rm -f .env.*.local || true
-	@find . -name ".env.*.local" -type f -delete 2>/dev/null || true
+	@$(safe_rm) .env
+	@$(safe_rm) .env.local
+	@$(safe_rm) .env.*.local
+	@find . -name ".env.*.local" -type f -print0 | xargs -0 $(safe_rm)
 	@$(call success, "Environment files cleaned")
 
 # ================================================================
@@ -111,28 +115,28 @@ env-clean: ## 🧹 Clean environment files
 
 clean-node: ## 🧹 Clean Node.js specific files
 	@$(call colorecho, "📦 Cleaning Node.js files...")
-	@rm -rf node_modules/ || true
-	@rm -f package-lock.json || true
-	@rm -f yarn.lock || true
-	@rm -f .yarn/install-state.gz || true
-	@rm -rf .yarn/cache/ || true
-	@rm -rf .npm/ || true
+	@$(safe_rm) node_modules/
+	@$(safe_rm) package-lock.json
+	@$(safe_rm) yarn.lock
+	@$(safe_rm) .yarn/install-state.gz
+	@$(safe_rm) .yarn/cache/
+	@$(safe_rm) .npm/
 	@$(call success, "Node.js files cleaned")
 
 clean-python: ## 🧹 Clean Python specific files
 	@$(call colorecho, "🐍 Cleaning Python files...")
-	@rm -rf __pycache__/ || true
-	@find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-	@find . -name "*.pyc" -type f -delete 2>/dev/null || true
-	@find . -name "*.pyo" -type f -delete 2>/dev/null || true
-	@find . -name "*.pyd" -type f -delete 2>/dev/null || true
-	@rm -rf .pytest_cache/ || true
-	@rm -rf .coverage || true
-	@rm -rf htmlcov/ || true
-	@rm -rf .mypy_cache/ || true
-	@rm -rf dist/ || true
-	@rm -rf build/ || true
-	@rm -rf *.egg-info/ || true
+	@$(safe_rm) __pycache__/
+	@find . -name "__pycache__" -type d -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.pyc" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.pyo" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.pyd" -type f -print0 | xargs -0 $(safe_rm)
+	@$(safe_rm) .pytest_cache/
+	@$(safe_rm) .coverage
+	@$(safe_rm) htmlcov/
+	@$(safe_rm) .mypy_cache/
+	@$(safe_rm) dist/
+	@$(safe_rm) build/
+	@$(safe_rm) *.egg-info/
 	@$(call success, "Python files cleaned")
 
 clean-rust: ## 🧹 Clean Rust specific files
@@ -140,7 +144,7 @@ clean-rust: ## 🧹 Clean Rust specific files
 	@if [ -f "Cargo.toml" ]; then \
 		cargo clean 2>/dev/null || true; \
 	fi
-	@rm -rf target/ || true
+	@$(safe_rm) target/
 	@$(call success, "Rust files cleaned")
 
 clean-go: ## 🧹 Clean Go specific files
@@ -154,9 +158,9 @@ clean-go: ## 🧹 Clean Go specific files
 
 clean-java: ## 🧹 Clean Java specific files
 	@$(call colorecho, "☕ Cleaning Java files...")
-	@rm -rf target/ || true
-	@rm -rf build/ || true
-	@find . -name "*.class" -type f -delete 2>/dev/null || true
+	@$(safe_rm) target/
+	@$(safe_rm) build/
+	@find . -name "*.class" -type f -print0 | xargs -0 $(safe_rm)
 	@$(call success, "Java files cleaned")
 
 # ================================================================
@@ -165,12 +169,12 @@ clean-java: ## 🧹 Clean Java specific files
 
 clean-ide: ## 🧹 Clean IDE and editor files
 	@$(call colorecho, "💻 Cleaning IDE files...")
-	@rm -rf .vscode/ || true
-	@rm -rf .idea/ || true
-	@rm -f *.sublime-project || true
-	@rm -f *.sublime-workspace || true
-	@find . -name ".vscode" -type d -exec rm -rf {} + 2>/dev/null || true
-	@find . -name ".idea" -type d -exec rm -rf {} + 2>/dev/null || true
+	@$(safe_rm) .vscode/
+	@$(safe_rm) .idea/
+	@$(safe_rm) *.sublime-project
+	@$(safe_rm) *.sublime-workspace
+	@find . -name ".vscode" -type d -print0 | xargs -0 $(safe_rm)
+	@find . -name ".idea" -type d -print0 | xargs -0 $(safe_rm)
 	@$(call success, "IDE files cleaned")
 
 # ================================================================
@@ -179,14 +183,14 @@ clean-ide: ## 🧹 Clean IDE and editor files
 
 clean-test: ## 🧹 Clean test artifacts
 	@$(call colorecho, "🧪 Cleaning test artifacts...")
-	@rm -rf coverage/ || true
-	@rm -rf htmlcov/ || true
-	@rm -rf .coverage || true
-	@rm -rf .pytest_cache/ || true
-	@rm -rf .nyc_output/ || true
-	@rm -rf test-results/ || true
-	@rm -rf junit.xml || true
-	@find . -name "*.cover" -type f -delete 2>/dev/null || true
+	@$(safe_rm) coverage/
+	@$(safe_rm) htmlcov/
+	@$(safe_rm) .coverage
+	@$(safe_rm) .pytest_cache/
+	@$(safe_rm) .nyc_output/
+	@$(safe_rm) test-results/
+	@$(safe_rm) junit.xml
+	@find . -name "*.cover" -type f -print0 | xargs -0 $(safe_rm)
 	@$(call success, "Test artifacts cleaned")
 
 # ================================================================
@@ -195,10 +199,10 @@ clean-test: ## 🧹 Clean test artifacts
 
 clean-recursively: ## 🧹 Clean recursively in all subdirectories
 	@$(call colorecho, "🔄 Recursive cleanup in all subdirectories...")
-	@find . -type d -name "node_modules" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type d -name "target" -path "*/target" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d -name "node_modules" -print0 | xargs -0 $(safe_rm)
+	@find . -type d -name "__pycache__" -print0 | xargs -0 $(safe_rm)
+	@find . -type d -name ".pytest_cache" -print0 | xargs -0 $(safe_rm)
+	@find . -type d -name "target" -path "*/target" -print0 | xargs -0 $(safe_rm)
 	@$(call success, "Recursive cleanup completed")
 
 clean-large-files: ## 🧹 Find and optionally clean large files (>50MB)
@@ -207,7 +211,7 @@ clean-large-files: ## 🧹 Find and optionally clean large files (>50MB)
 	@find . -type f -size +50M -exec ls -lh {} \; 2>/dev/null | \
 		awk '{print "  " $$9 " (" $$5 ")"}' || echo "  No large files found"
 	@echo ""
-	@echo "$(YELLOW)To delete these files, run: find . -type f -size +50M -delete$(RESET)"
+	@echo "$(YELLOW)To delete these files, run: find . -type f -size +50M -print0 | xargs -0 $(safe_rm)$(RESET)"
 
 clean-old-files: ## 🧹 Find and optionally clean old files (>30 days)
 	@$(call colorecho, "🗓️  Finding old files (>30 days)...")
@@ -216,7 +220,7 @@ clean-old-files: ## 🧹 Find and optionally clean old files (>30 days)
 		awk '{print "  " $$9 " (modified: " $$6 " " $$7 " " $$8 ")"}' | head -20 || \
 		echo "  No old files found"
 	@echo ""
-	@echo "$(YELLOW)To delete these files, run: find . -type f -mtime +30 -not -path './.git/*' -delete$(RESET)"
+	@echo "$(YELLOW)To delete these files, run: find . -type f -mtime +30 -not -path './.git/*' -print0 | xargs -0 $(safe_rm)$(RESET)"
 
 # ================================================================
 # 보안 정리
@@ -229,94 +233,8 @@ clean-secrets: ## 🧹 Clean potential secret files (BE CAREFUL!)
 	@echo ""
 	@echo "Continue? [y/N] " && read ans && [ $${ans:-N} = y ]
 	@$(call colorecho, "🔐 Cleaning secret files...")
-	@find . -name "*.pem" -type f -delete 2>/dev/null || true
-	@find . -name "*.key" -type f -delete 2>/dev/null || true
-	@find . -name "*.p12" -type f -delete 2>/dev/null || true
-	@find . -name "*.pfx" -type f -delete 2>/dev/null || true
+	@find . -name "*.pem" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.key" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.p12" -type f -print0 | xargs -0 $(safe_rm)
+	@find . -name "*.pfx" -type f -print0 | xargs -0 $(safe_rm)
 	@$(call success, "Secret files cleaned")
-
-# ================================================================
-# 상태 확인 및 보고
-# ================================================================
-
-clean-status: ## 🧹 Show cleanup status and disk usage
-	@echo "$(BLUE)📊 Cleanup Status Report$(RESET)"
-	@echo ""
-	@echo "$(YELLOW)Current Directory Size:$(RESET)"
-	@du -sh . 2>/dev/null || echo "  Unable to calculate size"
-	@echo ""
-	@echo "$(YELLOW)Largest Directories:$(RESET)"
-	@du -sh */ 2>/dev/null | sort -hr | head -5 | sed 's/^/  /' || echo "  No subdirectories found"
-	@echo ""
-	@echo "$(YELLOW)File Type Summary:$(RESET)"
-	@find . -type f | sed 's/.*\.//' | sort | uniq -c | sort -nr | head -10 | \
-		awk '{printf "  %s files: %d\n", $$2, $$1}' || echo "  Unable to analyze files"
-	@echo ""
-	@echo "$(YELLOW)Cleanup Suggestions:$(RESET)"
-	@if [ -d "node_modules" ]; then echo "  📦 Run 'make clean-node' to clean Node.js files"; fi
-	@if [ -d "__pycache__" ]; then echo "  🐍 Run 'make clean-python' to clean Python files"; fi
-	@if [ -d "target" ]; then echo "  🦀 Run 'make clean-rust' to clean Rust files"; fi
-	@if find . -name "*.log" | head -1 | grep -q .; then echo "  📋 Run 'make clean-logs' to clean log files"; fi
-
-# ================================================================
-# 자동 정리 (cron job용)
-# ================================================================
-
-auto-clean: ## 🧹 Automated cleanup (safe for cron jobs)
-	@$(call colorecho, "🤖 Running automated cleanup...")
-	@$(MAKE) clean-temp
-	@$(MAKE) clean-logs
-	@# 오래된 Docker 이미지 정리 (7일 이상)
-	@docker image prune -f --filter "until=168h" 2>/dev/null || true
-	@# 오래된 컨테이너 정리
-	@docker container prune -f 2>/dev/null || true
-	@$(call success, "Automated cleanup completed")
-
-# ================================================================
-# 정리 도움말
-# ================================================================
-
-clean-help: ## 🧹 Show cleanup commands help
-	@echo ""
-	@echo "$(BLUE)🧹 Cleanup Commands Help$(RESET)"
-	@echo ""
-	@echo "$(YELLOW)Basic Cleanup:$(RESET)"
-	@echo "  $(GREEN)clean$(RESET)                   Safe cleanup (temp files, logs, env)"
-	@echo "  $(GREEN)deep-clean$(RESET)              Complete cleanup (DANGEROUS)"
-	@echo "  $(GREEN)auto-clean$(RESET)              Automated cleanup (cron-safe)"
-	@echo ""
-	@echo "$(YELLOW)Specific Cleanup:$(RESET)"
-	@echo "  $(GREEN)clean-temp$(RESET)              Clean temporary files"
-	@echo "  $(GREEN)clean-logs$(RESET)              Clean log files"
-	@echo "  $(GREEN)clean-cache$(RESET)             Clean cache files"
-	@echo "  $(GREEN)clean-build$(RESET)             Clean build artifacts"
-	@echo "  $(GREEN)env-clean$(RESET)               Clean environment files"
-	@echo ""
-	@echo "$(YELLOW)Language-specific:$(RESET)"
-	@echo "  $(GREEN)clean-node$(RESET)              Clean Node.js files"
-	@echo "  $(GREEN)clean-python$(RESET)            Clean Python files"
-	@echo "  $(GREEN)clean-rust$(RESET)              Clean Rust files"
-	@echo "  $(GREEN)clean-go$(RESET)                Clean Go files"
-	@echo "  $(GREEN)clean-java$(RESET)              Clean Java files"
-	@echo ""
-	@echo "$(YELLOW)Advanced:$(RESET)"
-	@echo "  $(GREEN)clean-large-files$(RESET)       Find large files (>50MB)"
-	@echo "  $(GREEN)clean-old-files$(RESET)         Find old files (>30 days)"
-	@echo "  $(GREEN)clean-recursively$(RESET)       Recursive cleanup"
-	@echo "  $(GREEN)clean-status$(RESET)            Show cleanup status report"
-	@echo ""
-	@echo "$(RED)⚠️  Warning: deep-clean and clean-secrets are destructive!$(RESET)"
-
-# ================================================================
-# 커스텀 정리 스크립트 지원
-# ================================================================
-
-clean-custom: ## 🧹 Run custom cleanup script (if exists)
-	@if [ -f "scripts/custom-clean.sh" ]; then \
-		$(call colorecho, "🔧 Running custom cleanup script..."); \
-		bash scripts/custom-clean.sh; \
-		$(call success, "Custom cleanup completed"); \
-	else \
-		$(call warn, "No custom cleanup script found at scripts/custom-clean.sh"); \
-		echo "Create this file to add project-specific cleanup logic"; \
-	fi
