@@ -1,0 +1,128 @@
+name: Build Dev and Notify Slack
+
+on:
+  push:
+    branches:
+      - 'devel'
+
+env:
+  REPO_HUB: jinwoo
+  NAME: box
+  ROLE: frontend
+  
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      image_name: ${{ steps.vars.outputs.image_name }}
+      tag_name: ${{ steps.vars.outputs.tag_name }}
+      build_time: ${{ steps.build_time.outputs.build_time }}
+      build_timestamp: ${{ steps.build_time.outputs.build_timestamp }}
+            
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up dynamic variables
+        id: vars
+        run: |
+          VERSION=$(make version -s | awk '{print $2}')
+          SHA_SHORT=$(git rev-parse --short HEAD)
+          DATE=$(date +'%Y%m%d')
+
+          echo "image_name=${{ env.REPO_HUB }}/${{ env.NAME }}" >> $GITHUB_OUTPUT
+          echo "tag_name=${{ env.ROLE }}-${GITHUB_REF_NAME}-${DATE}-${SHA_SHORT}" >> $GITHUB_OUTPUT
+
+      - name: Set current time
+        id: build_time
+        run: |
+          echo "build_time=$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S %Z')" >> $GITHUB_OUTPUT
+          echo "build_timestamp=$(date +%s)" >> $GITHUB_OUTPUT
+
+  # 2. 워크플로우 시작 알림
+  notify-start:
+    runs-on: ubuntu-latest
+    needs: setup # setup 잡의 결과에 의존
+    steps:
+      - name: Send Start Notification to Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_USERNAME: 'GitHub Actions'
+          SLACK_ICON_EMOJI: ':rocket:'
+          SLACK_COLOR: '#A5D6A7'
+          SLACK_MESSAGE: |
+            *Build for `devel` branch has started!*
+            - *Commit*: `${{ github.event.head_commit.message }}`
+            - *Tag*: `${{ needs.setup.outputs.image_name }}:${{ needs.setup.outputs.tag_name }}`      
+            - *Triggered by*: `${{ github.actor }}`
+            - *Started at*: `${{ needs.setup.outputs.build_time }}`
+          SLACK_FOOTER: ' '
+          SLACK_TITLE: 'View Workflow Run'
+          SLACK_TITLE_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  # 3. Makefile을 이용한 빌드 및 푸시
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: setup # setup 잡의 결과에 의존
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push via Make
+        run: make build push
+        env:
+          REPO_HUB: ${{ env.REPO_HUB }}
+          NAME: ${{ env.NAME }}
+          TAGNAME: ${{ needs.setup.outputs.tag_name }}
+
+  # 4. 워크플로우 종료 알림
+  notify-finish:
+    runs-on: ubuntu-latest
+    needs: [setup, build-and-push] # setup과 build-and-push 잡의 결과에 의존
+    if: always()
+    steps:
+      - name: Set finish time
+        id: finish_time
+        run: |
+          echo "finish_time=$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S %Z')" >> $GITHUB_OUTPUT
+          echo "finish_timestamp=$(date +%s)" >> $GITHUB_OUTPUT
+
+      - name: Calculate elapsed time
+        id: elapsed
+        run: |
+          START=${{ needs.setup.outputs.build_timestamp }}
+          END=${{ steps.finish_time.outputs.finish_timestamp }}
+          SECONDS=$((END - START))
+          # Convert seconds to HH:MM:SS
+          ELAPSED=$(printf '%02d:%02d:%02d\n' $((SECONDS/3600)) $((SECONDS%3600/60)) $((SECONDS%60)))
+          echo "elapsed=${ELAPSED}" >> $GITHUB_OUTPUT
+
+      - name: Send Finish Notification to Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_USERNAME: 'GitHub Actions'
+          SLACK_ICON_EMOJI: ':github:'
+          SLACK_COLOR: ${{ needs.build-and-push.result == 'success' && 'good' || 'danger' }}
+          SLACK_MESSAGE: |
+            *Build for `devel` branch finished with status: `${{ needs.build-and-push.result }}`*
+            - *Commit*: `${{ github.event.head_commit.message }}`
+            - *Tag*: `${{ needs.setup.outputs.image_name }}:${{ needs.setup.outputs.tag_name }}`    
+            - *Triggered by*: `${{ github.actor }}`
+            - *Started at*: `${{ needs.setup.outputs.build_time }}`
+            - *Finished at*: `${{ steps.finish_time.outputs.finish_time }}`
+            - *Elapsed*: `${{ steps.elapsed.outputs.elapsed }}`            
+          SLACK_FOOTER: ' '
+          SLACK_TITLE: 'View Workflow Run'
+          SLACK_TITLE_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

@@ -1,0 +1,24 @@
+
+changelog:
+  # 릴리즈 노트에서 제외할 라벨과 작성자를 지정합니다.
+  exclude:
+    labels:
+      - 'skip-changelog'
+      - 'documentation'
+    authors:
+      - 'github-actions[bot]'
+
+  # 릴리즈 노트를 구성할 카테고리를 정의합니다.
+  categories:
+    - title: '🚀 새로운 기능 (Features)'
+      labels:
+        - 'feature'
+        - 'enhancement'
+    - title: '🐛 버그 수정 (Bug Fixes)'
+      labels:
+        - 'bug'
+        - 'fix'
+        - 'bugfix'
+    - title: '🔨 기타 개선 사항 (Other Improvements)'
+      labels:
+        - '*' # 위에 지정되지 않은 모든 라벨
