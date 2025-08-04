@@ -354,9 +354,11 @@ update_makefile_system() {
 
 
 main() {
-    case "${1:-install}" in
+    local cmd=${1:-install}
+    shift || true
+
+    case "$cmd" in
         install)
-            shift
             parse_install_args "$@"
             check_requirements
             check_existing_installation
@@ -372,14 +374,24 @@ main() {
             [[ "$EXISTING_PROJECT" == false ]] && create_sample_compose
             show_completion_message
             ;;
-        update)    
+        update)
             parse_update_args "$@"
-            update_makefile_system ;;
-        uninstall) uninstall ;;
-        help|-h|--help|'') usage ;;
-        *) log_error "Unknown command: $1"; usage; exit 1 ;;
+            update_makefile_system
+            ;;
+        uninstall)
+            uninstall
+            ;;
+        help|-h|--help|'')
+            usage
+            ;;
+        *)
+            log_error "Unknown command: $cmd"
+            usage
+            exit 1
+            ;;
     esac
 }
+
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
