@@ -335,10 +335,19 @@ show_changelog() {
 
 uninstall() {
     echo "${BLUE}Uninstalling Universal Makefile System...${RESET}"
-    for f in Makefile Makefile.universal; do
-        [[ -f "$f" && "$(head -1 "$f")" =~ Universal ]] && rm -f "$f" && log_info "Removed $f"
+
+    has_universal_id() {
+        local file=$1
+        [[ -f "$file" ]] && grep -q "Universal Makefile System" "$file"
+    }
+
+    for f in Makefile Makefile.universal project.mk; do
+        if has_universal_id "$f"; then
+            rm -f "$f"
+            log_info "Removed $f"
+        fi
     done
-    [[ -f project.mk && "$(head -1 project.mk)" =~ Universal ]] && rm -f project.mk && log_info "Removed project.mk"
+
     [[ -f .project.local.mk ]] && rm -f .project.local.mk
     [[ -f .NEW_VERSION.tmp ]] && rm -f .NEW_VERSION.tmp
     [[ -f .env ]] && rm -f .env
@@ -346,6 +355,7 @@ uninstall() {
     [[ -d makefiles ]] && rm -rf makefiles
     [[ -d scripts ]] && rm -rf scripts
     [[ -d templates ]] && rm -rf templates
+
     if [[ -d "$MAKEFILE_DIR" ]]; then
         if [[ "$FORCE_INSTALL" == true ]]; then
             git submodule deinit -f "$MAKEFILE_DIR" || true
@@ -356,8 +366,14 @@ uninstall() {
             log_warn "Submodule directory ($MAKEFILE_DIR) not removed. Use --force option to remove."
         fi
     fi
+
     sed -i.bak '/Universal Makefile System/d;/.project.local.mk/d;/\.env/d' .gitignore 2>/dev/null || true
     rm -f .gitignore.bak
+
+    [[ -f docker-compose.yml ]] && log_warn "docker-compose.yml is not removed (user/project file)."
+    [[ -f project.mk && ! $(has_universal_id project.mk) ]] && log_warn "project.mk is not removed (user/project file)."
+
+    log_warn "User project files such as docker-compose.yml are not removed for safety."
     log_success "Uninstallation complete"
 }
 
