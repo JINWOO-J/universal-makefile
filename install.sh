@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+unalias -a 2>/dev/null || true
 
 # 색상 정의
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
@@ -22,9 +23,12 @@ REPO_URL="https://github.com/jinwoo-j/universal-makefile"
 MAKEFILE_DIR=".makefile-system"
 MAIN_BRANCH="master"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
 INSTALLATION_TYPE="submodule"
+INSTALLER_SCRIPT_URL="$REPO_URL/raw/$MAIN_BRANCH/install.sh"
+
 FORCE_INSTALL=false
+DRY_RUN=false
+BACKUP=false
 EXISTING_PROJECT=false
 
 usage() {
@@ -37,18 +41,22 @@ Commands:
     install             Install the Universal Makefile System (default)
     update              Update the Universal Makefile System to the latest version
     uninstall           Remove all files created by this installer
+    self-update         Update this installer script itself
     help                Show this help message
 
-Install options (for 'install' command only):
+Common options:
+    --force             Force installation/uninstall/update actions
+    --dry-run           Show actions without performing them
+    --backup            Backup files before removing (uninstall only)
+
+Install options:
     --copy              Install by copying files instead of submodule
     --existing-project  Setup in existing project (preserve existing files)
-    --force             Force installation (overwrite existing files)
 
 Examples:
-    $0 install
-    $0 install --existing-project
-    $0 update
-    $0 uninstall
+    $0 install --copy
+    $0 uninstall --dry-run --backup
+    $0 self-update
     $0 help
 
 Repository: $REPO_URL
@@ -58,19 +66,20 @@ EOF
 
 parse_common_args() {
     FORCE_INSTALL=false
+    DRY_RUN=false
+    BACKUP=false
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --force)
-                FORCE_INSTALL=true
-                shift ;;
+            --force) FORCE_INSTALL=true; shift ;;
+            --dry-run) DRY_RUN=true; shift ;;
+            --backup) BACKUP=true; shift ;;
             *)
                 log_error "Unknown option: $1"
-                usage
-                exit 1 ;;
+                usage; exit 1 ;;
         esac
     done
 }
-
 
 parse_install_args() {
     INSTALLATION_TYPE="submodule"
@@ -127,6 +136,7 @@ check_requirements() {
     fi
     log_success "Requirements check passed"
 }
+
 
 check_existing_installation() {
     local has_existing=false
@@ -332,9 +342,25 @@ show_changelog() {
     fi
 }
 
+safe_rm() {
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "[dry-run] Would remove: $*"
+    else
+        [[ "$BACKUP" == true ]] && cp -r "$@" "$backup_dir/" 2>/dev/null || true
+        rm -rf "$@"
+        log_info "Removed $*"
+    fi
+}
 
 uninstall() {
     echo "${BLUE}Uninstalling Universal Makefile System...${RESET}"
+
+    local backup_dir=""
+    if [[ "$BACKUP" == true ]]; then
+        backup_dir=".backup_universal_makefile_$(date +%Y%m%d_%H%M%S)"
+        mkdir -p "$backup_dir"
+        log_info "Backup enabled. Files will be backed up to $backup_dir"
+    fi
 
     has_universal_id() {
         local file=$1
@@ -343,18 +369,18 @@ uninstall() {
 
     for f in Makefile Makefile.universal project.mk; do
         if has_universal_id "$f"; then
-            rm -f "$f"
+            safe_rm "$f"
             log_info "Removed $f"
         fi
     done
 
-    [[ -f .project.local.mk ]] && rm -f .project.local.mk
-    [[ -f .NEW_VERSION.tmp ]] && rm -f .NEW_VERSION.tmp
-    [[ -f .env ]] && rm -f .env
-    [[ -d environments ]] && rm -rf environments
-    [[ -d makefiles ]] && rm -rf makefiles
-    [[ -d scripts ]] && rm -rf scripts
-    [[ -d templates ]] && rm -rf templates
+    [[ -f .project.local.mk ]] && safe_rm .project.local.mk
+    [[ -f .NEW_VERSION.tmp ]] && safe_rm .NEW_VERSION.tmp
+    [[ -f .env ]] && safe_rm .env
+    [[ -d environments ]] && safe_rm environments
+    [[ -d makefiles ]] && safe_rm makefiles
+    [[ -d scripts ]] && safe_rm scripts
+    [[ -d templates ]] && safe_rm templates
 
     if [[ -d "$MAKEFILE_DIR" ]]; then
         if [[ "$FORCE_INSTALL" == true ]]; then
@@ -377,6 +403,31 @@ uninstall() {
     log_success "Uninstallation complete"
 }
 
+
+self_update() {
+    log_info "Updating installer script itself..."
+    local tmp_script
+    tmp_script=$(mktemp)
+    
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$INSTALLER_SCRIPT_URL" -o "$tmp_script"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$tmp_script" "$INSTALLER_SCRIPT_URL"
+    else
+        log_error "curl or wget required for self-update."
+        exit 1
+    fi
+
+    if [[ -s "$tmp_script" ]]; then
+        chmod +x "$tmp_script"
+        mv "$tmp_script" "$0"
+        log_success "Installer script updated successfully!"
+    else
+        rm -f "$tmp_script"
+        log_error "Failed to download installer script."
+        exit 1
+    fi
+}
 
 update_makefile_system() {
     log_info "Updating Universal Makefile System..."
@@ -461,6 +512,9 @@ main() {
             parse_uninstall_args "$@"
             uninstall
             ;;
+        self-update)
+            self_update
+            ;;            
         help|-h|--help|'')
             usage
             ;;
