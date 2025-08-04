@@ -422,6 +422,7 @@ main() {
             update_makefile_system
             ;;
         uninstall)
+            parse_uninstall_args "$@"
             uninstall
             ;;
         help|-h|--help|'')
