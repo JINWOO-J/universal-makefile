@@ -630,10 +630,15 @@ setup_app_example() {
         local i=1
         for dir in "$examples_dir"/*/; do
             local app_name=$(basename "$dir")
+            [[ "$app_name" == "environments" ]] && continue
             apps+=("$app_name")
             echo "  $i) $app_name"
             ((i++))
         done
+        if [[ ${#apps[@]} -eq 0 ]]; then
+            log_warn "No app examples found!"
+            exit 1
+        fi
         echo ""
         read -rp "Select example to setup (1-${#apps[@]}) [q to quit]: " choice
         [[ "$choice" == "q" || "$choice" == "Q" ]] && log_warn "Aborted by user." && exit 0
@@ -647,7 +652,6 @@ setup_app_example() {
 
     log_info "Setting up example for '$app_type'..."
 
-    # 주요 파일 복사 (이미 있으면 확인)
     for file in "$template_dir"/*; do
         fname=$(basename "$file")
         if [[ -e "$fname" && "$FORCE_INSTALL" != true ]]; then
@@ -661,6 +665,7 @@ setup_app_example() {
     log_success "$app_type example setup complete!"
     echo "Try: make help"
 }
+
 
 
 main() {
