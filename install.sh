@@ -361,6 +361,9 @@ update_makefile_system() {
     log_info "Updating Universal Makefile System..."
 
     if [[ "$INSTALLATION_TYPE" == "submodule" && -d "$MAKEFILE_DIR" ]]; then
+        local old_commit
+        old_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
+
         git -C "$MAKEFILE_DIR" fetch origin "$MAIN_BRANCH"
         if [[ "$FORCE_INSTALL" == true ]]; then
             git -C "$MAKEFILE_DIR" reset --hard "origin/$MAIN_BRANCH"
@@ -372,28 +375,46 @@ update_makefile_system() {
                 exit 1
             fi
             log_success "Submodule updated with merge."
-            show_changelog "$MAKEFILE_DIR" 5
-
         fi
+
+        local new_commit
+        new_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
+
+        if [[ "$old_commit" != "$new_commit" ]]; then
+            show_changelog "$MAKEFILE_DIR" 5
+        fi
+
         echo "👉 Don't forget: git add $MAKEFILE_DIR && git commit to update the submodule pointer!"
+
     elif [[ "$INSTALLATION_TYPE" == "copy" && -d "makefiles" ]]; then
+        local old_commit=""
+        if [[ -d makefiles/.git ]]; then
+            old_commit=$(git -C makefiles rev-parse HEAD 2>/dev/null || echo "")
+        fi
+
         local temp_dir
         temp_dir=$(mktemp -d)
         trap "rm -rf $temp_dir" EXIT
         log_info "Cloning latest version from $REPO_URL"
         git clone "$REPO_URL" "$temp_dir/universal-makefile"
+
         cp -r "$temp_dir/universal-makefile/makefiles" .
         cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true
         cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true
         [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .
         log_success "Copied latest files from remote."
-        show_changelog "$temp_dir/universal-makefile" 5 
+
+        local new_commit
+        new_commit=$(git -C "$temp_dir/universal-makefile" rev-parse HEAD 2>/dev/null || echo "")
+        if [[ "$old_commit" != "$new_commit" ]]; then
+            show_changelog "$temp_dir/universal-makefile" 5
+        fi
+
     else
         log_error "Universal Makefile System installation not found. Cannot update."
         exit 1
     fi
 }
-
 
 
 main() {
