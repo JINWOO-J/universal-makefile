@@ -24,13 +24,13 @@ RUN apt-get update && apt-get install -y \
 RUN pip install poetry
 
 # Copy poetry files
+COPY app ./app
 COPY pyproject.toml poetry.lock* ./
-
 # Configure poetry
 RUN poetry config virtualenvs.create false
 
 # Install dependencies
-RUN poetry install --only=main --no-dev
+RUN poetry install --only=main
 
 # Production stage
 FROM python:3.11-slim AS production

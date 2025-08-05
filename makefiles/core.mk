@@ -81,6 +81,15 @@ else \
 fi
 endef
 
+define warn_echo
+if [ -n "$(YELLOW)" ]; then \
+    echo "$(YELLOW)⚠️  $(1)$(RESET)"; \
+else \
+    echo "WARNING: $(1)"; \
+fi
+endef
+
+
 # 에러 메시지 함수
 define error
 @if [ -n "$(RED)" ]; then \
@@ -90,9 +99,18 @@ else \
 fi
 endef
 
+define error_echo
+if [ -n "$(RED)" ]; then \
+    echo "$(RED)❌ $(1)$(RESET)" >&2; \
+else \
+    echo "ERROR: $(1)" >&2; \
+fi
+endef
+
+
 # 성공 메시지 함수
-define success
-@if [ -n "$(GREEN)" ]; then \
+define success_echo
+if [ -n "$(GREEN)" ]; then \
     echo "$(GREEN)✅ $(1)$(RESET)"; \
 else \
     echo "SUCCESS: $(1)"; \
@@ -101,34 +119,48 @@ endef
 
 # 시간 측정 함수
 define timed_command
-@echo "⏰ Starting: $(1)"; \
+@echo "⏰ Starting: $(1) -> $(2)"; \
 start_time=$$(date +%s); \
 $(2); \
 end_time=$$(date +%s); \
 duration=$$((end_time - start_time)); \
-$(call success, "Completed '$(1)' in $${duration}s")
+$(call success_echo, Completed '$(1)' in $$duration s)
 endef
+
+# define timed_command
+# 	echo "⏰ Starting: $(1)"; \
+# 	start_time=$$(date +%s); \
+# 	$(2); \
+# 	end_time=$$(date +%s); \
+# 	duration=$$((end_time - start_time)); \
+# 	echo "$(GREEN)✅ Completed '$(1)' in $${duration}s$(RESET)"
+# endef
 
 # 필수 명령어 확인 함수
 define check_command
-@command -v $(1) >/dev/null 2>&1 || ($(call error, "$(1) is required but not installed") && exit 1)
+@command -v $(1) >/dev/null 2>&1 || ($(call error_echo, "$(1) is required but not installed") && exit 1)
 endef
 
 # Docker 실행 상태 확인
 define check_docker
-@docker info >/dev/null 2>&1 || ($(call error, "Docker is not running") && exit 1)
+@docker info >/dev/null 2>&1 || ($(call error_echo, "Docker is not running") && exit 1)
 endef
+
+define check_docker_command
+@docker info >/dev/null 2>&1 || ( $(call error_echo, "Docker is not running") ; exit 1 )
+endef
+
 
 # Git 작업 디렉토리 정리 상태 확인
 define check_git_clean
-@git diff --quiet || ($(call warn, "Working directory has uncommitted changes") && exit 1)
+@git diff --quiet || ( $(call warn_echo, "Working directory has uncommitted changes") && exit 1 )
 endef
 
 # Git 브랜치 확인
 define check_branch
 @CURRENT=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null); \
 if [ "$$CURRENT" != "$(1)" ]; then \
-    $(call error, "You must be on '$(1)' branch (currently on '$$CURRENT')"); \
+    $(call error_echo, "You must be on '$(1)' branch (currently on '$$CURRENT')"); \
     exit 1; \
 fi
 endef
@@ -138,6 +170,10 @@ endef
 # ================================================================
 
 .PHONY: check-deps check-docker check-git-clean
+check-check:
+	$(call success, "All required tools are available")
+	$(call check_docker_command)
+	$(call success, "All required tools are available")
 
 check-deps: ## 🔧 Check if required tools are installed
 	$(call check_command, docker)

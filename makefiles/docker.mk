@@ -8,18 +8,18 @@
 # 메인 Docker 타겟들
 # ================================================================
 
-build: check-docker ## 🎯 Build Docker image
-	@$(call colorecho, "🔨 Building app... TAGNAME=$(TAGNAME)")
-	@$(call timed_command, "Docker build", \
-		docker build $(DOCKER_BUILD_OPTION) \
+build: check-docker ## 🎯 Docker 이미지 빌드
+	@echo "🔨 Docker 이미지를 빌드합니다... TAG: $(TAGNAME)"
+	@docker build $(DOCKER_BUILD_OPTION) \
 		--build-arg VERSION=$(TAGNAME) \
 		-f $(DOCKERFILE_PATH) \
-		-t $(FULL_TAG) .)
+		-t $(FULL_TAG) .
 	@echo ""
-	@$(call success, "Successfully built '$(FULL_TAG)'")
-	@echo "$(BLUE)Image details:$(RESET)"
-	@docker images | grep $(APP_IMAGE_NAME) | grep $(TAGNAME) || true
+	@echo "$(GREEN)✅ 이미지 빌드 성공: '$(FULL_TAG)'$(RESET)"
+	@echo "$(BLUE)--- 이미지 상세 정보 ---$(RESET)"
+	@docker images $(FULL_TAG)
 
+	
 push: build ## 🚀 Push image to registry
 	@$(call colorecho, "📦 Pushing images to registry...")
 	@$(call timed_command, "Docker push", \

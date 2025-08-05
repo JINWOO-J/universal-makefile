@@ -24,21 +24,47 @@ RESET := \033[0m
 # endef
 
 
+# define colorecho
+# 	@printf '\033[0;34m%s\033[0m\n' $(1)
+# endef
+
+# define success
+# 	@printf '\033[0;32m%s\033[0m\n' $(1)
+# endef
+
+# define warn
+# 	@printf '\033[0;33m%s\033[0m\n' $(1)
+# endef
+
+define print_error
+	@printf '\033[0;31m%s\033[0m\n' $(1)
+endef
+
 define colorecho
-	@printf '\033[0;34m%s\033[0m\n' $(1)
+	@echo "$(BLUE)$(1)$(RESET)"
 endef
 
 define success
-	@printf '\033[0;32m%s\033[0m\n' $(1)
+	@echo "$(GREEN)$(1)$(RESET)"
 endef
 
 define warn
-	@printf '\033[0;33m%s\033[0m\n' $(1)
+	@echo "$(YELLOW)$(1)$(RESET)"
 endef
 
 define error
-	@printf '\033[0;31m%s\033[0m\n' $(1)
+	@echo "$(RED)$(1)$(RESET)"
 endef
+
+define yellow
+	@echo "$(YELLOW)$(1)$(RESET)"
+endef
+
+colorecho = @echo "$(BLUE)$(1)$(RESET)"
+blue = @echo "$(BLUE)$(1)$(RESET)"
+green = @echo "$(GREEN)$(1)$(RESET)"
+yellow = @echo "$(YELLOW)$(1)$(RESET)"
+red = @echo "$(RED)$(1)$(RESET)"
 
 
 # Shell script 용 color 함수 export

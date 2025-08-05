@@ -6,6 +6,7 @@
 .PHONY: dev-up dev-down dev-restart dev-logs
 
 # Docker Compose 파일 설정 (project.mk에서 오버라이드 가능)
+COMPOSE_CLI = docker compose
 COMPOSE_FILE ?= docker-compose.yml
 DEV_COMPOSE_FILE ?= docker-compose.dev.yml
 PROD_COMPOSE_FILE ?= docker-compose.prod.yml
@@ -19,44 +20,50 @@ else
     ACTIVE_COMPOSE_FILE := $(COMPOSE_FILE)
 endif
 
+ifeq ($(wildcard $(ACTIVE_COMPOSE_FILE)),)
+  COMPOSE_COMMAND = $(COMPOSE_CLI) -f $(COMPOSE_FILE)
+else
+  COMPOSE_COMMAND = $(COMPOSE_CLI) -f $(ACTIVE_COMPOSE_FILE)
+endif
+
+
+define compose_cmd
+  $(COMPOSE_CLI) -f $(if $(wildcard $(ACTIVE_COMPOSE_FILE)),$(ACTIVE_COMPOSE_FILE),$(COMPOSE_FILE)) $(1)
+endef
+
 # ================================================================
 # 환경별 타겟들
 # ================================================================
 
 up: env ## 🚀 Start services with Docker Compose
-	@$(call colorecho, "🚀 Starting services ($(ENV) environment)...")
-	@if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		$(call warn, "Compose file $(ACTIVE_COMPOSE_FILE) not found, using default"); \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	$(call timed_command, "Docker Compose up", \
-		docker-compose -f $$ACTIVE_COMPOSE_FILE up -d)
-	@$(call success, "Services started successfully")
+	$(call colorecho, "🚀 Starting services $(ENV) environment.. with $(ACTIVE_COMPOSE_FILE)")
+ifeq ($(wildcard $(ACTIVE_COMPOSE_FILE)),)
+	$(call yellow, ⚠️  Compose file not found, using default)
+endif
+	@$(COMPOSE_COMMAND) up -d
+	$(call colorecho, 🚀 Services started successfully)
 	@$(MAKE) status
 
-down: ## 🚀 Stop services with Docker Compose
-	@$(call colorecho, "🛑 Stopping services ($(ENV) environment)...")
-	@if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	$(call timed_command, "Docker Compose down", \
-		docker-compose -f $$ACTIVE_COMPOSE_FILE down)
-	@$(call success, "Services stopped successfully")
+down: ## 🛑 Stop services with Docker Compose
+	@$(call colorecho, 🛑 Stopping services $(ENV) environment... with $(ACTIVE_COMPOSE_FILE))
+ifeq ($(wildcard $(ACTIVE_COMPOSE_FILE)),)
+	@echo "Using default compose file"
+	@$(call timed_command, Docker Compose down, docker-compose -f $(COMPOSE_FILE) down)
+else
+	@$(call timed_command, Docker Compose down, docker-compose -f $(ACTIVE_COMPOSE_FILE) down)
+endif
+	@$(call success, Services stopped successfully)
 
 restart: ## 🚀 Restart services
 	@$(call colorecho, "🔄 Restarting services...")
 	@$(MAKE) down
 	@$(MAKE) up
 
-rebuild: ## 🚀 Rebuild and restart services
-	@$(call colorecho, "🔨 Rebuilding and restarting services...")
-	@if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE down; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE build --no-cache; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE up -d
-	@$(call success, "Services rebuilt and restarted")
+rebuild:
+	$(call colorecho, "🔨 Rebuilding and restarting services... with $(ACTIVE_COMPOSE_FILE) build --no-cache")
+	@$(COMPOSE_COMMAND) build --no-cache
+	$(call colorecho, "🚀 Services started successfully with $(COMPOSE_COMMAND)")
+	@$(MAKE) status
 
 # ================================================================
 # 개발 환경 전용 타겟들
@@ -97,24 +104,22 @@ dev-logs: ## 🔧 Show development environment logs
 
 logs: ## 🔧 Show service logs
 	@$(call colorecho, "📋 Showing service logs...")
-	@if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE logs -f
+	@$(COMPOSE_COMMAND) logs -f
 
 logs-tail: ## 🔧 Show last 100 lines of logs
 	@$(call colorecho, "📋 Showing last 100 lines of logs...")
-	@if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE logs --tail=100
+	@$(COMPOSE_COMMAND) logs -f --tail=100
 
 status: ## 🔧 Show services status
-	@echo "$(BLUE)Services Status:$(RESET)"
-	@if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE ps
+	@$(call colorecho, 🔧 Services Status)
+ifeq ($(wildcard $(ACTIVE_COMPOSE_FILE)),)
+	@echo "Using default compose file: $(COMPOSE_FILE)"
+	@docker-compose -f $(COMPOSE_FILE) ps
+else
+	@echo "Using compose file: $(ACTIVE_COMPOSE_FILE)"
+	@docker-compose -f $(ACTIVE_COMPOSE_FILE) ps
+endif
+
 
 dev-status: ## 🔧 Show development services status
 	@echo "$(BLUE)Development Services Status:$(RESET)"
@@ -125,45 +130,36 @@ dev-status: ## 🔧 Show development services status
 # 서비스별 작업
 # ================================================================
 
-exec-service: ## 🔧 Execute command in specific service (usage: make exec-service SERVICE=web COMMAND="ls -la")
+exec-service: ## 🔧 특정 서비스에서 명령어 실행 (사용법: make exec-service SERVICE=web COMMAND="ls -la")
 	@if [ -z "$(SERVICE)" ]; then \
-		$(call error, "SERVICE is required. Usage: make exec-service SERVICE=web COMMAND='bash'"); \
+		echo "$(RED)에러: SERVICE 변수가 필요합니다. 사용법: make exec-service SERVICE=web$(RESET)"; \
 		exit 1; \
-	fi; \
-	COMMAND_TO_RUN="$${COMMAND:-bash}"; \
-	$(call colorecho, "🔧 Executing '$$COMMAND_TO_RUN' in service $(SERVICE)..."); \
-	if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE exec $(SERVICE) $$COMMAND_TO_RUN
+	fi
+	@COMMAND_TO_RUN="$${COMMAND:-bash}"; \
+	echo "🔧 [$(SERVICE)] 서비스에서 '$$COMMAND_TO_RUN' 명령어를 실행합니다..."; \
+	$(COMPOSE_COMMAND) exec $(SERVICE) $$COMMAND_TO_RUN
 
-restart-service: ## 🔧 Restart specific service (usage: make restart-service SERVICE=web)
+restart-service: ## 🔧 특정 서비스 재시작 (사용법: make restart-service SERVICE=web)
 	@if [ -z "$(SERVICE)" ]; then \
-		$(call error, "SERVICE is required. Usage: make restart-service SERVICE=web"); \
+		echo "$(RED)에러: SERVICE 변수가 필요합니다. 사용법: make restart-service SERVICE=web$(RESET)"; \
 		exit 1; \
-	fi; \
-	$(call colorecho, "🔄 Restarting service $(SERVICE)..."); \
-	if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE restart $(SERVICE); \
-	$(call success, "Service $(SERVICE) restarted")
+	fi
+	@echo "🔄 [$(SERVICE)] 서비스를 재시작합니다..."
+	@$(COMPOSE_COMMAND) restart $(SERVICE)
+	@echo "$(GREEN)✅ [$(SERVICE)] 서비스가 성공적으로 재시작되었습니다.$(RESET)"
 
-logs-service: ## 🔧 Show logs for specific service (usage: make logs-service SERVICE=web)
+logs-service: ## 🔧 특정 서비스 로그 보기 (사용법: make logs-service SERVICE=web)
 	@if [ -z "$(SERVICE)" ]; then \
-		$(call error, "SERVICE is required. Usage: make logs-service SERVICE=web"); \
+		echo "$(RED)에러: SERVICE 변수가 필요합니다. 사용법: make logs-service SERVICE=web$(RESET)"; \
 		exit 1; \
-	fi; \
-	$(call colorecho, "📋 Showing logs for service $(SERVICE)..."); \
-	if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE logs -f $(SERVICE)
+	fi
+	@echo "📋 [$(SERVICE)] 서비스의 로그를 표시합니다..."
+	@$(COMPOSE_COMMAND) logs -f $(SERVICE)
+
 
 # ================================================================
 # 환경 관리
 # ================================================================
-
 env: ## 🔧 Create .env file from current configuration
 	@$(call colorecho, "📝 Creating .env file...")
 	@echo "# Generated .env file - $(shell date)" > .env
@@ -195,14 +191,11 @@ env-show: ## 🔧 Show current environment variables
 # ================================================================
 
 compose-clean: ## 🧹 Clean Docker Compose resources
-	@$(call colorecho, "🧹 Cleaning Docker Compose resources...")
+	@echo "🧹 Docker Compose 리소스를 정리합니다..."
 	@$(MAKE) down 2>/dev/null || true
-	@if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE rm -f; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE down --volumes --remove-orphans 2>/dev/null || true
-	@$(call success, "Docker Compose cleanup completed")
+	@$(COMPOSE_COMMAND) rm -fv
+	@$(COMPOSE_COMMAND) down --volumes --remove-orphans 2>/dev/null || true
+	@echo "$(GREEN)✅ Docker Compose 정리가 완료되었습니다.$(RESET)"
 
 # ================================================================
 # 스케일링
@@ -210,29 +203,23 @@ compose-clean: ## 🧹 Clean Docker Compose resources
 
 scale: ## 🔧 Scale services (usage: make scale SERVICE=web REPLICAS=3)
 	@if [ -z "$(SERVICE)" ] || [ -z "$(REPLICAS)" ]; then \
-		$(call error, "SERVICE and REPLICAS are required. Usage: make scale SERVICE=web REPLICAS=3"); \
+		echo "$(RED)에러: SERVICE와 REPLICAS 변수가 필요합니다. 사용법: make scale SERVICE=web REPLICAS=3$(RESET)"; \
 		exit 1; \
-	fi; \
-	$(call colorecho, "⚖️  Scaling service $(SERVICE) to $(REPLICAS) replicas..."); \
-	if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE up -d --scale $(SERVICE)=$(REPLICAS); \
-	$(call success, "Service $(SERVICE) scaled to $(REPLICAS) replicas")
+	fi
+	@echo "⚖️  [$(SERVICE)] 서비스를 [$(REPLICAS)]개로 스케일링합니다..."
+	@$(COMPOSE_COMMAND) up -d --scale $(SERVICE)=$(REPLICAS)
+	@echo "$(GREEN)✅ [$(SERVICE)] 서비스가 성공적으로 스케일링되었습니다.$(RESET)"
 
 # ================================================================
 # 헬스체크 및 테스트
 # ================================================================
 
 health-check: ## 🔧 Check health of all services
-	@$(call colorecho, "🩺 Checking service health...")
-	@if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	SERVICES=$$(docker-compose -f $$ACTIVE_COMPOSE_FILE config --services); \
+	@echo "🩺 서비스 상태를 확인합니다..."
+	@SERVICES=$$($(COMPOSE_COMMAND) config --services); \
 	for service in $$SERVICES; do \
 		echo "Checking $$service..."; \
-		CONTAINER_ID=$$(docker-compose -f $$ACTIVE_COMPOSE_FILE ps -q $$service); \
+		CONTAINER_ID=$$(docker ps -q --filter "name=$$service"); \
 		if [ -n "$$CONTAINER_ID" ]; then \
 			STATUS=$$(docker inspect --format='{{.State.Health.Status}}' $$CONTAINER_ID 2>/dev/null || echo "no-health-check"); \
 			echo "  $$service: $$STATUS"; \
@@ -242,12 +229,12 @@ health-check: ## 🔧 Check health of all services
 	done
 
 compose-test: ## 🔧 Run compose-based tests
-	@$(call colorecho, "🧪 Running compose tests...")
+	@echo "🧪 compose 기반 테스트를 실행합니다..."
 	@if [ -f docker-compose.test.yml ]; then \
-		docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit; \
-		docker-compose -f docker-compose.test.yml down; \
+		$(COMPOSE_CLI) -f docker-compose.test.yml up --build --abort-on-container-exit; \
+		$(COMPOSE_CLI) -f docker-compose.test.yml down; \
 	else \
-		$(call warn, "No docker-compose.test.yml found"); \
+		echo "$(YELLOW)⚠️  docker-compose.test.yml 파일을 찾을 수 없습니다.$(RESET)"; \
 	fi
 
 # ================================================================
@@ -255,33 +242,24 @@ compose-test: ## 🔧 Run compose-based tests
 # ================================================================
 
 backup-volumes: ## 🔧 Backup Docker volumes
-	@$(call colorecho, "💾 Backing up Docker volumes...")
+	@echo "💾 Docker 볼륨을 백업합니다..."
 	@BACKUP_DIR="./backups/$$(date +%Y%m%d_%H%M%S)"; \
 	mkdir -p $$BACKUP_DIR; \
-	if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	VOLUMES=$$(docker-compose -f $$ACTIVE_COMPOSE_FILE config --volumes); \
+	VOLUMES=$$($(COMPOSE_COMMAND) config --volumes); \
 	for volume in $$VOLUMES; do \
 		echo "Backing up volume: $$volume"; \
 		docker run --rm -v $$volume:/data -v $$BACKUP_DIR:/backup alpine tar czf /backup/$$volume.tar.gz -C /data .; \
 	done; \
-	$(call success, "Volumes backed up to $$BACKUP_DIR")
+	echo "$(GREEN)✅ 볼륨이 $$BACKUP_DIR 에 성공적으로 백업되었습니다.$(RESET)"
 
 # ================================================================
 # 디버깅
 # ================================================================
 
 compose-config: ## 🔧 Show resolved Docker Compose configuration
-	@$(call colorecho, "📋 Showing resolved compose configuration...")
-	@if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE config
+	@echo "📋 해석된 compose 설정을 표시합니다..."
+	@$(COMPOSE_COMMAND) config
 
 compose-images: ## 🔧 Show images used by compose services
-	@$(call colorecho, "🖼️  Showing compose images...")
-	@if [ ! -f $(ACTIVE_COMPOSE_FILE) ]; then \
-		ACTIVE_COMPOSE_FILE=$(COMPOSE_FILE); \
-	fi; \
-	docker-compose -f $$ACTIVE_COMPOSE_FILE images
+	@echo "🖼️  compose 서비스가 사용하는 이미지를 표시합니다..."
+	@$(COMPOSE_COMMAND) images

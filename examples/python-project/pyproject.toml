@@ -3,8 +3,9 @@ name = "my-python-app"
 version = "1.0.0"
 description = "Example Python application using Universal Makefile System"
 authors = ["Your Name <your.email@example.com>"]
-readme = "README.md"
-packages = [{include = "app"}]
+# readme = "README.md"
+# packages = [{include = "app"}]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"

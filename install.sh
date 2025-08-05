@@ -374,7 +374,7 @@ create_sample_compose() {
     log_info "Creating docker-compose.yml..."
     cat > docker-compose.yml << 'EOF'
 # === Created by Universal Makefile System Installer ===
-version: '3.8'
+#version: '3.8'
 services:
   app:
     build: .
