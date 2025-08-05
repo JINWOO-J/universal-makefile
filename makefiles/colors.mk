@@ -8,21 +8,27 @@ CYAN := \033[0;36m
 RESET := \033[0m
 
 # Makefile 함수용
-define colorecho
-	@printf '\033[0;34m%s\033[0m\n' "$(1)"
-endef
+# define colorecho
+# 	@printf '\033[0;34m%s\033[0m\n' "$(1)"
+# endef
 
-define success
-	@printf '\033[0;32m%s\033[0m\n' "$(1)"
-endef
+# define success
+# 	@printf '\033[0;32m%s\033[0m\n' "$(1)"
+# endef
 
-define warn
-	@printf '\033[0;33m%s\033[0m\n' "$(1)"
-endef
+# define warn
+# 	@printf '\033[0;33m%s\033[0m\n' "$(1)"
+# endef
 
-define error
-	@printf '\033[0;31m%s\033[0m\n' "$(1)"
-endef
+# define error
+# 	@printf '\033[0;31m%s\033[0m\n' "$(1)"
+# endef
+
+colorecho = printf '\033[0;34m%s\033[0m\n' "$(1)"
+success   = printf '\033[0;32m%s\033[0m\n' "$(1)"
+warn      = printf '\033[0;33m%s\033[0m\n' "$(1)"
+error     = printf '\033[0;31m%s\033[0m\n' "$(1)"
+
 
 # Shell script 용 color 함수 export
 export COLORECHO = 'printf "%b%s%b\n" "$(BLUE)" "$$1" "$(RESET)"'
