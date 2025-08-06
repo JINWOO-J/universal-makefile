@@ -377,37 +377,85 @@ self-%:
 # 디버깅 타겟들
 # ================================================================
 
-debug-vars: ## 🔧 Show all Makefile variables
-	@echo "$(BLUE)Core Variables:$(RESET)"
-	@echo "  REPO_HUB: $(REPO_HUB)"
-	@echo "  NAME: $(NAME)"
-	@echo "  VERSION: $(VERSION)"
-	@echo "  TAGNAME: $(TAGNAME)"
-	@echo "  IMAGE_NAME: $(IMAGE_NAME)"
-	@echo "  APP_IMAGE_NAME: $(APP_IMAGE_NAME)"
-	@echo "  FULL_TAG: $(FULL_TAG)"
-	@echo "  LATEST_TAG: $(LATEST_TAG)"
+define print_var
+	@key='$(1)'; \
+	value='$($(1))'; \
+	\
+	@printf "  %-25s : $(YELLOW)%s$(RESET)\n" "$$key" "$$value";
+endef
+# debug-vars: ## 🔧 Show all Makefile variables
+# 	@echo "$(BLUE)Core Variables:$(RESET)"
+# 	@echo "  REPO_HUB: $(REPO_HUB)"
+# 	@echo "  NAME: $(NAME)"
+# 	@echo "  VERSION: $(VERSION)"
+# 	@echo "  TAGNAME: $(TAGNAME)"
+# 	@echo "  IMAGE_NAME: $(IMAGE_NAME)"
+# 	@echo "  APP_IMAGE_NAME: $(APP_IMAGE_NAME)"
+# 	@echo "  FULL_TAG: $(FULL_TAG)"
+# 	@echo "  LATEST_TAG: $(LATEST_TAG)"
+# 	@echo ""
+# 	@echo "$(BLUE)Git Configuration:$(RESET)"
+# 	@echo "  CURRENT_BRANCH: $(CURRENT_BRANCH)"
+# 	@echo "  MAIN_BRANCH: $(MAIN_BRANCH)"
+# 	@echo "  DEVELOP_BRANCH: $(DEVELOP_BRANCH)"
+# 	@echo "  CURRENT_COMMIT_SHORT: $(CURRENT_COMMIT_SHORT)"
+# 	@echo "  CURRENT_COMMIT_LONG: $(CURRENT_COMMIT_LONG)"
+# 	@echo "  GIT_STATUS: $(GIT_STATUS)"
+# 	@echo "  COMMIT_TAG: $(COMMIT_TAG)"
+# 	@echo ""
+# 	@echo "$(BLUE)Docker Configuration:$(RESET)"
+# 	@echo "  DOCKERFILE_PATH: $(DOCKERFILE_PATH)"
+# 	@echo "  DOCKER_BUILD_OPTION: $(DOCKER_BUILD_OPTION)"
+# 	@echo "  BUILD_ARGS: $(BUILD_ARGS_CONTENT)"
+# 	@echo "  DEBUG_ARGS: $(DEBUG_ARGS_CONTENT)"
+# 	@echo ""
+# 	@echo "$(BLUE)Environment:$(RESET)"
+# 	@echo "  ENV: $(ENV)"
+# 	@echo "  CI: $(CI)"
+# 	@echo "  DEBUG: $(DEBUG)"
+# 	@echo "  FORCE_REBUILD: $(FORCE_REBUILD)"
+
+# debug-vars 타겟에서 사용할 변수 목록
+
+define print_kv
+	@echo $(ECHO_OPTION) "$(BOLD)$(BLUE)$(1)$(RESET): $(GREEN)$(2)$(RESET)"
+endef
+
+define print_var
+	@printf "  $(BOLD)$(BLUE)%-20s$(RESET) : $(YELLOW)%s$(RESET)\n" "$(1)" "$(2)"
+endef
+
+debug-vars: ## 🔧 Show all Makefile variables in a structured way
+	@echo "$(MAGENTA)Core Variables:$(RESET)"
+	@$(call print_var, REPO_HUB, $(REPO_HUB))
+	@$(call print_var, NAME, $(NAME))
+	@$(call print_var, VERSION, $(VERSION))
+	@$(call print_var, TAGNAME, $(TAGNAME))
+	@$(call print_var, IMAGE_NAME, $(IMAGE_NAME))
+	@$(call print_var, APP_IMAGE_NAME, $(APP_IMAGE_NAME))
+	@$(call print_var, FULL_TAG, $(FULL_TAG))
+	@$(call print_var, LATEST_TAG, $(LATEST_TAG))
 	@echo ""
-	@echo "$(BLUE)Git Configuration:$(RESET)"
-	@echo "  CURRENT_BRANCH: $(CURRENT_BRANCH)"
-	@echo "  MAIN_BRANCH: $(MAIN_BRANCH)"
-	@echo "  DEVELOP_BRANCH: $(DEVELOP_BRANCH)"
-	@echo "  CURRENT_COMMIT_SHORT: $(CURRENT_COMMIT_SHORT)"
-	@echo "  CURRENT_COMMIT_LONG: $(CURRENT_COMMIT_LONG)"
-	@echo "  GIT_STATUS: $(GIT_STATUS)"
-	@echo "  COMMIT_TAG: $(COMMIT_TAG)"
+	@echo "$(MAGENTA)Git Configuration:$(RESET)"
+	@$(call print_var, CURRENT_BRANCH, $(CURRENT_BRANCH))
+	@$(call print_var, MAIN_BRANCH, $(MAIN_BRANCH))
+	@$(call print_var, DEVELOP_BRANCH, $(DEVELOP_BRANCH))
+	@$(call print_var, CURRENT_COMMIT_SHORT, $(CURRENT_COMMIT_SHORT))
+	@$(call print_var, CURRENT_COMMIT_LONG, $(CURRENT_COMMIT_LONG))
+	@$(call print_var, GIT_STATUS, $(GIT_STATUS))
+	@$(call print_var, COMMIT_TAG, $(COMMIT_TAG))
 	@echo ""
-	@echo "$(BLUE)Docker Configuration:$(RESET)"
-	@echo "  DOCKERFILE_PATH: $(DOCKERFILE_PATH)"
-	@echo "  DOCKER_BUILD_OPTION: $(DOCKER_BUILD_OPTION)"
-	@echo "  BUILD_ARGS: $(BUILD_ARGS_CONTENT)"
-	@echo "  DEBUG_ARGS: $(DEBUG_ARGS_CONTENT)"
+	@echo "$(MAGENTA)Docker Configuration:$(RESET)"
+	@$(call print_var, DOCKERFILE_PATH, $(DOCKERFILE_PATH))
+	@$(call print_var, DOCKER_BUILD_OPTION, $(DOCKER_BUILD_OPTION))
+	@$(call print_var, BUILD_ARGS, $(BUILD_ARGS_CONTENT))
+	@$(call print_var, DEBUG_ARGS, $(DEBUG_ARGS_CONTENT))
 	@echo ""
-	@echo "$(BLUE)Environment:$(RESET)"
-	@echo "  ENV: $(ENV)"
-	@echo "  CI: $(CI)"
-	@echo "  DEBUG: $(DEBUG)"
-	@echo "  FORCE_REBUILD: $(FORCE_REBUILD)"
+	@echo "$(MAGENTA)Environment:$(RESET)"
+	@$(call print_var, ENV, $(ENV))
+	@$(call print_var, CI, $(CI))
+	@$(call print_var, DEBUG, $(DEBUG))
+	@$(call print_var, FORCE_REBUILD, $(FORCE_REBUILD))
 
 
 info: debug-vars
