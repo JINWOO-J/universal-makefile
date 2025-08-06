@@ -30,6 +30,7 @@ FORCE_INSTALL=false
 DRY_RUN=false
 BACKUP=false
 EXISTING_PROJECT=false
+DEBUG_MODE=false
 
 usage() {
     cat <<EOF
@@ -43,13 +44,14 @@ Commands:
     uninstall           Remove all files created by this installer
     self-update         Update this installer script itself
     app | setup-app     Setup example app
-    
+    diff                Show differences between local and remote files
     help                Show this help message
 
 Common options:
     --force             Force installation/uninstall/update actions
     --dry-run           Show actions without performing them
     --backup            Backup files before removing (uninstall only)
+    -d, --debug         Show detailed debug info on failure # <-- 이 줄을 추가합니다.
 
 Install options:
     --copy              Install by copying files instead of submodule
@@ -76,6 +78,7 @@ parse_common_args() {
             --force) FORCE_INSTALL=true; shift ;;
             --dry-run) DRY_RUN=true; shift ;;
             --backup) BACKUP=true; shift ;;
+            -d|--debug) DEBUG_MODE=true; shift ;;
             *)
                 log_error "Unknown option: $1"
                 usage; exit 1 ;;
@@ -90,16 +93,16 @@ parse_install_args() {
     local POSITIONAL_ARGS=()
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --copy)             
+            --copy)
                 INSTALLATION_TYPE="copy"; shift ;;
-            --existing-project) 
+            --existing-project)
                 EXISTING_PROJECT=true; shift ;;
-            --help|-h)          
+            --help|-h)
                 usage; exit 0 ;;
             --*) # 다른 옵션은 공통 옵션 파서로 넘김
                 POSITIONAL_ARGS+=("$1"); shift ;;
             *)
-                log_error "Unknown option for install: $1"; 
+                log_error "Unknown option for install: $1";
                 usage; exit 1 ;;
         esac
     done
@@ -145,35 +148,7 @@ check_requirements() {
 }
 
 
-# check_existing_installation() {
-#     local has_existing=false
-
-#     if [[ -d "$MAKEFILE_DIR" && ! -f Makefile && ! -f project.mk && ! -d makefiles ]]; then
-#         log_info "Only submodule detected; proceeding as new installation."
-#         return 0
-#     fi
-
-#     [[ -d "makefiles" ]] && log_warn "Makefiles directory exists" && has_existing=true
-
-#     if [[ -f "Makefile" && "$EXISTING_PROJECT" != true ]]; then
-#         if ! has_universal_id "Makefile"; then
-#             log_warn "Existing Makefile found (not created by universal-makefile)"
-#             has_existing=true
-#         fi
-#     fi
-
-#     log_info "has_existing: $has_existing, FORCE_INSTALL: $FORCE_INSTALL, EXISTING_PROJECT: $EXISTING_PROJECT"
-#     if [[ "$has_existing" == true && "$FORCE_INSTALL" == false && "$EXISTING_PROJECT" != true ]]; then
-#         echo ""
-#         log_warn "Existing installation detected. Options:"
-#         echo "  1. Use --force to overwrite"
-#         echo "  2. Use --existing-project to preserve existing files"
-#         echo "  3. Manually remove existing files"
-#         exit 1
-#     fi
-# }
-
-check_existing_installation() {   
+check_existing_installation() {
     if [[ -d "$MAKEFILE_DIR" && ! -f Makefile && ! -f project.mk && ! -d makefiles && ! -f Makefile.universal ]]; then
         log_info "Only submodule detected; proceeding as new installation."
         return 0
@@ -194,7 +169,6 @@ check_existing_installation() {
         fi
     fi
 }
-
 
 
 install_submodule() {
@@ -284,20 +258,10 @@ include \$(MAKEFILE_DIR)/makefiles/cleanup.mk
 EOF
     log_success "$target_file created"
 
-    # # 설치 안내 메시지 추가
-    # if [[ "$created_universal" == true ]]; then
-    #     echo ""
-    #     echo -e "${BLUE}To use Universal Makefile System commands, add the following line to your existing Makefile:${RESET}"
-    #     echo -e "${YELLOW}include Makefile.universal${RESET}"
-    #     echo ""
-    # fi
-
     if [[ ! -f Makefile ]]; then
         echo -e "# Project Makefile\ninclude Makefile.universal\n" > Makefile
         log_success "Created Makefile with 'include Makefile.universal'"
     else
-        # log_warn "Existing Makefile detected. To use Universal Makefile System, add:"
-        # echo -e "${YELLOW}include Makefile.universal${RESET}"
         echo ""
         log_info "To use Universal Makefile System commands, add the following line to your existing Makefile:"
         echo -e "${YELLOW}include Makefile.universal${RESET}"
@@ -316,7 +280,7 @@ create_project_config() {
         [[ "$url" =~ github.com[:/]([^/]+) ]] && default_repo_hub="${BASH_REMATCH[1]}"
     fi
     cat > "project.mk" << EOF
-# === Created by Universal Makefile System Installer ===    
+# === Created by Universal Makefile System Installer ===
 REPO_HUB = $default_repo_hub
 NAME = $default_name
 VERSION = v1.0.0
@@ -461,7 +425,7 @@ uninstall() {
     sed -i.bak '/Universal Makefile System/d;/.project.local.mk/d;/\.env/d' .gitignore 2>/dev/null || true
     rm -f .gitignore.bak
 
-    [[ -f docker-compose.yml ]] && log_warn "docker-compose.yml is not removed (user/project file)."    
+    [[ -f docker-compose.yml ]] && log_warn "docker-compose.yml is not removed (user/project file)."
     [[ -f project.mk ]] && ! has_universal_id project.mk && log_warn "project.mk is not removed (user/project file)."
 
     log_warn "User project files such as docker-compose.yml are not removed for safety."
@@ -473,7 +437,7 @@ self_update() {
     log_info "Updating installer script itself..."
     local tmp_script
     tmp_script=$(mktemp)
-    
+
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL "$INSTALLER_SCRIPT_URL" -o "$tmp_script"
     elif command -v wget >/dev/null 2>&1; then
@@ -494,6 +458,13 @@ self_update() {
     fi
 }
 
+show_diff() {
+    echo ""
+    log_info "Debug mode enabled. Showing local changes that are blocking the update:"
+    git --no-pager -C "$MAKEFILE_DIR" diff --color=always
+    echo ""
+}
+
 update_makefile_system() {
     log_info "Updating Universal Makefile System..."
 
@@ -507,10 +478,22 @@ update_makefile_system() {
             log_success "Submodule forcibly updated to latest commit from remote."
         else
             if ! git -C "$MAKEFILE_DIR" merge "origin/$MAIN_BRANCH"; then
+                echo ""
+                log_warn "Merge aborted. Showing local changes in '$MAKEFILE_DIR' that are blocking the update:"
+
+                if [[ "$DEBUG_MODE" == true ]]; then
+                    show_diff
+                else
+                    log_info "To see the conflicting changes, run the update again with the --debug flag."
+                fi
+
+                echo ""
                 log_error "Merge conflict occurred in submodule."
                 log_warn "You can resolve manually, or run update again with --force to overwrite local changes."
                 exit 1
             fi
+
+
             log_success "Submodule updated with merge."
         fi
 
@@ -589,12 +572,7 @@ is_universal_makefile_installed() {
     fi
 }
 
-# install_github_workflow() {
-#     log_info "Installing GitHub Actions workflow..."
-#     mkdir -p .github/workflows
-#     cp -rf $MAKEFILE_DIR/github/workflows/* .github/workflows/
-#     log_success "GitHub Actions workflow installed"
-# }
+
 install_github_workflow() {
     log_info "Installing GitHub Actions workflow..."
     mkdir -p .github/workflows
@@ -706,10 +684,13 @@ main() {
             ;;
         self-update)
             self_update
-            ;;            
+            ;;
         check)
             is_universal_makefile_installed
-            ;;            
+            ;;
+        diff)
+            show_diff
+            ;;
         help|-h|--help|'')
             usage
             ;;
