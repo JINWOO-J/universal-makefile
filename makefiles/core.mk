@@ -24,6 +24,9 @@ DOCKER_BUILDKIT ?= 1
 BUILDKIT_INLINE_CACHE ?= 1
 DOCKER_BUILD_OPTION ?= --rm=true
 
+ARGS := $(filter-out self-update,$(MAKECMDGOALS))
+
+
 # 조건부 빌드 옵션
 ifeq ($(DEBUG), true)
     DOCKER_BUILD_OPTION += --progress=plain
