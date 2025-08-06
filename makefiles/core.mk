@@ -73,10 +73,12 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 	SED = sed -E -i ''
 	ECHO_OPTION = ""
+	ECHO_CMD = echo $(ECHO_OPTION)
 	GET_NANO_CMD := if command -v gdate >/dev/null; then gdate +%s%N; else python -c 'import time; print(int(time.time() * 10**9))'; fi
 else
 	SED = sed -i
 	ECHO_OPTION = "-e"
+	ECHO_CMD = echo $(ECHO_OPTION)
 	GET_NANO_CMD := date +%s%N
 
 endif
@@ -426,7 +428,7 @@ define print_var
 endef
 
 debug-vars: ## 🔧 Show all Makefile variables in a structured way
-	@echo "$(MAGENTA)Core Variables:$(RESET)"
+	@$(ECHO_CMD) "$(MAGENTA)Core Variables:$(RESET)"
 	@$(call print_var, REPO_HUB, $(REPO_HUB))
 	@$(call print_var, NAME, $(NAME))
 	@$(call print_var, VERSION, $(VERSION))
@@ -435,8 +437,8 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(call print_var, APP_IMAGE_NAME, $(APP_IMAGE_NAME))
 	@$(call print_var, FULL_TAG, $(FULL_TAG))
 	@$(call print_var, LATEST_TAG, $(LATEST_TAG))
-	@echo ""
-	@echo "$(MAGENTA)Git Configuration:$(RESET)"
+	@$(ECHO_CMD) ""
+	@$(ECHO_CMD) "$(MAGENTA)Git Configuration:$(RESET)"
 	@$(call print_var, CURRENT_BRANCH, $(CURRENT_BRANCH))
 	@$(call print_var, MAIN_BRANCH, $(MAIN_BRANCH))
 	@$(call print_var, DEVELOP_BRANCH, $(DEVELOP_BRANCH))
@@ -444,14 +446,14 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(call print_var, CURRENT_COMMIT_LONG, $(CURRENT_COMMIT_LONG))
 	@$(call print_var, GIT_STATUS, $(GIT_STATUS))
 	@$(call print_var, COMMIT_TAG, $(COMMIT_TAG))
-	@echo ""
-	@echo "$(MAGENTA)Docker Configuration:$(RESET)"
+	@$(ECHO_CMD) ""
+	@$(ECHO_CMD) "$(MAGENTA)Docker Configuration:$(RESET)"
 	@$(call print_var, DOCKERFILE_PATH, $(DOCKERFILE_PATH))
 	@$(call print_var, DOCKER_BUILD_OPTION, $(DOCKER_BUILD_OPTION))
 	@$(call print_var, BUILD_ARGS, $(BUILD_ARGS_CONTENT))
 	@$(call print_var, DEBUG_ARGS, $(DEBUG_ARGS_CONTENT))
-	@echo ""
-	@echo "$(MAGENTA)Environment:$(RESET)"
+	@$(ECHO_CMD) ""
+	@$(ECHO_CMD) "$(MAGENTA)Environment:$(RESET)"
 	@$(call print_var, ENV, $(ENV))
 	@$(call print_var, CI, $(CI))
 	@$(call print_var, DEBUG, $(DEBUG))
