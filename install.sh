@@ -377,7 +377,7 @@ create_sample_compose() {
 #version: '3.8'
 services:
   app:
-    build: .
+    image: ${REPO_HUB}/${NAME}:${TAGNAME}
     ports:
       - "3000:3000"
     environment:

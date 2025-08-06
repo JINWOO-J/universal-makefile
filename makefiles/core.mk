@@ -15,7 +15,7 @@ DEVELOP_BRANCH ?= develop
 # 계산된 변수들
 CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 IMAGE_NAME := $(REPO_HUB)/$(NAME)
-APP_IMAGE_NAME := $(REPO_HUB)/$(NAME)-app
+APP_IMAGE_NAME := $(REPO_HUB)/$(NAME)
 FULL_TAG := $(APP_IMAGE_NAME):$(TAGNAME)
 LATEST_TAG := $(APP_IMAGE_NAME):latest
 
