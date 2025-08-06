@@ -7,7 +7,11 @@
 
 # Docker Compose 파일 설정 (project.mk에서 오버라이드 가능)
 COMPOSE_CLI = docker compose
-COMPOSE_FILE ?= docker-compose.yml
+
+COMPOSE_FILE_DEFAULT ?= docker-compose.yml
+COMPOSE_FILE_DEV ?= docker-compose.dev.yml
+COMPOSE_FILE_PROD ?= docker-compose.prod.yml
+
 DEV_COMPOSE_FILE ?= docker-compose.dev.yml
 PROD_COMPOSE_FILE ?= docker-compose.prod.yml
 
