@@ -8,18 +8,36 @@
 # 메인 Docker 타겟들
 # ================================================================
 
-build: check-docker ## 🎯 Docker 이미지 빌드
-	@echo "🔨 Docker 이미지를 빌드합니다... TAG: $(TAGNAME)"
-	@docker build $(DOCKER_BUILD_OPTION) \
-		--build-arg VERSION=$(TAGNAME) \
-		-f $(DOCKERFILE_PATH) \
-		-t $(FULL_TAG) .
+# build: check-docker make-build-args  ## 🎯 Docker 이미지 빌드
+# 	@echo "🔨 Docker 이미지를 빌드합니다... TAG: $(TAGNAME)"
+# 	@DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker build $(DOCKER_BUILD_OPTION) \
+# 		$(shell cat BUILD_ARGS)  \
+# 		-f $(DOCKERFILE_PATH) \
+# 		-t $(FULL_TAG) .
+# 	@echo ""
+# 	@echo "$(GREEN)✅ 이미지 빌드 성공: '$(FULL_TAG)'$(RESET)"
+# 	@echo "$(BLUE)--- 이미지 상세 정보 ---$(RESET)"
+# 	@docker images $(FULL_TAG)
+
+build: check-docker make-build-args ## 🎯 Build the Docker image
+	@$(call colorecho, $(BLUE), "🔨", "Building Docker image with tag: $(TAGNAME)")
+
+	# Use the 'timed_command' macro to measure execution time.
+	# The BUILD_ARGS file is no longer needed; pass the make variable directly.
+	$(call timed_command, Image Build $(FULL_TAG), \
+		DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker build \
+			$(DOCKER_BUILD_OPTION) \
+			$(BUILD_ARGS_CONTENT) \
+			-f $(DOCKERFILE_PATH) \
+			-t $(FULL_TAG) \
+			. \
+	)
+
 	@echo ""
-	@echo "$(GREEN)✅ 이미지 빌드 성공: '$(FULL_TAG)'$(RESET)"
-	@echo "$(BLUE)--- 이미지 상세 정보 ---$(RESET)"
+	@$(call colorecho, $(BLUE), "---", "Image Details ---")
 	@docker images $(FULL_TAG)
 
-	
+
 push: build ## 🚀 Push image to registry
 	@$(call colorecho, "📦 Pushing images to registry...")
 	@$(call timed_command, "Docker push", \

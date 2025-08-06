@@ -55,8 +55,10 @@ endif
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 	SED = sed -E -i ''
+	ECHO_OPTION = ""
 else
 	SED = sed -i
+	ECHO_OPTION = "-e"
 endif
 
 # ================================================================
@@ -118,23 +120,74 @@ fi
 endef
 
 # 시간 측정 함수
-define timed_command
-@echo "⏰ Starting: $(1) -> $(2)"; \
-start_time=$$(date +%s); \
-$(2); \
-end_time=$$(date +%s); \
-duration=$$((end_time - start_time)); \
-$(call success_echo, Completed '$(1)' in $$duration s)
+# define timed_command
+# @echo "⏰ Starting: $(1) -> $(2)"; \
+# echo "------------------------------------------------------------";\
+# start_time=$$(date +%s); \
+# $(2); \
+# end_time=$$(date +%s); \
+# duration=$$((end_time - start_time)); \
+# echo "------------------------------------------------------------";\
+# $(call success_echo, Completed '$(1)' in $$duration s)
+# endef
+
+define task_echo
+	echo "\n$(YELLOW)🚀  $(1)$(RESET)"
 endef
 
 # define timed_command
-# 	echo "⏰ Starting: $(1)"; \
-# 	start_time=$$(date +%s); \
-# 	$(2); \
-# 	end_time=$$(date +%s); \
-# 	duration=$$((end_time - start_time)); \
-# 	echo "$(GREEN)✅ Completed '$(1)' in $${duration}s$(RESET)"
+# @$(call task_echo, Starting task: $(1)); \
+# echo ">-----------------------------------------------------------------"; \
+# start_time=$$(date +%s); \
+# if $(2); then \
+#     end_time=$$(date +%s); \
+#     duration=$$((end_time - start_time)); \
+#     echo "-----------------------------------------------------------------<"; \
+#     $(call success_echo, Completed '$(1)' in $$duration s); \
+# else \
+#     end_time=$$(date +%s); \
+#     duration=$$((end_time - start_time)); \
+#     echo "-----------------------------------------------------------------<"; \
+#     $(call error_echo, Task '$(1)' failed after $$duration s); \
+#     exit 1; \
+# fi
 # endef
+
+define timed_command
+	@$(call task_echo, Starting task: $(1)); \
+	echo "----------------------------------------------------------------------------"; \
+	start_time=$$(date +%s); \
+	if $(2); then \
+		end_time=$$(date +%s); \
+		duration=$$((end_time - start_time)); \
+		minutes=$$((duration / 60)); \
+		seconds=$$((duration % 60)); \
+		time_str=""; \
+		if [ $$minutes -gt 0 ]; then \
+			time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
+		else \
+			time_str=$$(printf "%ds" $$seconds); \
+		fi; \
+		\
+		echo "----------------------------------------------------------------------------"; \
+		printf "$(GREEN)✅ Task '$(1)' completed $(BLUE) ⏱️  Elapsed time: $(YELLOW)%s$(BLUE)$(RESET)\n" "$$time_str"; \
+	else \
+		end_time=$$(date +%s); \
+		duration=$$((end_time - start_time)); \
+		minutes=$$((duration / 60)); \
+		seconds=$$((duration % 60)); \
+		time_str=""; \
+		if [ $$minutes -gt 0 ]; then \
+			time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
+		else \
+			time_str=$$(printf "%ds" $$seconds); \
+		fi; \
+		\
+		echo "----------------------------------------------------------------------------"; \
+		printf "$(RED)❌ Task '$(1)' failed $(BLUE) ⏱️  after $(YELLOW)%s$(BLUE)$(RESET)\n" "$$time_str"; \
+		exit 1; \
+	fi
+endef
 
 # 필수 명령어 확인 함수
 define check_command
@@ -165,11 +218,25 @@ if [ "$$CURRENT" != "$(1)" ]; then \
 fi
 endef
 
+define newline
+
+endef
+
+BUILD_ARG_VARS := \
+    REPO_HUB \
+    NAME \
+    VERSION \
+    TAGNAME \
+    ENV
+
+
+BUILD_ARGS_CONTENT := $(foreach var,$(BUILD_ARG_VARS),--build-arg $(var)='$($(var))'$(newline))
+DEBUG_ARGS_CONTENT := $(BUILD_ARGS_CONTENT)
 # ================================================================
 # 기본 검증 타겟들
 # ================================================================
 
-.PHONY: check-deps check-docker check-git-clean
+.PHONY: check-deps check-docker check-git-clean make_debug_mode make_build_args
 check-check:
 	$(call success, "All required tools are available")
 	$(call check_docker_command)
@@ -187,6 +254,27 @@ check-docker: ## 🔧 Check if Docker is running
 check-git-clean: ## 🔧 Check if working directory is clean
 	$(call check_git_clean)
 	@$(call success, "Working directory is clean")
+
+
+make-debug-mode:
+	@$(call colorecho, $(BLUE), "", "----- DEBUG Environment -----")
+	@# DEBUG_VARS 목록을 순회하며 각 변수와 값을 보기 좋게 출력합니다.
+	@for var_name in $(DEBUG_VARS); do \
+		printf "  %-20s = %s\n" "$$var_name" "$($(var_name))"; \
+	done
+	@echo ""
+	@# 미리 생성된 내용을 DEBUG_ARGS 파일에 한 번에 씁니다.
+	@echo '$(DEBUG_ARGS_CONTENT)' > DEBUG_ARGS
+	@$(call success, "DEBUG_ARGS file generated successfully.")
+	@echo "Content of DEBUG_ARGS:"
+	@cat DEBUG_ARGS
+
+make-build-args:
+	@$(call success, ----- Generating Docker Build Arguments (using foreach) -----)
+	@$(call yellow, BUILD_ARGS = $(BUILD_ARGS_CONTENT) \n)
+	@printf '%s' '$(BUILD_ARGS_CONTENT)' > BUILD_ARGS
+	@$(call success, "BUILD_ARGS file generated successfully.")
+
 
 # ================================================================
 # 디버깅 타겟들
@@ -211,7 +299,8 @@ debug-vars: ## 🔧 Show all Makefile variables
 	@echo "$(BLUE)Docker Configuration:$(RESET)"
 	@echo "  DOCKERFILE_PATH: $(DOCKERFILE_PATH)"
 	@echo "  DOCKER_BUILD_OPTION: $(DOCKER_BUILD_OPTION)"
-	@echo "  DOCKER_BUILDKIT: $(DOCKER_BUILDKIT)"
+	@echo "  BUILD_ARGS: $(BUILD_ARGS_CONTENT)"
+	@echo "  DEBUG_ARGS: $(DEBUG_ARGS_CONTENT)"
 	@echo ""
 	@echo "$(BLUE)Environment:$(RESET)"
 	@echo "  ENV: $(ENV)"
