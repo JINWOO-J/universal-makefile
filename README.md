@@ -32,6 +32,10 @@
 ```bash
 # 기존 프로젝트에 추가
 cd your-project
+```
+
+
+```bash
 git submodule add https://github.com/jinwoo-j/universal-makefile .makefile-system
 
 # 설치 및 설정
