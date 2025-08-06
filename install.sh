@@ -370,9 +370,9 @@ EOF
 }
 
 create_sample_compose() {
-    [[ -f "docker-compose.yml" && "$FORCE_INSTALL" == false ]] && return
-    log_info "Creating docker-compose.yml..."
-    cat > docker-compose.yml << 'EOF'
+    [[ -f "docker-compose.dev.yml" && "$FORCE_INSTALL" == false ]] && return
+    log_info "Creating docker-compose.dev.yml..."
+    cat > docker-compose.dev.yml << 'EOF'
 # === Created by Universal Makefile System Installer ===
 #version: '3.8'
 services:
@@ -384,7 +384,7 @@ services:
       - NODE_ENV=production
     restart: unless-stopped
 EOF
-    log_success "Sample docker-compose.yml created"
+    log_success "Sample docker-compose.dev.yml created"
 }
 
 show_completion_message() {
