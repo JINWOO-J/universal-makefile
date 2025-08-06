@@ -20,12 +20,8 @@ else
     ACTIVE_COMPOSE_FILE := $(COMPOSE_FILE)
 endif
 
-ifeq ($(wildcard $(ACTIVE_COMPOSE_FILE)),)
-  COMPOSE_COMMAND = $(COMPOSE_CLI) -f $(COMPOSE_FILE)
-else
-  COMPOSE_COMMAND = $(COMPOSE_CLI) -f $(ACTIVE_COMPOSE_FILE)
-endif
-
+COMPOSE_FILE_TO_USE := $(if $(wildcard $(ACTIVE_COMPOSE_FILE)),$(ACTIVE_COMPOSE_FILE),$(COMPOSE_FILE_DEFAULT))
+COMPOSE_COMMAND = $(COMPOSE_CLI) -f $(COMPOSE_FILE_TO_USE)
 
 define compose_cmd
   $(COMPOSE_CLI) -f $(if $(wildcard $(ACTIVE_COMPOSE_FILE)),$(ACTIVE_COMPOSE_FILE),$(COMPOSE_FILE)) $(1)
@@ -35,32 +31,26 @@ endef
 # 환경별 타겟들
 # ================================================================
 
-up: env ## 🚀 Start services with Docker Compose
-	$(call colorecho, "🚀 Starting services $(ENV) environment.. with $(ACTIVE_COMPOSE_FILE)")
-ifeq ($(wildcard $(ACTIVE_COMPOSE_FILE)),)
-	$(call yellow, ⚠️  Compose file not found, using default)
-endif
+up: env ## 🚀 Start services for the current ENV
+	@$(call colorecho, "🚀 Starting services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...")
 	@$(COMPOSE_COMMAND) up -d
-	$(call colorecho, 🚀 Services started successfully)
+	@$(call success, "✅ Services started successfully.")
 	@$(MAKE) status
 
-down: ## 🛑 Stop services with Docker Compose
-	@$(call colorecho, 🛑 Stopping services $(ENV) environment... with $(ACTIVE_COMPOSE_FILE))
-ifeq ($(wildcard $(ACTIVE_COMPOSE_FILE)),)
-	@echo "Using default compose file"
-	@$(call timed_command, Docker Compose down, docker-compose -f $(COMPOSE_FILE) down)
-else
-	@$(call timed_command, Docker Compose down, docker-compose -f $(ACTIVE_COMPOSE_FILE) down)
-endif
-	@$(call success, Services stopped successfully)
 
-restart: ## 🚀 Restart services
+down: ## 🛑 Stop services for the current ENV
+	@$(call colorecho, "🛑 Stopping services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...")
+	@$(COMPOSE_COMMAND) down --remove-orphans
+	@$(call success, "✅ Services stopped successfully.")
+
+restart: ## 🔄 Restart services for the current ENV
 	@$(call colorecho, "🔄 Restarting services...")
 	@$(MAKE) down
 	@$(MAKE) up
 
+
 rebuild:
-	$(call colorecho, "🔨 Rebuilding and restarting services... with $(ACTIVE_COMPOSE_FILE) build --no-cache")
+	@$(call colorecho, "🔨 Rebuilding services for [$(ENV)] environment with no-cache...")
 	@$(COMPOSE_COMMAND) build --no-cache
 	$(call colorecho, "🚀 Services started successfully with $(COMPOSE_COMMAND)")
 	@$(MAKE) status
@@ -110,16 +100,9 @@ logs-tail: ## 🔧 Show last 100 lines of logs
 	@$(call colorecho, "📋 Showing last 100 lines of logs...")
 	@$(COMPOSE_COMMAND) logs -f --tail=100
 
-status: ## 🔧 Show services status
-	@$(call colorecho, 🔧 Services Status)
-ifeq ($(wildcard $(ACTIVE_COMPOSE_FILE)),)
-	@echo "Using default compose file: $(COMPOSE_FILE)"
-	@docker-compose -f $(COMPOSE_FILE) ps
-else
-	@echo "Using compose file: $(ACTIVE_COMPOSE_FILE)"
-	@docker-compose -f $(ACTIVE_COMPOSE_FILE) ps
-endif
-
+status: ## 📊 Show status of services
+	@$(call colorecho, "📊 Status for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]:")
+	@$(COMPOSE_COMMAND) ps
 
 dev-status: ## 🔧 Show development services status
 	@echo "$(BLUE)Development Services Status:$(RESET)"
@@ -171,19 +154,20 @@ env: ## 🔧 Create .env file from current configuration
 	@echo "COMPOSE_FILE=$(ACTIVE_COMPOSE_FILE)" >> .env
 	@$(call success, ".env file created successfully")
 
-env-show: ## 🔧 Show current environment variables
+env-show: ## 🧐 Show current environment variables
 	@echo "$(BLUE)Current Environment Configuration:$(RESET)"
-	@echo "  Environment: $(ENV)"
-	@echo "  Compose File: $(ACTIVE_COMPOSE_FILE)"
-	@echo "  Project Name: $(NAME)"
-	@echo "  Version: $(VERSION)"
-	@echo "  Image Tag: $(TAGNAME)"
+	@echo "  Environment (ENV)   : $(ENV)"
+	@echo "  Compose CLI         : $(COMPOSE_CLI)"
+	@echo "  Active Compose File : $(COMPOSE_FILE_TO_USE)"
+	@echo "  Project Name (NAME) : $(NAME)"
+	@echo "  Version (VERSION)   : $(VERSION)"
+	@echo "  Image Tag (TAGNAME) : $(TAGNAME)"
 	@echo ""
 	@if [ -f .env ]; then \
 		echo "$(BLUE).env file contents:$(RESET)"; \
 		cat .env | sed 's/^/  /'; \
 	else \
-		echo "$(YELLOW).env file not found$(RESET)"; \
+		echo "$(YELLOW)NOTE: .env file not found. Create one with 'make env'.$(RESET)"; \
 	fi
 
 # ================================================================
