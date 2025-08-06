@@ -29,7 +29,7 @@ else
 endif
 
 COMMIT_TAG := $(CURRENT_COMMIT_SHORT)$(GIT_DIRTY_SUFFIX)
-
+BUILD_REVISION := $(CURRENT_BRANCH)-$(CURRENT_COMMIT_SHORT)$(GIT_DIRTY_SUFFIX)
 
 IMAGE_NAME := $(REPO_HUB)/$(NAME)
 APP_IMAGE_NAME := $(REPO_HUB)/$(NAME)
@@ -261,6 +261,10 @@ define timed_command
 	fi
 endef
 
+define print_var
+	@printf "     $(BOLD)$(BLUE)%-20s$(RESET) : $(YELLOW)%s$(RESET)\n" "$(1)" "$(2)"
+endef
+
 # 필수 명령어 확인 함수
 define check_command
 @command -v $(1) >/dev/null 2>&1 || ($(call error_echo, "$(1) is required but not installed") && exit 1)
@@ -299,6 +303,7 @@ BUILD_ARG_VARS := \
     NAME \
     VERSION \
     TAGNAME \
+    BUILD_REVISION \
     ENV
 
 
@@ -378,13 +383,6 @@ self-%:
 # ================================================================
 # 디버깅 타겟들
 # ================================================================
-
-define print_var
-	@key='$(1)'; \
-	value='$($(1))'; \
-	\
-	@printf "  %-25s : $(YELLOW)%s$(RESET)\n" "$$key" "$$value";
-endef
 # debug-vars: ## 🔧 Show all Makefile variables
 # 	@echo "$(BLUE)Core Variables:$(RESET)"
 # 	@echo "  REPO_HUB: $(REPO_HUB)"
@@ -419,12 +417,6 @@ endef
 
 # debug-vars 타겟에서 사용할 변수 목록
 
-
-
-define print_var
-	@printf "     $(BOLD)$(BLUE)%-20s$(RESET) : $(YELLOW)%s$(RESET)\n" "$(1)" "$(2)"
-endef
-
 debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(ECHO_CMD) "$(MAGENTA)🐰 Core Variables:$(RESET)"
 	@$(call print_var, REPO_HUB, $(REPO_HUB))
@@ -444,6 +436,7 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(call print_var, CURRENT_COMMIT_LONG, $(CURRENT_COMMIT_LONG))
 	@$(call print_var, GIT_STATUS, $(GIT_STATUS))
 	@$(call print_var, COMMIT_TAG, $(COMMIT_TAG))
+	@$(call print_var, BUILD_REVISION, $(BUILD_REVISION))
 	@$(ECHO_CMD) ""
 	@$(ECHO_CMD) "$(MAGENTA)🐰 Docker Configuration:$(RESET)"
 	@$(call print_var, DOCKERFILE_PATH, $(DOCKERFILE_PATH))
