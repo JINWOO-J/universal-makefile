@@ -419,16 +419,14 @@ endef
 
 # debug-vars 타겟에서 사용할 변수 목록
 
-define print_kv
-	@echo $(ECHO_OPTION) "$(BOLD)$(BLUE)$(1)$(RESET): $(GREEN)$(2)$(RESET)"
-endef
+
 
 define print_var
-	@printf "  $(BOLD)$(BLUE)%-20s$(RESET) : $(YELLOW)%s$(RESET)\n" "$(1)" "$(2)"
+	@printf "     $(BOLD)$(BLUE)%-20s$(RESET) : $(YELLOW)%s$(RESET)\n" "$(1)" "$(2)"
 endef
 
 debug-vars: ## 🔧 Show all Makefile variables in a structured way
-	@$(ECHO_CMD) "$(MAGENTA)Core Variables:$(RESET)"
+	@$(ECHO_CMD) "$(MAGENTA)🐰 Core Variables:$(RESET)"
 	@$(call print_var, REPO_HUB, $(REPO_HUB))
 	@$(call print_var, NAME, $(NAME))
 	@$(call print_var, VERSION, $(VERSION))
@@ -438,7 +436,7 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(call print_var, FULL_TAG, $(FULL_TAG))
 	@$(call print_var, LATEST_TAG, $(LATEST_TAG))
 	@$(ECHO_CMD) ""
-	@$(ECHO_CMD) "$(MAGENTA)Git Configuration:$(RESET)"
+	@$(ECHO_CMD) "$(MAGENTA)🐰 Git Configuration:$(RESET)"
 	@$(call print_var, CURRENT_BRANCH, $(CURRENT_BRANCH))
 	@$(call print_var, MAIN_BRANCH, $(MAIN_BRANCH))
 	@$(call print_var, DEVELOP_BRANCH, $(DEVELOP_BRANCH))
@@ -447,13 +445,13 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(call print_var, GIT_STATUS, $(GIT_STATUS))
 	@$(call print_var, COMMIT_TAG, $(COMMIT_TAG))
 	@$(ECHO_CMD) ""
-	@$(ECHO_CMD) "$(MAGENTA)Docker Configuration:$(RESET)"
+	@$(ECHO_CMD) "$(MAGENTA)🐰 Docker Configuration:$(RESET)"
 	@$(call print_var, DOCKERFILE_PATH, $(DOCKERFILE_PATH))
 	@$(call print_var, DOCKER_BUILD_OPTION, $(DOCKER_BUILD_OPTION))
 	@$(call print_var, BUILD_ARGS, $(BUILD_ARGS_CONTENT))
 	@$(call print_var, DEBUG_ARGS, $(DEBUG_ARGS_CONTENT))
 	@$(ECHO_CMD) ""
-	@$(ECHO_CMD) "$(MAGENTA)Environment:$(RESET)"
+	@$(ECHO_CMD) "$(MAGENTA)🐰 Environment:$(RESET)"
 	@$(call print_var, ENV, $(ENV))
 	@$(call print_var, CI, $(CI))
 	@$(call print_var, DEBUG, $(DEBUG))
