@@ -330,6 +330,7 @@ DOCKER_BUILD_ARGS =
 COMPOSE_FILE = docker-compose.yml
 DEV_COMPOSE_FILE = docker-compose.dev.yml
 PROD_COMPOSE_FILE = docker-compose.prod.yml
+MAKEFILE_DIR = $MAKEFILE_DIR
 EOF
     log_success "project.mk created"
 }
