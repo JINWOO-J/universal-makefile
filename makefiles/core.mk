@@ -395,7 +395,6 @@ debug-vars: ## 🔧 Show all Makefile variables
 	@echo "  CURRENT_COMMIT_SHORT: $(CURRENT_COMMIT_SHORT)"
 	@echo "  CURRENT_COMMIT_LONG: $(CURRENT_COMMIT_LONG)"
 	@echo "  GIT_STATUS: $(GIT_STATUS)"
-	@echo "  GIT_DIRTY_SUFFIX: $(GIT_DIRTY_SUFFIX)"
 	@echo "  COMMIT_TAG: $(COMMIT_TAG)"
 	@echo ""
 	@echo "$(BLUE)Docker Configuration:$(RESET)"
