@@ -56,9 +56,12 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 	SED = sed -E -i ''
 	ECHO_OPTION = ""
+	GET_NANO_CMD := if command -v gdate >/dev/null; then gdate +%s%N; else python -c 'import time; print(int(time.time() * 10**9))'; fi
 else
 	SED = sed -i
 	ECHO_OPTION = "-e"
+	GET_NANO_CMD := date +%s%N
+
 endif
 
 # ================================================================
@@ -153,38 +156,88 @@ endef
 # fi
 # endef
 
+# define timed_command
+# 	@$(call task_echo, Starting task: $(1)); \
+# 	echo "----------------------------------------------------------------------------"; \
+# 	start_time=$$(date +%s); \
+# 	if $(2); then \
+# 		end_time=$$(date +%s); \
+# 		duration=$$((end_time - start_time)); \
+# 		minutes=$$((duration / 60)); \
+# 		seconds=$$((duration % 60)); \
+# 		time_str=""; \
+# 		if [ $$minutes -gt 0 ]; then \
+# 			time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
+# 		else \
+# 			time_str=$$(printf "%ds" $$seconds); \
+# 		fi; \
+# 		\
+# 		echo "----------------------------------------------------------------------------"; \
+# 		printf "$(GREEN)✅ Task '$(1)' completed $(BLUE) ⏱️  Elapsed time: $(YELLOW)%s$(BLUE)$(RESET)\n" "$$time_str"; \
+# 	else \
+# 		end_time=$$(date +%s); \
+# 		duration=$$((end_time - start_time)); \
+# 		minutes=$$((duration / 60)); \
+# 		seconds=$$((duration % 60)); \
+# 		time_str=""; \
+# 		if [ $$minutes -gt 0 ]; then \
+# 			time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
+# 		else \
+# 			time_str=$$(printf "%ds" $$seconds); \
+# 		fi; \
+# 		\
+# 		echo "----------------------------------------------------------------------------"; \
+# 		printf "$(RED)❌ Task '$(1)' failed $(BLUE) ⏱️  after $(YELLOW)%s$(BLUE)$(RESET)\n" "$$time_str"; \
+# 		exit 1; \
+# 	fi
+# endef
+
 define timed_command
 	@$(call task_echo, Starting task: $(1)); \
 	echo "----------------------------------------------------------------------------"; \
-	start_time=$$(date +%s); \
+	start_time_ns=$$( $(GET_NANO_CMD) ); \
 	if $(2); then \
-		end_time=$$(date +%s); \
-		duration=$$((end_time - start_time)); \
-		minutes=$$((duration / 60)); \
-		seconds=$$((duration % 60)); \
+		end_time_ns=$$( $(GET_NANO_CMD) ); \
+		duration_ns=$$((end_time_ns - start_time_ns)); \
 		time_str=""; \
-		if [ $$minutes -gt 0 ]; then \
-			time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
+		\
+		if [ $$duration_ns -lt 1000000000 ]; then \
+			duration_ms=$$((duration_ns / 1000000)); \
+			time_str=$$(printf "%dms" $$duration_ms); \
 		else \
-			time_str=$$(printf "%ds" $$seconds); \
+			duration_s=$$((duration_ns / 1000000000)); \
+			minutes=$$((duration_s / 60)); \
+			seconds=$$((duration_s % 60)); \
+			if [ $$minutes -gt 0 ]; then \
+				time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
+			else \
+				time_str=$$(printf "%ds" $$seconds); \
+			fi; \
 		fi; \
 		\
 		echo "----------------------------------------------------------------------------"; \
-		printf "$(GREEN)✅ Task '$(1)' completed $(BLUE) ⏱️  Elapsed time: $(YELLOW)%s$(BLUE)$(RESET)\n" "$$time_str"; \
+		printf "$(GREEN)✅ Task '$(1)' completed $(BLUE)(⏱️  Elapsed time: $(YELLOW)%s$(BLUE))$(RESET)\n" "$$time_str"; \
 	else \
-		end_time=$$(date +%s); \
-		duration=$$((end_time - start_time)); \
-		minutes=$$((duration / 60)); \
-		seconds=$$((duration % 60)); \
+		end_time_ns=$$( $(GET_NANO_CMD) ); \
+		duration_ns=$$((end_time_ns - start_time_ns)); \
 		time_str=""; \
-		if [ $$minutes -gt 0 ]; then \
-			time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
+		\
+		if [ $$duration_ns -lt 1000000000 ]; then \
+			duration_ms=$$((duration_ns / 1000000)); \
+			time_str=$$(printf "%dms" $$duration_ms); \
 		else \
-			time_str=$$(printf "%ds" $$seconds); \
+			duration_s=$$((duration_ns / 1000000000)); \
+			minutes=$$((duration_s / 60)); \
+			seconds=$$((duration_s % 60)); \
+			if [ $$minutes -gt 0 ]; then \
+				time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
+			else \
+				time_str=$$(printf "%ds" $$seconds); \
+			fi; \
 		fi; \
 		\
 		echo "----------------------------------------------------------------------------"; \
-		printf "$(RED)❌ Task '$(1)' failed $(BLUE) ⏱️  after $(YELLOW)%s$(BLUE)$(RESET)\n" "$$time_str"; \
+		printf "$(RED)❌ Task '$(1)' failed $(BLUE)(⏱️  after $(YELLOW)%s$(BLUE))$(RESET)\n" "$$time_str"; \
 		exit 1; \
 	fi
 endef
@@ -279,13 +332,29 @@ make-build-args:
 # ================================================================
 # universal makefile 설정
 # ================================================================
+self-install:   ## ✨ Run 'install' command from install.sh
+self-update:    ## ✨ Run 'update' command from install.sh
+self-check:     ## ✨ Run 'check' command from install.sh
+self-help:      ## ✨ Run 'help' command from install.sh
+self-uninstall: ## ✨ Run 'uninstall' command from install.sh
+self-app:       ## ✨ Run 'app' command from install.sh
 
-
-self-update:
+# 'self-'로 시작하는 모든 타겟을 처리하는 패턴 규칙
+# 예: 'make self-install'은 이 규칙을 통해 실행됩니다.
+self-%:
 	@$(call colorecho, ----- Updating Makefile System -----)
-	# $(shell ...)을 제거하고 스크립트를 직접 호출합니다.
-	@$(MAKEFILE_DIR)/install.sh update $(ARGS)
-	@$(call success, "Makefile System updated successfully.")
+	# '$*' 자동 변수는 '%'에 매칭된 부분 (install, update 등)을 가리킵니다.
+	# 이 값을 install.sh의 첫 번째 인자로 전달합니다.
+	# ARGS 변수를 통해 추가 인자(--force 등)도 전달할 수 있습니다.
+	@$(call timed_command, Executing '$(MAKEFILE_DIR)/install.sh $(*) $(ARGS)', \
+		$(MAKEFILE_DIR)/install.sh $(*) $(ARGS) \
+	)
+
+
+# self-update:
+# 	# $(shell ...)을 제거하고 스크립트를 직접 호출합니다.
+# 	@$(MAKEFILE_DIR)/install.sh update $(ARGS)
+# 	@$(call success, "Makefile System updated successfully.")
 
 # ================================================================
 # 디버깅 타겟들
