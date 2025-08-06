@@ -14,6 +14,23 @@ DEVELOP_BRANCH ?= develop
 
 # 계산된 변수들
 CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
+# 현재 짧은/긴 커밋 해시
+CURRENT_COMMIT_SHORT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+CURRENT_COMMIT_LONG := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+
+# Git 워킹 디렉토리의 상태를 확인 (커밋되지 않은 변경사항이 있으면 출력 내용이 생김)
+GIT_STATUS := $(shell git status --porcelain 2>/dev/null)
+
+ifeq ($(strip $(GIT_STATUS)),)
+	GIT_DIRTY_SUFFIX :=
+else
+	GIT_DIRTY_SUFFIX := -dirty
+endif
+
+COMMIT_TAG := $(CURRENT_COMMIT_SHORT)$(GIT_DIRTY_SUFFIX)
+
+
 IMAGE_NAME := $(REPO_HUB)/$(NAME)
 APP_IMAGE_NAME := $(REPO_HUB)/$(NAME)
 FULL_TAG := $(APP_IMAGE_NAME):$(TAGNAME)
@@ -375,6 +392,11 @@ debug-vars: ## 🔧 Show all Makefile variables
 	@echo "  CURRENT_BRANCH: $(CURRENT_BRANCH)"
 	@echo "  MAIN_BRANCH: $(MAIN_BRANCH)"
 	@echo "  DEVELOP_BRANCH: $(DEVELOP_BRANCH)"
+	@echo "  CURRENT_COMMIT_SHORT: $(CURRENT_COMMIT_SHORT)"
+	@echo "  CURRENT_COMMIT_LONG: $(CURRENT_COMMIT_LONG)"
+	@echo "  GIT_STATUS: $(GIT_STATUS)"
+	@echo "  GIT_DIRTY_SUFFIX: $(GIT_DIRTY_SUFFIX)"
+	@echo "  COMMIT_TAG: $(COMMIT_TAG)"
 	@echo ""
 	@echo "$(BLUE)Docker Configuration:$(RESET)"
 	@echo "  DOCKERFILE_PATH: $(DOCKERFILE_PATH)"
@@ -387,3 +409,6 @@ debug-vars: ## 🔧 Show all Makefile variables
 	@echo "  CI: $(CI)"
 	@echo "  DEBUG: $(DEBUG)"
 	@echo "  FORCE_REBUILD: $(FORCE_REBUILD)"
+
+
+info: debug-vars
