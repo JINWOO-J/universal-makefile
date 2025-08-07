@@ -200,6 +200,14 @@ parse_common_args() {
     BACKUP=$(resolve_flag "BACKUP" "--backup" "" "$@")
     DEBUG_MODE=$(resolve_flag "DEBUG" "--debug" "-d" "$@")
 
+    if [[ "${DEBUG_MODE}" == "true" ]]; then
+        log_info "Common flags resolved as follows:"
+        echo "  - FORCE_INSTALL: ${FORCE_INSTALL}"
+        echo "  - DRY_RUN      : ${DRY_RUN}"
+        echo "  - BACKUP       : ${BACKUP}"
+        echo "  - DEBUG_MODE   : ${DEBUG_MODE}"
+    fi
+
     local POSITIONAL_ARGS=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -213,11 +221,38 @@ parse_common_args() {
     eval set -- "${POSITIONAL_ARGS[@]:-}"
 }
 
+# parse_install_args() {
+#     INSTALLATION_TYPE="submodule"
+#     EXISTING_PROJECT=false
+
+#     local POSITIONAL_ARGS=()
+#     while [[ $# -gt 0 ]]; do
+#         case $1 in
+#             --copy)
+#                 INSTALLATION_TYPE="copy"; shift ;;
+#             --existing-project)
+#                 EXISTING_PROJECT=true; shift ;;
+#             --help|-h)
+#                 usage; exit 0 ;;
+#             --*) # 다른 옵션은 공통 옵션 파서로 넘김
+#                 POSITIONAL_ARGS+=("$1"); shift ;;
+#             *)
+#                 log_error "Unknown option for install: $1";
+#                 usage; exit 1 ;;
+#         esac
+#     done
+
+#     parse_common_args "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
+
+#     log_info "Installation type: $INSTALLATION_TYPE"
+# }
+
 parse_install_args() {
     INSTALLATION_TYPE="submodule"
     EXISTING_PROJECT=false
 
-    local POSITIONAL_ARGS=()
+    # install 명령어에만 해당하는 인자를 먼저 처리합니다.
+    local remaining_args=()
     while [[ $# -gt 0 ]]; do
         case $1 in
             --copy)
@@ -226,19 +261,14 @@ parse_install_args() {
                 EXISTING_PROJECT=true; shift ;;
             --help|-h)
                 usage; exit 0 ;;
-            --*) # 다른 옵션은 공통 옵션 파서로 넘김
-                POSITIONAL_ARGS+=("$1"); shift ;;
             *)
-                log_error "Unknown option for install: $1";
-                usage; exit 1 ;;
+                remaining_args+=("$1"); shift ;;
         esac
     done
-
-    parse_common_args "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
+    parse_common_args "${remaining_args[@]:-}"
 
     log_info "Installation type: $INSTALLATION_TYPE"
 }
-
 
 parse_uninstall_args() {
     parse_common_args "$@"
@@ -765,7 +795,7 @@ setup_app_example() {
             [[ "$yn" =~ ^[Yy]$ ]] || { log_warn "Skipped $fname"; continue; }
         fi
         cp -rf "$file" .
-        
+
         log_success "Installed $fname"
     done
 
