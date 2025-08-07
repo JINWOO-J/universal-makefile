@@ -781,8 +781,7 @@ main() {
     case "$cmd" in
         install)
             parse_install_args "$@"
-            check_requirements
-            show_status
+            check_requirements            
             check_existing_installation
             case "$INSTALLATION_TYPE" in
                 submodule) install_submodule ;;
@@ -800,18 +799,24 @@ main() {
         app|setup-app)
             local app_type="${1:-}"
             parse_common_args "${@:2}"
+            check_requirements
+            show_status            
             setup_app_example "$app_type"
             ;;
         status)
             parse_common_args "$@"
             show_status
             ;;            
-        update|pull)
+        update|pull)            
             parse_update_args "$@"
+            check_requirements
+            show_status
             update_makefile_system
             ;;
         uninstall)
             parse_uninstall_args "$@"
+            check_requirements
+            show_status
             uninstall
             ;;
         self-update)
