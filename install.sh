@@ -748,7 +748,7 @@ show_status() {
         echo "  Commit            : ${commit}"
         
         if [[ -n "$status" ]]; then
-            log_warn "  Status            : Modified (Local changes detected in system files)"
+            log_warn "Status            : Modified (Local changes detected in system files)"
             if [[ "$DEBUG_MODE" == "true" ]]; then
                 echo ""
                 log_info "Showing local modifications (--debug enabled):"
@@ -800,7 +800,6 @@ main() {
             local app_type="${1:-}"
             parse_common_args "${@:2}"
             check_requirements
-            show_status            
             setup_app_example "$app_type"
             ;;
         status)
@@ -816,7 +815,6 @@ main() {
         uninstall)
             parse_uninstall_args "$@"
             check_requirements
-            show_status
             uninstall
             ;;
         self-update)
