@@ -765,6 +765,7 @@ setup_app_example() {
             [[ "$yn" =~ ^[Yy]$ ]] || { log_warn "Skipped $fname"; continue; }
         fi
         cp -rf "$file" .
+        
         log_success "Installed $fname"
     done
 
