@@ -802,6 +802,10 @@ main() {
             parse_common_args "${@:2}"
             setup_app_example "$app_type"
             ;;
+        status)
+            parse_common_args "$@"
+            show_status
+            ;;            
         update|pull)
             parse_update_args "$@"
             update_makefile_system
