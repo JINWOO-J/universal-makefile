@@ -157,59 +157,6 @@ define task_echo
 	echo "\n$(YELLOW)🚀  $(1)$(RESET)"
 endef
 
-# define timed_command
-# @$(call task_echo, Starting task: $(1)); \
-# echo ">-----------------------------------------------------------------"; \
-# start_time=$$(date +%s); \
-# if $(2); then \
-#     end_time=$$(date +%s); \
-#     duration=$$((end_time - start_time)); \
-#     echo "-----------------------------------------------------------------<"; \
-#     $(call success_echo, Completed '$(1)' in $$duration s); \
-# else \
-#     end_time=$$(date +%s); \
-#     duration=$$((end_time - start_time)); \
-#     echo "-----------------------------------------------------------------<"; \
-#     $(call error_echo, Task '$(1)' failed after $$duration s); \
-#     exit 1; \
-# fi
-# endef
-
-# define timed_command
-# 	@$(call task_echo, Starting task: $(1)); \
-# 	echo "----------------------------------------------------------------------------"; \
-# 	start_time=$$(date +%s); \
-# 	if $(2); then \
-# 		end_time=$$(date +%s); \
-# 		duration=$$((end_time - start_time)); \
-# 		minutes=$$((duration / 60)); \
-# 		seconds=$$((duration % 60)); \
-# 		time_str=""; \
-# 		if [ $$minutes -gt 0 ]; then \
-# 			time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
-# 		else \
-# 			time_str=$$(printf "%ds" $$seconds); \
-# 		fi; \
-# 		\
-# 		echo "----------------------------------------------------------------------------"; \
-# 		printf "$(GREEN)✅ Task '$(1)' completed $(BLUE) ⏱️  Elapsed time: $(YELLOW)%s$(BLUE)$(RESET)\n" "$$time_str"; \
-# 	else \
-# 		end_time=$$(date +%s); \
-# 		duration=$$((end_time - start_time)); \
-# 		minutes=$$((duration / 60)); \
-# 		seconds=$$((duration % 60)); \
-# 		time_str=""; \
-# 		if [ $$minutes -gt 0 ]; then \
-# 			time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
-# 		else \
-# 			time_str=$$(printf "%ds" $$seconds); \
-# 		fi; \
-# 		\
-# 		echo "----------------------------------------------------------------------------"; \
-# 		printf "$(RED)❌ Task '$(1)' failed $(BLUE) ⏱️  after $(YELLOW)%s$(BLUE)$(RESET)\n" "$$time_str"; \
-# 		exit 1; \
-# 	fi
-# endef
 
 define timed_command
 	@$(call task_echo, Starting task: $(1)); \
@@ -370,6 +317,9 @@ self-%:
 	# '$*' 자동 변수는 '%'에 매칭된 부분 (install, update 등)을 가리킵니다.
 	# 이 값을 install.sh의 첫 번째 인자로 전달합니다.
 	# ARGS 변수를 통해 추가 인자(--force 등)도 전달할 수 있습니다.
+	#
+	@export DEBUG
+	@echo "DEBUG variable is: [$(DEBUG)]"
 	@$(call timed_command, Executing '$(MAKEFILE_DIR)/install.sh $(*) $(ARGS)', \
 		$(MAKEFILE_DIR)/install.sh $(*) $(ARGS) \
 	)
