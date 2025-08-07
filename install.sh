@@ -86,28 +86,30 @@ parse_common_args() {
             log_info "Debug mode enabled by 'DEBUG=true' environment variable."
         else
             DEBUG_MODE=false
-            log_info "Debug mode explicitly disabled by 'DEBUG=${DEBUG}' environment variable."
+            log_info "Debug mode explicitly disabled by 'DEBUG=$(D E B U G)' environment variable."
         fi
     else
         DEBUG_MODE=false
     fi
 
     FORCE_INSTALL=false
-    DRY_RUN=fals
+    DRY_RUN=false
     BACKUP=false
 
+    local POSITIONAL_ARGS=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --force) FORCE_INSTALL=true; shift ;;
             --dry-run) DRY_RUN=true; shift ;;
             --backup) BACKUP=true; shift ;;
-            -d|--debug) DEBUG_MODE=true; shift ;;
+            -d|--debug) shift ;; # 결정은 위에서 이미 끝났으므로, 인자만 제거합니다.
             *)
-                log_error "Unknown option: $1"
-                usage; exit 1 ;;
+                POSITIONAL_ARGS+=("$1")
+                shift;;
         esac
     done
 }
+
 
 parse_install_args() {
     INSTALLATION_TYPE="submodule"
