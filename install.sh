@@ -590,15 +590,51 @@ uninstall() {
 }
 
 
+# self_update() {
+#     log_info "Updating installer script itself..."
+#     local tmp_script
+#     tmp_script=$(mktemp)
+
+#     if command -v curl >/dev/null 2>&1; then
+#         curl -fsSL "$INSTALLER_SCRIPT_URL" -o "$tmp_script"
+#     elif command -v wget >/dev/null 2>&1; then
+#         wget -qO "$tmp_script" "$INSTALLER_SCRIPT_URL"
+#     else
+#         log_error "curl or wget required for self-update."
+#         exit 1
+#     fi
+
+#     if [[ -s "$tmp_script" ]]; then
+#         chmod +x "$tmp_script"
+#         mv "$tmp_script" "$0"
+#         log_success "Installer script updated successfully!"
+#     else
+#         rm -f "$tmp_script"
+#         log_error "Failed to download installer script."
+#         exit 1
+#     fi
+# }
+
 self_update() {
     log_info "Updating installer script itself..."
+    
     local tmp_script
     tmp_script=$(mktemp)
 
+    local curl_args=("-fsSL")
+    local wget_args=("-qO")
+
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        log_info "GITHUB_TOKEN is set. Adding authentication header for private repository access."
+        local auth_header="Authorization: Bearer ${GITHUB_TOKEN}"
+        curl_args+=(-H "${auth_header}")
+        wget_args+=(--header="${auth_header}")
+    fi
+    
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$INSTALLER_SCRIPT_URL" -o "$tmp_script"
+        curl "${curl_args[@]}" "$INSTALLER_SCRIPT_URL" -o "$tmp_script"
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$tmp_script" "$INSTALLER_SCRIPT_URL"
+        wget "${wget_args[@]}" -O "$tmp_script" "$INSTALLER_SCRIPT_URL"
     else
         log_error "curl or wget required for self-update."
         exit 1
@@ -611,6 +647,7 @@ self_update() {
     else
         rm -f "$tmp_script"
         log_error "Failed to download installer script."
+        log_warn "If this is a private repository, ensure the GITHUB_TOKEN is set correctly."
         exit 1
     fi
 }
