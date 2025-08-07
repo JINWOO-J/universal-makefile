@@ -19,17 +19,18 @@ log_success() { echo "${GREEN}✅ $1${RESET}"; }
 log_warn()    { echo "${YELLOW}⚠️  $1${RESET}"; }
 log_error()   { echo "${RED}❌ $1${RESET}" >&2; }
 
+MAKEFILE_DIR=".makefile-system"
+
 GITHUB_OWNER="jinwoo-j"
 GITHUB_REPO="universal-makefile"
 GITHUB_REPO_SLUG="${GITHUB_OWNER}/${GITHUB_REPO}"
+MAIN_BRANCH="master"
 
 REPO_URL="https://github.com/${GITHUB_REPO_SLUG}"
 INSTALLER_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO_SLUG}/${MAIN_BRANCH}/install.sh"
 
-MAIN_BRANCH="master"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 INSTALLATION_TYPE="submodule"
-INSTALLER_SCRIPT_URL="$REPO_URL/raw/$MAIN_BRANCH/install.sh"
 
 FORCE_INSTALL=false
 DRY_RUN=false
