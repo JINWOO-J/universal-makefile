@@ -19,8 +19,13 @@ log_success() { echo "${GREEN}✅ $1${RESET}"; }
 log_warn()    { echo "${YELLOW}⚠️  $1${RESET}"; }
 log_error()   { echo "${RED}❌ $1${RESET}" >&2; }
 
-REPO_URL="https://github.com/jinwoo-j/universal-makefile"
-MAKEFILE_DIR=".makefile-system"
+GITHUB_OWNER="jinwoo-j"
+GITHUB_REPO="universal-makefile"
+GITHUB_REPO_SLUG="${GITHUB_OWNER}/${GITHUB_REPO}"
+
+REPO_URL="https://github.com/${GITHUB_REPO_SLUG}"
+INSTALLER_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO_SLUG}/${MAIN_BRANCH}/install.sh"
+
 MAIN_BRANCH="master"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 INSTALLATION_TYPE="submodule"
@@ -617,7 +622,7 @@ uninstall() {
 
 self_update() {
     log_info "Updating installer script itself..."
-    
+
     local tmp_script
     tmp_script=$(mktemp)
 
@@ -630,7 +635,7 @@ self_update() {
         curl_args+=(-H "${auth_header}")
         wget_args+=(--header="${auth_header}")
     fi
-    
+
     if command -v curl >/dev/null 2>&1; then
         curl "${curl_args[@]}" "$INSTALLER_SCRIPT_URL" -o "$tmp_script"
     elif command -v wget >/dev/null 2>&1; then
@@ -639,7 +644,7 @@ self_update() {
         log_error "curl or wget required for self-update."
         exit 1
     fi
-
+    exit 1
     if [[ -s "$tmp_script" ]]; then
         chmod +x "$tmp_script"
         mv "$tmp_script" "$0"
