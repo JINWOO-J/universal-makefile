@@ -246,8 +246,112 @@ install_copy() {
 }
 
 # create_main_makefile 함수 전체를 이 코드로 교체합니다.
+# create_main_makefile() {
+#     # 1. Makefile.universal 생성 (이 부분은 기존과 동일)
+#     local universal_makefile="Makefile.universal"
+#     log_info "Creating ${universal_makefile}..."
+#     cat > "$universal_makefile" << EOF
+# # === Created by Universal Makefile System Installer ===
+# # This file is the entry point for the universal makefile system.
+# # It should be included by the project's main Makefile.
+
+# .DEFAULT_GOAL := help
+
+# # Detect installation type (submodule vs. copied files)
+# ifneq (,\$(wildcard ${MAKEFILE_DIR}/))
+#     MAKEFILE_DIR := ${MAKEFILE_DIR}
+#     MAKEFILE_TYPE := ${INSTALLATION_TYPE}
+# else ifneq (,\$(wildcard makefiles/core.mk))
+#     MAKEFILE_DIR := .
+#     MAKEFILE_TYPE := script
+# else
+#     \$(error Universal Makefile System not found. Please run 'install.sh' or 'git submodule update --init')
+# endif
+
+# # Ensure project.mk exists and include it
+# ifeq (,\$(wildcard project.mk))
+#     \$(error project.mk not found. Please run 'install.sh' to generate it.)
+# endif
+# include project.mk
+
+# # Include environment-specific overrides
+# ENV ?= development
+# -include environments/\$(ENV).mk
+# -include .project.local.mk
+
+# # Include core system modules
+# include \$(MAKEFILE_DIR)/makefiles/core.mk
+# include \$(MAKEFILE_DIR)/makefiles/help.mk
+# include \$(MAKEFILE_DIR)/makefiles/version.mk
+# include \$(MAKEFILE_DIR)/makefiles/docker.mk
+# include \$(MAKEFILE_DIR)/makefiles/compose.mk
+# include \$(MAKEFILE_DIR)/makefiles/git-flow.mk
+# include \$(MAKEFILE_DIR)/makefiles/cleanup.mk
+# EOF
+#     log_success "${universal_makefile} created"
+
+
+#     # 2. 최상위 Makefile 생성 또는 수정 안내 (이 부분이 핵심 변경사항)
+#     local main_makefile="Makefile"
+    
+#     if [[ ! -f ${main_makefile} ]]; then
+#         log_info "Creating main ${main_makefile} with submodule auto-initialization logic..."
+#         # Makefile이 없으면, 자동 초기화 로직이 포함된 Makefile을 새로 생성합니다.
+#         # 셸의 변수($MAKEFILE_DIR)와 make의 변수(\$(MAKEFILE_DIR))를 구분하기 위해 \`를 사용합니다.
+#         cat > "${main_makefile}" << EOF
+# # === Created by Universal Makefile System Installer ===
+# # This Makefile automatically initializes the submodule system on the first run.
+
+# # Define the location of the Makefile system and the file to check for.
+# MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
+# MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile.universal
+
+# # If the check file is missing (e.g., after a fresh git clone),
+# # run 'git submodule update' automatically.
+# ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
+# \$(warning ⚠️  Makefile system not found in \$(MAKEFILE_SYSTEM_DIR). Initializing submodule...)
+# \$(shell @git submodule update --init --recursive || exit 1)
+# endif
+
+# # Now that the system is guaranteed to be present, include it.
+# include \$(MAKEFILE_SYSTEM_CHECK_FILE)
+
+# # Project-specific targets can be added below this line.
+# # e.g.,
+# # build:
+# #	@echo "Building the main project..."
+
+# EOF
+#         log_success "Created ${main_makefile} with auto-init logic."
+#     else
+#         # Makefile이 이미 존재하면, 사용자에게 직접 추가하도록 안내합니다.
+#         log_warn "Existing ${main_makefile} detected."
+#         echo ""
+#         log_info "To enable automatic submodule initialization, add the following lines to the TOP of your Makefile:"
+#         # 사용자에게 보여줄 안내 메시지 생성
+#         local instructions
+#         instructions=$(cat <<EOF
+
+# # --- Start of Universal Makefile System ---
+# # Automatically initialize submodule if it's missing.
+# MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
+# MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile.universal
+# ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
+# \$(warning ⚠️  Makefile system not found. Initializing submodule...)
+# \$(shell @git submodule update --init --recursive || exit 1)
+# endif
+# include \$(MAKEFILE_SYSTEM_CHECK_FILE)
+# # --- End of Universal Makefile System ---
+
+# EOF
+# )
+#         echo -e "${YELLOW}${instructions}${RESET}"
+#     fi
+# }
+# install.sh의 create_main_makefile 함수
+
 create_main_makefile() {
-    # 1. Makefile.universal 생성 (이 부분은 기존과 동일)
+    # 1. Makefile.universal을 사용자가 제공한 새로운 내용으로 생성합니다.
     local universal_makefile="Makefile.universal"
     log_info "Creating ${universal_makefile}..."
     cat > "$universal_makefile" << EOF
@@ -257,29 +361,35 @@ create_main_makefile() {
 
 .DEFAULT_GOAL := help
 
-# Detect installation type (submodule vs. copied files)
-ifneq (,\$(wildcard ${MAKEFILE_DIR}/))
-    MAKEFILE_DIR := ${MAKEFILE_DIR}
-    MAKEFILE_TYPE := ${INSTALLATION_TYPE}
-else ifneq (,\$(wildcard makefiles/core.mk))
-    MAKEFILE_DIR := .
-    MAKEFILE_TYPE := script
-else
-    \$(error Universal Makefile System not found. Please run 'install.sh' or 'git submodule update --init')
-endif
-
-# Ensure project.mk exists and include it
-ifeq (,\$(wildcard project.mk))
+# 1. 먼저 project.mk를 include하여 MAKEFILE_DIR 같은 핵심 변수를 로드합니다.
+ifeq (\$(wildcard project.mk),)
     \$(error project.mk not found. Please run 'install.sh' to generate it.)
 endif
 include project.mk
 
-# Include environment-specific overrides
+# 2. 이제 MAKEFILE_DIR 변수가 정의되었으므로, Makefile 시스템의 존재 여부를 확인합니다.
+# 이 검사는 설치 유형(submodule 또는 copy)을 감지하고 올바른 경로를 설정합니다.
+ifneq (\$(wildcard \$(MAKEFILE_DIR)/makefiles/core.mk),)
+    # Submodule 설치: project.mk에 정의된 MAKEFILE_DIR 경로가 유효합니다.
+    # 설치 유형을 'submodule'로 명시적으로 설정합니다.
+    MAKEFILE_TYPE := submodule
+else ifneq (\$(wildcard makefiles/core.mk),)
+    # Copy 설치: project.mk의 MAKEFILE_DIR이 유효하지 않을 수 있습니다.
+    # 현재 디렉토리를 기준으로 시스템 파일을 찾습니다.
+    MAKEFILE_DIR := .
+    MAKEFILE_TYPE := copy
+else
+    # 두 경우 모두 실패 시 사용자에게 친절한 에러 메시지를 보여줍니다.
+    \$(warning ⚠️  Universal Makefile System files not found in '\$(MAKEFILE_DIR)')
+    \$(error Please run 'git submodule update --init --recursive' and try again.)
+endif
+
+# 3. 환경별 오버라이드 파일을 include 합니다.
 ENV ?= development
 -include environments/\$(ENV).mk
 -include .project.local.mk
 
-# Include core system modules
+# 4. 모든 변수와 경로 설정이 끝났으므로, 핵심 시스템 모듈들을 include 합니다.
 include \$(MAKEFILE_DIR)/makefiles/core.mk
 include \$(MAKEFILE_DIR)/makefiles/help.mk
 include \$(MAKEFILE_DIR)/makefiles/version.mk
@@ -291,36 +401,29 @@ EOF
     log_success "${universal_makefile} created"
 
 
-    # 2. 최상위 Makefile 생성 또는 수정 안내 (이 부분이 핵심 변경사항)
+    # 2. 최상위 Makefile을 생성하거나 사용자에게 추가 방법을 안내합니다.
     local main_makefile="Makefile"
     
     if [[ ! -f ${main_makefile} ]]; then
         log_info "Creating main ${main_makefile} with submodule auto-initialization logic..."
         # Makefile이 없으면, 자동 초기화 로직이 포함된 Makefile을 새로 생성합니다.
-        # 셸의 변수($MAKEFILE_DIR)와 make의 변수(\$(MAKEFILE_DIR))를 구분하기 위해 \`를 사용합니다.
         cat > "${main_makefile}" << EOF
 # === Created by Universal Makefile System Installer ===
 # This Makefile automatically initializes the submodule system on the first run.
 
 # Define the location of the Makefile system and the file to check for.
-MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
+MAKEFILE_SYSTEM_DIR := .makefile-system
 MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile.universal
 
 # If the check file is missing (e.g., after a fresh git clone),
 # run 'git submodule update' automatically.
 ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
-\$(warning ⚠️  Makefile system not found in \$(MAKEFILE_SYSTEM_DIR). Initializing submodule...)
-\$(shell @git submodule update --init --recursive || exit 1)
+\$(warning ⚠️  Makefile system not found in .makefile-system. Initializing submodule...)
+\$(shell git submodule update --init --recursive || exit 1)
 endif
 
 # Now that the system is guaranteed to be present, include it.
-include \$(MAKEFILE_SYSTEM_CHECK_FILE)
-
-# Project-specific targets can be added below this line.
-# e.g.,
-# build:
-#	@echo "Building the main project..."
-
+include Makefile.universal
 EOF
         log_success "Created ${main_makefile} with auto-init logic."
     else
@@ -328,19 +431,18 @@ EOF
         log_warn "Existing ${main_makefile} detected."
         echo ""
         log_info "To enable automatic submodule initialization, add the following lines to the TOP of your Makefile:"
-        # 사용자에게 보여줄 안내 메시지 생성
         local instructions
         instructions=$(cat <<EOF
 
 # --- Start of Universal Makefile System ---
 # Automatically initialize submodule if it's missing.
-MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
+MAKEFILE_SYSTEM_DIR := .makefile-system
 MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile.universal
 ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
-\$(warning ⚠️  Makefile system not found. Initializing submodule...)
-\$(shell @git submodule update --init --recursive || exit 1)
+\$(warning ⚠️  Makefile system not found in .makefile-system. Initializing submodule...)
+\$(shell git submodule update --init --recursive || exit 1)
 endif
-include \$(MAKEFILE_SYSTEM_CHECK_FILE)
+include Makefile.universal
 # --- End of Universal Makefile System ---
 
 EOF
@@ -348,7 +450,6 @@ EOF
         echo -e "${YELLOW}${instructions}${RESET}"
     fi
 }
-
 create_project_config() {
     [[ -f "project.mk" && "$FORCE_INSTALL" == false ]] && return
     log_info "Creating project.mk..."
