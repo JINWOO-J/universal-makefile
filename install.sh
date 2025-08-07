@@ -504,7 +504,7 @@ check_token_validity() {
 }
 
 
-self_upgrade() {
+self_update_script() {
     log_info "Updating installer script itself..."
     local tmp_script; tmp_script=$(mktemp)
     local curl_args=("-fsSL"); local wget_args=("-q")
@@ -817,8 +817,8 @@ main() {
             check_requirements
             uninstall
             ;;
-        upgrade|self-upgrade)
-            self_upgrade
+        update-script|self-update-script)
+            self_update_script
             ;;
         check)
             is_universal_makefile_installed
