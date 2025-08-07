@@ -69,6 +69,29 @@ EOF
 
 
 parse_common_args() {
+    local debug_flag_present=false
+    for arg in "$@"; do
+        if [[ "$arg" == "-d" || "$arg" == "--debug" ]]; then
+            debug_flag_present=true
+            break
+        fi
+    done
+
+    if [[ "$debug_flag_present" == true ]]; then
+        DEBUG_MODE=true
+        log_info "Debug mode enabled by command-line flag (--debug or -d)."
+    elif [[ -v DEBUG ]]; then
+        if [[ "${DEBUG,,}" == "true" ]]; then
+            DEBUG_MODE=true
+            log_info "Debug mode enabled by 'DEBUG=true' environment variable."
+        else
+            DEBUG_MODE=false
+            log_info "Debug mode explicitly disabled by 'DEBUG=$(D E B U G)' environment variable."
+        fi
+    else
+        DEBUG_MODE=false
+    fi
+
     FORCE_INSTALL=false
     DRY_RUN=fals
     BACKUP=false
@@ -644,7 +667,6 @@ setup_app_example() {
     log_success "$app_type example setup complete!"
     echo "Try: make help"
 }
-
 
 
 main() {
