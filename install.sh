@@ -86,7 +86,7 @@ parse_common_args() {
             log_info "Debug mode enabled by 'DEBUG=true' environment variable."
         else
             DEBUG_MODE=false
-            log_info "Debug mode explicitly disabled by 'DEBUG=$(D E B U G)' environment variable."
+            log_info "Debug mode explicitly disabled by 'DEBUG=${DEBUG}' environment variable."
         fi
     else
         DEBUG_MODE=false
