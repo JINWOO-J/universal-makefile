@@ -68,49 +68,149 @@ EOF
 }
 
 
-parse_common_args() {
-    local debug_flag_present=false
-    for arg in "$@"; do
-        if [[ "$arg" == "-d" || "$arg" == "--debug" ]]; then
-            debug_flag_present=true
-            break
+# parse_common_args() {
+#     # 1. 우선 환경 변수를 기반으로 DEBUG_MODE의 기본값을 설정합니다.
+#     #    (커맨드라인 인자가 있으면 이 값은 아래에서 덮어쓰여집니다.)
+#     if [ -n "${DEBUG+x}" ]; then
+#         if [[ "$(echo "${DEBUG}" | tr '[:upper:]' '[:lower:]')" == "true" ]]; then
+#             DEBUG_MODE=true
+#         else
+#             DEBUG_MODE=false
+#         fi
+#     else
+#         DEBUG_MODE=false # 환경 변수도 없으면 기본값은 false
+#     fi
+
+#     # 2. 커맨드라인 인자를 순회하며 최종 값을 결정합니다.
+#     FORCE_INSTALL=false
+#     DRY_RUN=false
+#     BACKUP=false
+
+#     local POSITIONAL_ARGS=()
+#     while [[ $# -gt 0 ]]; do
+#         case "$1" in
+#             --force) FORCE_INSTALL=true; shift ;;
+#             --dry-run) DRY_RUN=true; shift ;;
+#             --backup) BACKUP=true; shift ;;
+#             -d|--debug)
+#                 # --debug 플래그가 발견되면, 환경 변수 설정을 무시하고 무조건 true로 덮어씁니다.
+#                 DEBUG_MODE=true
+#                 shift ;;
+#             *)
+#                 POSITIONAL_ARGS+=("$1")
+#                 shift ;;
+#         esac
+#     done
+
+#     # 디버깅을 위해 최종 결정된 DEBUG_MODE 값을 출력합니다.
+#     log_info "Final DEBUG_MODE is: ${DEBUG_MODE}"
+# }
+
+# 우선순위 로직(인자 > 환경변수 > 기본값)에 따라 플래그의 최종 상태(true/false)를 결정합니다.
+# 사용법: MY_VAR=$(resolve_flag "ENV_VAR_NAME" "--long-flag" "-s" "$@")
+# resolve_flag() {
+#     local env_var_name=$1
+#     local long_flag=$2
+#     local short_flag=$3
+#     shift 3 # 함수 자체의 인자 3개를 인자 목록에서 제거
+#     local all_args=("$@") # 스크립트에 전달된 나머지 인자들을 배열로 저장
+
+#     # 1. 커맨드라인 플래그가 최우선
+#     for arg in "${all_args[@]}"; do
+#         # -n "$short_flag" : short_flag가 비어있지 않을 때만 비교
+#         if [[ "$arg" == "$long_flag" || (-n "$short_flag" && "$arg" == "$short_flag") ]]; then
+#             echo "true"
+#             return
+#         fi
+#     done
+
+#     # 2. 플래그가 없으면 환경 변수 확인
+#     # eval과 파라미터 확장(:-)을 함께 사용하여, 환경 변수가 설정되지 않았을 때도 안전하게 처리합니다.
+#     eval "local env_val=\"\${$env_var_name:-}\""
+#     # 변수가 설정되어 있는지 확인 (이제 이 줄은 불필요하지만, 명확성을 위해 둘 수 있습니다)
+#     if [ -n "${env_val+x}" ]; then
+#         if [[ "$(echo "$env_val" | tr '[:upper:]' '[:lower:]')" == "true" ]]; then
+#             echo "true"
+#         else
+#             echo "false"
+#         fi
+#     else
+#         # 3. 둘 다 없으면 기본값은 false
+#         echo "false"
+#     fi
+# }
+
+# parse_common_args() {
+#     # resolve_flag 헬퍼 함수를 호출하여 각 변수의 상태를 결정합니다.
+#     FORCE_INSTALL=$(resolve_flag "FORCE" "--force" "" "$@")
+#     DRY_RUN=$(resolve_flag "DRY_RUN" "--dry-run" "" "$@")
+#     BACKUP=$(resolve_flag "BACKUP" "--backup" "" "$@")
+#     DEBUG_MODE=$(resolve_flag "DEBUG" "--debug" "-d" "$@")
+
+#     # --- 여기가 핵심 수정 사항 ---
+#     # while 루프에 들어가기 전에, POSITIONAL_ARGS를 항상 빈 배열로 선언합니다.
+#     local POSITIONAL_ARGS=()
+
+#     # 이 루프는 스크립트의 나머지 부분에 영향을 주지 않도록
+#     # 처리된 공통 옵션들을 인자 목록에서 제거하는 역할만 합니다.
+#     while [[ $# -gt 0 ]]; do
+#         case "$1" in
+#             --force|--dry-run|--backup|-d|--debug)
+#                 shift ;;
+#             *)
+#                 # 공통 옵션이 아닌 인자는 POSITIONAL_ARGS 배열에 저장합니다.
+#                 POSITIONAL_ARGS+=("$1")
+#                 shift ;;
+#         esac
+#     done
+
+#     # 공통 옵션이 제거된 나머지 인자들을 스크립트의 위치 인자로 다시 설정합니다.
+#     eval set -- "${POSITIONAL_ARGS[@]}"
+# }
+#
+# resolve_flag 함수 전체를 아래 코드로 교체해주세요.
+resolve_flag() {
+    local env_var_name=$1
+    local long_flag=$2
+    local short_flag=$3
+    local all_args=("${@:4}")
+
+    for arg in "${all_args[@]:-}"; do
+        if [[ "$arg" == "$long_flag" || (-n "$short_flag" && "$arg" == "$short_flag") ]]; then
+            echo "true"
+            return
         fi
     done
 
-    if [[ "$debug_flag_present" == true ]]; then
-        DEBUG_MODE=true
-        log_info "Debug mode enabled by command-line flag (--debug or -d)."
-    elif [ -n "${DEBUG+x}" ]; then
-        local debug_env_val
-        debug_env_val=$(echo "${DEBUG}" | tr '[:upper:]' '[:lower:]')
-
-        if [[ "$debug_env_val" == "true" ]]; then
-            DEBUG_MODE=true
-            log_info "Debug mode enabled by 'DEBUG=true' environment variable."
+    eval "local env_val=\"\${$env_var_name:-}\""
+    if [ -n "${env_val+x}" ]; then
+        if [[ "$(echo "$env_val" | tr '[:upper:]' '[:lower:]')" == "true" ]]; then
+            echo "true"
         else
-            DEBUG_MODE=false
-            log_info "Debug mode explicitly disabled by 'DEBUG=${DEBUG}' environment variable."
+            echo "false"
         fi
     else
-        DEBUG_MODE=false
+        echo "false"
     fi
+}
 
-    FORCE_INSTALL=false
-    DRY_RUN=false
-    BACKUP=false
+parse_common_args() {
+    FORCE_INSTALL=$(resolve_flag "FORCE" "--force" "" "$@")
+    DRY_RUN=$(resolve_flag "DRY_RUN" "--dry-run" "" "$@")
+    BACKUP=$(resolve_flag "BACKUP" "--backup" "" "$@")
+    DEBUG_MODE=$(resolve_flag "DEBUG" "--debug" "-d" "$@")
 
     local POSITIONAL_ARGS=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --force) FORCE_INSTALL=true; shift ;;
-            --dry-run) DRY_RUN=true; shift ;;
-            --backup) BACKUP=true; shift ;;
-            -d|--debug) shift ;; 
+            --force|--dry-run|--backup|-d|--debug)
+                shift ;;
             *)
                 POSITIONAL_ARGS+=("$1")
-                shift;;
+                shift ;;
         esac
     done
+    eval set -- "${POSITIONAL_ARGS[@]:-}"
 }
 
 parse_install_args() {
