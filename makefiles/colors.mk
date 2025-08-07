@@ -44,46 +44,67 @@ define print_error
 	echo "$(RED) ❌ $(2)$(RESET)"
 endef
 
+
+# Makefile에서 모든 인자를 받는 옵션은 없고 ","를 다른 아규먼트로 인식하는 경우가 있음. "을 없애고 쓰거나, 아래 형태로 10개 받기
 define colorecho
-	echo "$(BLUE)$(1)$(RESET)"
+	echo "$(BLUE)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 # define color_echo
 # 	echo "$(1)$(2)$(RESET)"
 # endef
 
-define blue
-	@echo "$(BLUE)$(1)$(RESET)"
+define success_silent
+	@echo "$(GREEN)✅ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+endef
+
+define warn_silent
+	@echo "$(YELLOW)⚠️  $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+endef
+
+define error_silent
+	@echo "$(RED)❌ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)" >&2
+endef
+
+define blue_silent
+	@echo "$(BLUE)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+endef
+
+define green_silent
+	@echo "$(GREEN)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+endef
+
+define yellow_silent
+	@echo "$(YELLOW)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+endef
+
+define red_silent
+	@echo "$(RED)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define success
-	@echo "$(GREEN)$(1)$(RESET)"
+	echo "$(GREEN)✅ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define warn
-	@echo "$(YELLOW)$(1)$(RESET)"
+	echo "$(YELLOW)⚠️  $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define error
-	@echo "$(RED)$(1)$(RESET)"
+	echo "$(RED)❌ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)" >&2
 endef
 
-define yellow
-	@echo "$(YELLOW)$(1)$(RESET)"
+define blue
+	echo "$(BLUE)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
-define colorecho_silent
-	@echo "$(BLUE)$(1)$(RESET)"
-endef
-define success_silent
-	@echo "$(GREEN)✅ $(1)$(RESET)"
-endef
-define warn_silent
-	@echo "$(YELLOW)⚠️  $(1)$(RESET)"
-endef
-define error_silent
-	@echo "$(RED)❌ $(1)$(RESET)" >&2
-endef
+# ----------------------------------------------------------------
+# 별칭 (Aliases)
+# - 중복을 피하고 일관성을 유지하기 위해 기존 이름들을 새 이름에 연결합니다.
+# ----------------------------------------------------------------
+colorecho = $(call blue)
+yellow = $(call warn)
+colorecho_silent = $(call blue_silent)
 
 # colorecho = @echo "$(BLUE)$(1)$(RESET)"
 # blue = @echo "$(BLUE)$(1)$(RESET)"
