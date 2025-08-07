@@ -507,7 +507,8 @@ check_token_validity() {
 self_update_script() {
     log_info "Updating installer script itself..."
     local tmp_script; tmp_script=$(mktemp)
-    local curl_args=("-fsSL"); local wget_args=("-q")
+    local curl_args=("-fsSL" "-L" "-H" "Cache-Control: no-cache")
+    local wget_args=("-q" "--no-cache")
 
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
         log_info "GITHUB_TOKEN is set. Adding authentication header."
@@ -843,4 +844,4 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 fi
 
 
-echo "new22234"
+echo "new2223411"
