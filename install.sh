@@ -73,108 +73,6 @@ Repository: $REPO_URL
 EOF
 }
 
-
-# parse_common_args() {
-#     # 1. 우선 환경 변수를 기반으로 DEBUG_MODE의 기본값을 설정합니다.
-#     #    (커맨드라인 인자가 있으면 이 값은 아래에서 덮어쓰여집니다.)
-#     if [ -n "${DEBUG+x}" ]; then
-#         if [[ "$(echo "${DEBUG}" | tr '[:upper:]' '[:lower:]')" == "true" ]]; then
-#             DEBUG_MODE=true
-#         else
-#             DEBUG_MODE=false
-#         fi
-#     else
-#         DEBUG_MODE=false # 환경 변수도 없으면 기본값은 false
-#     fi
-
-#     # 2. 커맨드라인 인자를 순회하며 최종 값을 결정합니다.
-#     FORCE_INSTALL=false
-#     DRY_RUN=false
-#     BACKUP=false
-
-#     local POSITIONAL_ARGS=()
-#     while [[ $# -gt 0 ]]; do
-#         case "$1" in
-#             --force) FORCE_INSTALL=true; shift ;;
-#             --dry-run) DRY_RUN=true; shift ;;
-#             --backup) BACKUP=true; shift ;;
-#             -d|--debug)
-#                 # --debug 플래그가 발견되면, 환경 변수 설정을 무시하고 무조건 true로 덮어씁니다.
-#                 DEBUG_MODE=true
-#                 shift ;;
-#             *)
-#                 POSITIONAL_ARGS+=("$1")
-#                 shift ;;
-#         esac
-#     done
-
-#     # 디버깅을 위해 최종 결정된 DEBUG_MODE 값을 출력합니다.
-#     log_info "Final DEBUG_MODE is: ${DEBUG_MODE}"
-# }
-
-# 우선순위 로직(인자 > 환경변수 > 기본값)에 따라 플래그의 최종 상태(true/false)를 결정합니다.
-# 사용법: MY_VAR=$(resolve_flag "ENV_VAR_NAME" "--long-flag" "-s" "$@")
-# resolve_flag() {
-#     local env_var_name=$1
-#     local long_flag=$2
-#     local short_flag=$3
-#     shift 3 # 함수 자체의 인자 3개를 인자 목록에서 제거
-#     local all_args=("$@") # 스크립트에 전달된 나머지 인자들을 배열로 저장
-
-#     # 1. 커맨드라인 플래그가 최우선
-#     for arg in "${all_args[@]}"; do
-#         # -n "$short_flag" : short_flag가 비어있지 않을 때만 비교
-#         if [[ "$arg" == "$long_flag" || (-n "$short_flag" && "$arg" == "$short_flag") ]]; then
-#             echo "true"
-#             return
-#         fi
-#     done
-
-#     # 2. 플래그가 없으면 환경 변수 확인
-#     # eval과 파라미터 확장(:-)을 함께 사용하여, 환경 변수가 설정되지 않았을 때도 안전하게 처리합니다.
-#     eval "local env_val=\"\${$env_var_name:-}\""
-#     # 변수가 설정되어 있는지 확인 (이제 이 줄은 불필요하지만, 명확성을 위해 둘 수 있습니다)
-#     if [ -n "${env_val+x}" ]; then
-#         if [[ "$(echo "$env_val" | tr '[:upper:]' '[:lower:]')" == "true" ]]; then
-#             echo "true"
-#         else
-#             echo "false"
-#         fi
-#     else
-#         # 3. 둘 다 없으면 기본값은 false
-#         echo "false"
-#     fi
-# }
-
-# parse_common_args() {
-#     # resolve_flag 헬퍼 함수를 호출하여 각 변수의 상태를 결정합니다.
-#     FORCE_INSTALL=$(resolve_flag "FORCE" "--force" "" "$@")
-#     DRY_RUN=$(resolve_flag "DRY_RUN" "--dry-run" "" "$@")
-#     BACKUP=$(resolve_flag "BACKUP" "--backup" "" "$@")
-#     DEBUG_MODE=$(resolve_flag "DEBUG" "--debug" "-d" "$@")
-
-#     # --- 여기가 핵심 수정 사항 ---
-#     # while 루프에 들어가기 전에, POSITIONAL_ARGS를 항상 빈 배열로 선언합니다.
-#     local POSITIONAL_ARGS=()
-
-#     # 이 루프는 스크립트의 나머지 부분에 영향을 주지 않도록
-#     # 처리된 공통 옵션들을 인자 목록에서 제거하는 역할만 합니다.
-#     while [[ $# -gt 0 ]]; do
-#         case "$1" in
-#             --force|--dry-run|--backup|-d|--debug)
-#                 shift ;;
-#             *)
-#                 # 공통 옵션이 아닌 인자는 POSITIONAL_ARGS 배열에 저장합니다.
-#                 POSITIONAL_ARGS+=("$1")
-#                 shift ;;
-#         esac
-#     done
-
-#     # 공통 옵션이 제거된 나머지 인자들을 스크립트의 위치 인자로 다시 설정합니다.
-#     eval set -- "${POSITIONAL_ARGS[@]}"
-# }
-#
-# resolve_flag 함수 전체를 아래 코드로 교체해주세요.
 resolve_flag() {
     local env_var_name=$1
     local long_flag=$2
@@ -227,37 +125,11 @@ parse_common_args() {
     eval set -- "${POSITIONAL_ARGS[@]:-}"
 }
 
-# parse_install_args() {
-#     INSTALLATION_TYPE="submodule"
-#     EXISTING_PROJECT=false
-
-#     local POSITIONAL_ARGS=()
-#     while [[ $# -gt 0 ]]; do
-#         case $1 in
-#             --copy)
-#                 INSTALLATION_TYPE="copy"; shift ;;
-#             --existing-project)
-#                 EXISTING_PROJECT=true; shift ;;
-#             --help|-h)
-#                 usage; exit 0 ;;
-#             --*) # 다른 옵션은 공통 옵션 파서로 넘김
-#                 POSITIONAL_ARGS+=("$1"); shift ;;
-#             *)
-#                 log_error "Unknown option for install: $1";
-#                 usage; exit 1 ;;
-#         esac
-#     done
-
-#     parse_common_args "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
-
-#     log_info "Installation type: $INSTALLATION_TYPE"
-# }
 
 parse_install_args() {
     INSTALLATION_TYPE="submodule"
     EXISTING_PROJECT=false
 
-    # install 명령어에만 해당하는 인자를 먼저 처리합니다.
     local remaining_args=()
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -595,68 +467,80 @@ uninstall() {
     log_success "Uninstallation complete"
 }
 
+check_token_validity() {
+    if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+        log_error "GITHUB_TOKEN is not set or is empty. Aborting."
+        return 1
+    fi
 
-# self_update() {
-#     log_info "Updating installer script itself..."
-#     local tmp_script
-#     tmp_script=$(mktemp)
+    log_info "Download failed with a GITHUB_TOKEN. Running automatic authentication check..."
 
-#     if command -v curl >/dev/null 2>&1; then
-#         curl -fsSL "$INSTALLER_SCRIPT_URL" -o "$tmp_script"
-#     elif command -v wget >/dev/null 2>&1; then
-#         wget -qO "$tmp_script" "$INSTALLER_SCRIPT_URL"
-#     else
-#         log_error "curl or wget required for self-update."
-#         exit 1
-#     fi
+    local owner; owner=$(echo "${REPO_URL}" | sed -E 's|https?://github.com/([^/]+)/.*|\1|')
+    local repo; repo=$(echo "${REPO_URL}" | sed -E 's|https?://github.com/[^/]+/([^/]+)|\1|')
 
-#     if [[ -s "$tmp_script" ]]; then
-#         chmod +x "$tmp_script"
-#         mv "$tmp_script" "$0"
-#         log_success "Installer script updated successfully!"
-#     else
-#         rm -f "$tmp_script"
-#         log_error "Failed to download installer script."
-#         exit 1
-#     fi
-# }
+    local http_code; http_code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/user)
+    if [[ "$http_code" == "401" ]]; then
+        log_error "GITHUB_TOKEN Check Failed: HTTP ${http_code} - Bad credentials."
+        log_warn "The token is invalid, expired, or has been revoked. Please generate a new token."
+        return
+    elif [[ "$http_code" != "200" ]]; then
+        log_error "Token Check Failed: Received HTTP ${http_code} when checking token validity."
+        return
+    fi
+    log_success "Token Check OK: Token is valid."
+
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${GITHUB_TOKEN}" "https://api.github.com/repos/${owner}/${repo}")
+    if [[ "$http_code" == "404" ]]; then
+        log_error "Permission Check Failed: HTTP ${http_code} - Not Found."
+        log_warn "The GITHUB_TOKEN is valid, but it does not have permission to access the '${owner}/${repo}' repository."
+        log_warn "Please ensure the GITHUB_TOKEN has the correct 'repo' scope (for Classic PAT) or has been granted access to the repository (for Fine-grained PAT)."
+        log_warn "If this is an organization repository, ensure SSO has been authorized for the token."
+    elif [[ "$http_code" != "200" ]]; then
+        log_error "Permission Check Failed: Received HTTP ${http_code} when checking repository access."
+    else
+        log_success "Permission Check OK: GITHUB_TOKEN has access to the repository."
+        log_warn "All checks passed, but download still failed. There might be a temporary network issue or a problem with the file path/branch name."
+    fi
+}
+
 
 self_update() {
     log_info "Updating installer script itself..."
-
-    local tmp_script
-    tmp_script=$(mktemp)
-
-    local curl_args=("-fsSL")
-    local wget_args=("-qO")
+    local tmp_script; tmp_script=$(mktemp)
+    local curl_args=("-fsSL"); local wget_args=("-q")
 
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        log_info "GITHUB_TOKEN is set. Adding authentication header for private repository access."
+        log_info "GITHUB_TOKEN is set. Adding authentication header."
         local auth_header="Authorization: Bearer ${GITHUB_TOKEN}"
         curl_args+=(-H "${auth_header}")
         wget_args+=(--header="${auth_header}")
     fi
 
+    local download_success=true
     if command -v curl >/dev/null 2>&1; then
-        curl "${curl_args[@]}" "$INSTALLER_SCRIPT_URL" -o "$tmp_script"
+        curl "${curl_args[@]}" "$INSTALLER_SCRIPT_URL" -o "$tmp_script" || download_success=false
     elif command -v wget >/dev/null 2>&1; then
-        wget "${wget_args[@]}" -O "$tmp_script" "$INSTALLER_SCRIPT_URL"
+        wget "${wget_args[@]}" -O "$tmp_script" "$INSTALLER_SCRIPT_URL" || download_success=false
     else
-        log_error "curl or wget required for self-update."
-        exit 1
+        log_error "curl or wget required for self-update."; exit 1
     fi
-    exit 1
-    if [[ -s "$tmp_script" ]]; then
+
+    if [[ "$download_success" == true && -s "$tmp_script" ]]; then
         chmod +x "$tmp_script"
         mv "$tmp_script" "$0"
         log_success "Installer script updated successfully!"
     else
         rm -f "$tmp_script"
-        log_error "Failed to download installer script."
-        log_warn "If this is a private repository, ensure the GITHUB_TOKEN is set correctly."
+        log_error "Failed to download installer script."        
+        if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            check_token_validity
+        else
+            log_warn "If this is a private repository, please set the GITHUB_TOKEN environment variable."
+        fi
         exit 1
     fi
 }
+
 
 show_diff() {
     echo ""
