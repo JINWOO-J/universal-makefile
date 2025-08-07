@@ -413,7 +413,7 @@ EOF
 
 # Define the location of the Makefile system and the file to check for.
 MAKEFILE_SYSTEM_DIR := .makefile-system
-MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile.universal
+MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile
 
 # If the check file is missing (e.g., after a fresh git clone),
 # run 'git submodule update' automatically.
@@ -437,7 +437,7 @@ EOF
 # --- Start of Universal Makefile System ---
 # Automatically initialize submodule if it's missing.
 MAKEFILE_SYSTEM_DIR := .makefile-system
-MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile.universal
+MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile
 ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
 \$(warning ⚠️  Makefile system not found in .makefile-system. Initializing submodule...)
 \$(shell git submodule update --init --recursive || exit 1)
