@@ -20,8 +20,7 @@
 # 	@docker images $(FULL_TAG)
 
 build: check-docker make-build-args ## 🎯 Build the Docker image
-	@$(call colorecho, $(BLUE), "🔨", "Building Docker image with tag: $(TAGNAME)")
-
+	@$(call print_color, $(BLUE),"🔨Building Docker image with tag: $(TAGNAME)")
 	# Use the 'timed_command' macro to measure execution time.
 	# The BUILD_ARGS file is no longer needed; pass the make variable directly.
 	$(call timed_command, Image Build $(FULL_TAG), \
@@ -34,7 +33,7 @@ build: check-docker make-build-args ## 🎯 Build the Docker image
 	)
 
 	@echo ""
-	@$(call colorecho, $(BLUE), "---", "Image Details ---")
+	@$(call print_color, $(BLUE),"--- Image Details ---")
 	@docker images $(FULL_TAG)
 
 

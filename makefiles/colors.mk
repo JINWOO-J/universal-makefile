@@ -36,11 +36,23 @@ RESET := \033[0m
 # 	@printf '\033[0;33m%s\033[0m\n' $(1)
 # endef
 
+define print_color
+	echo "$(1)$(2)$(RESET)"
+endef
+
 define print_error
-	@printf '\033[0;31m%s\033[0m\n' $(1)
+	echo "$(RED) ❌ $(2)$(RESET)"
 endef
 
 define colorecho
+	echo "$(BLUE)$(1)$(RESET)"
+endef
+
+# define color_echo
+# 	echo "$(1)$(2)$(RESET)"
+# endef
+
+define blue
 	@echo "$(BLUE)$(1)$(RESET)"
 endef
 
@@ -60,11 +72,24 @@ define yellow
 	@echo "$(YELLOW)$(1)$(RESET)"
 endef
 
-colorecho = @echo "$(BLUE)$(1)$(RESET)"
-blue = @echo "$(BLUE)$(1)$(RESET)"
-green = @echo "$(GREEN)$(1)$(RESET)"
-yellow = @echo "$(YELLOW)$(1)$(RESET)"
-red = @echo "$(RED)$(1)$(RESET)"
+define colorecho_silent
+	@echo "$(BLUE)$(1)$(RESET)"
+endef
+define success_silent
+	@echo "$(GREEN)✅ $(1)$(RESET)"
+endef
+define warn_silent
+	@echo "$(YELLOW)⚠️  $(1)$(RESET)"
+endef
+define error_silent
+	@echo "$(RED)❌ $(1)$(RESET)" >&2
+endef
+
+# colorecho = @echo "$(BLUE)$(1)$(RESET)"
+# blue = @echo "$(BLUE)$(1)$(RESET)"
+# green = @echo "$(GREEN)$(1)$(RESET)"
+# yellow = @echo "$(YELLOW)$(1)$(RESET)"
+# red = @echo "$(RED)$(1)$(RESET)"
 
 
 # Shell script 용 color 함수 export
