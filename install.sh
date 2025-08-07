@@ -81,12 +81,15 @@ parse_common_args() {
         DEBUG_MODE=true
         log_info "Debug mode enabled by command-line flag (--debug or -d)."
     elif [ -n "${DEBUG+x}" ]; then
-        if [[ "${DEBUG,,}" == "true" ]]; then
+        local debug_env_val
+        debug_env_val=$(echo "${DEBUG}" | tr '[:upper:]' '[:lower:]')
+
+        if [[ "$debug_env_val" == "true" ]]; then
             DEBUG_MODE=true
             log_info "Debug mode enabled by 'DEBUG=true' environment variable."
         else
             DEBUG_MODE=false
-            log_info "Debug mode explicitly disabled by 'DEBUG=$(D E B U G)' environment variable."
+            log_info "Debug mode explicitly disabled by 'DEBUG=${DEBUG}' environment variable."
         fi
     else
         DEBUG_MODE=false
@@ -102,14 +105,13 @@ parse_common_args() {
             --force) FORCE_INSTALL=true; shift ;;
             --dry-run) DRY_RUN=true; shift ;;
             --backup) BACKUP=true; shift ;;
-            -d|--debug) shift ;; # 결정은 위에서 이미 끝났으므로, 인자만 제거합니다.
+            -d|--debug) shift ;; 
             *)
                 POSITIONAL_ARGS+=("$1")
                 shift;;
         esac
     done
 }
-
 
 parse_install_args() {
     INSTALLATION_TYPE="submodule"
