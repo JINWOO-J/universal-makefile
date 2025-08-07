@@ -80,7 +80,7 @@ parse_common_args() {
     if [[ "$debug_flag_present" == true ]]; then
         DEBUG_MODE=true
         log_info "Debug mode enabled by command-line flag (--debug or -d)."
-    elif [[ -v DEBUG ]]; then
+    elif [ -n "${DEBUG+x}" ]; then
         if [[ "${DEBUG,,}" == "true" ]]; then
             DEBUG_MODE=true
             log_info "Debug mode enabled by 'DEBUG=true' environment variable."
