@@ -730,6 +730,49 @@ setup_app_example() {
     echo "Try: make help"
 }
 
+show_status() {
+    log_info "Checking status of the installed Universal Makefile System..."
+    echo ""
+
+    if [[ -d "$MAKEFILE_DIR" ]] && (cd "$MAKEFILE_DIR" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
+        local git_dir="$MAKEFILE_DIR"
+        local remote; remote=$(git -C "$git_dir" remote get-url origin 2>/dev/null || echo "N/A")
+        local branch; branch=$(git -C "$git_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "N/A")
+        local commit; commit=$(git -C "$git_dir" rev-parse --short HEAD 2>/dev/null || echo "N/A")
+        local status; status=$(git -C "$git_dir" status --porcelain 2>/dev/null)
+
+        echo "  Installation Type : Submodule"
+        echo "  Path              : ${git_dir}"
+        echo "  Remote URL        : ${remote}"
+        echo "  Branch            : ${branch}"
+        echo "  Commit            : ${commit}"
+        
+        if [[ -n "$status" ]]; then
+            log_warn "  Status            : Modified (Local changes detected in system files)"
+            if [[ "$DEBUG_MODE" == "true" ]]; then
+                echo ""
+                log_info "Showing local modifications (--debug enabled):"
+                git --no-pager -C "$git_dir" diff --color=always
+            fi
+        else
+            log_success "  Status            : Clean"
+        fi
+    elif [[ -d "makefiles" ]]; then
+        echo "  Installation Type : Copied Files"
+        if [[ -f "VERSION" ]]; then
+            local version; version=$(cat VERSION)
+            echo "  Version File      : ${version}"
+        else
+            echo "  Version File      : Not found"
+        fi
+        log_warn "  Cannot determine specific git commit for copied files."
+    else
+        log_error "Universal Makefile System installation not found."
+        exit 1
+    fi
+    echo ""
+}
+
 
 main() {
     local cmd=${1:-install}
@@ -739,6 +782,7 @@ main() {
         install)
             parse_install_args "$@"
             check_requirements
+            show_status
             check_existing_installation
             case "$INSTALLATION_TYPE" in
                 submodule) install_submodule ;;
