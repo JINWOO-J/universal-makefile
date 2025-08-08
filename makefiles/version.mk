@@ -27,7 +27,7 @@ show-version: version ## 🔧 Alias for version command
 uv: update-version ## 🔧 Update version (shortcut)
 
 update-version: ## 🔧 Update version using appropriate tool
-	@$(call colorecho, "🔄 Updating version...")
+	@$(call colorecho, "🔄 Updating version... using $(VERSION_UPDATE_TOOL)")
 	@$(MAKE) _detect_and_update_version
 	@$(call success, "Version updated successfully")
 
@@ -67,6 +67,23 @@ _auto_detect_version_tool:
 		$(MAKE) _update_version_with_tool TOOL=generic; \
 	fi
 
+# ================================================================
+# Fallback: bump version using VERSION variable only
+# ================================================================
+
+_bump_version_from_variable:
+	@current="$(VERSION)"; \
+	if echo "$$current" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		major=$$(echo "$$current" | sed -E 's/^v([0-9]+)\..*/\1/'); \
+		minor=$$(echo "$$current" | sed -E 's/^v[0-9]+\.([0-9]+)\..*/\1/'); \
+		patch=$$(echo "$$current" | sed -E 's/^v[0-9]+\.[0-9]+\.([0-9]+).*$$/\1/'); \
+		new_version=v$$major.$$minor.$$((patch+1)); \
+	else \
+		new_version=v1.0.1; \
+	fi; \
+	$(call colorecho, "📝 New version: $$new_version"); \
+	$(MAKE) update-version-file NEW_VERSION=$$new_version
+
 _update_version_with_tool:
 	@case "$(TOOL)" in \
 		yarn) \
@@ -94,12 +111,12 @@ _update_version_with_tool:
 			cargo bump patch; \
 			;; \
 		generic) \
-			$(call colorecho, "⚙️  Generic version update..."); \
-			echo "Please manually update your version file"; \
+			$(call colorecho, ⚙️  Generic version update - bumping from VERSION...); \
+			$(MAKE) _bump_version_from_variable; \
 			;; \
 		*) \
-			$(call error, "Unknown version tool: $(TOOL)"); \
-			exit 1; \
+			$(call warn, Unknown version tool: $(TOOL). Falling back to VERSION-based bump); \
+			$(MAKE) _bump_version_from_variable; \
 			;; \
 	esac
 
@@ -133,7 +150,8 @@ update-version-file: ## 🔧 Update version in specific file
 					echo "$(VERSION_TO_UPDATE)" > "$$file" 2>/dev/null && success=true; \
 					;; \
 				project.mk) \
-					$(SED) 's/^VERSION=.*/VERSION=$(VERSION_TO_UPDATE)/' "$$file" 2>/dev/null && success=true; \
+					$(SED) 's/^VERSION[[:space:]]*=.*/VERSION = $(VERSION_TO_UPDATE)/' "$$file" 2>/dev/null; \
+					grep -Eq "^VERSION[[:space:]]*=[[:space:]]*$(VERSION_TO_UPDATE:v%=%)$$" "$$file" && success=true; \
 					;; \
 			esac; \
 			if [ "$$success" = "true" ]; then \
