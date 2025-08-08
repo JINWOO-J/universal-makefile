@@ -166,7 +166,7 @@ env: ## 🔧 Create .env file from current configuration
 	@echo "COMPOSE_FILE=$(ACTIVE_COMPOSE_FILE)" >> .env
 	@$(call success, ".env file created successfully")
 
-env-show: ## 🧐 Show current environment variables
+env-show: env ## 🧐 Show current environment variables
 	@echo "$(BLUE)Current Environment Configuration:$(RESET)"
 	@echo "  Environment (ENV)   : $(ENV)"
 	@echo "  Compose CLI         : $(COMPOSE_CLI)"
