@@ -30,7 +30,7 @@ REPO_URL="https://github.com/${GITHUB_REPO_SLUG}"
 INSTALLER_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO_SLUG}/${MAIN_BRANCH}/install.sh"
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-INSTALLATION_TYPE="submodule"
+INSTALLATION_TYPE="subtree"
 
 FORCE_INSTALL=false
 DRY_RUN=false
@@ -61,6 +61,7 @@ Common options:
 
 Install options:
     --copy              Install by copying files instead of submodule
+    --submodule         Install using git submodule (instead of default subtree)
     --existing-project  Setup in existing project (preserve existing files)
 
 Examples:
@@ -127,7 +128,7 @@ parse_common_args() {
 
 
 parse_install_args() {
-    INSTALLATION_TYPE="submodule"
+    INSTALLATION_TYPE="subtree"
     EXISTING_PROJECT=false
 
     local remaining_args=()
@@ -135,6 +136,8 @@ parse_install_args() {
         case $1 in
             --copy)
                 INSTALLATION_TYPE="copy"; shift ;;
+            --subtree)
+                INSTALLATION_TYPE="subtree"; shift ;;
             --existing-project)
                 EXISTING_PROJECT=true; shift ;;
             --help|-h)
@@ -695,71 +698,87 @@ show_diff() {
     echo ""
 }
 
+# update_makefile_system 함수 전체를 이 코드로 교체
+
 update_makefile_system() {
     log_info "Updating Universal Makefile System..."
-
-    if [[ "$INSTALLATION_TYPE" == "submodule" && -d "$MAKEFILE_DIR" ]]; then
-        local old_commit
-        old_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
-
-        git -C "$MAKEFILE_DIR" fetch origin "$MAIN_BRANCH"
-        if [[ "$FORCE_INSTALL" == true ]]; then
-            git -C "$MAKEFILE_DIR" reset --hard "origin/$MAIN_BRANCH"
-            log_success "Submodule forcibly updated to latest commit from remote."
-        else
-            if ! git -C "$MAKEFILE_DIR" merge "origin/$MAIN_BRANCH"; then
-                echo ""
-                log_warn "Merge aborted. Showing local changes in '$MAKEFILE_DIR' that are blocking the update:"
-
-                if [[ "$DEBUG_MODE" == true ]]; then
-                    show_diff
-                else
-                    log_info "To see the conflicting changes, run the update again with the --debug flag."
-                fi
-
-                echo ""
-                log_error "Merge conflict occurred in submodule."
-                log_warn "You can resolve manually, or run update again with --force to overwrite local changes."
-                exit 1
-            fi
-
-
-            log_success "Submodule updated with merge."
-        fi
-
-        local new_commit
-        new_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
-        show_changelog "$MAKEFILE_DIR" "$old_commit" "$new_commit"
-        echo "👉 Don't forget: git add $MAKEFILE_DIR && git commit to update the submodule pointer!"
-
-    elif [[ "$INSTALLATION_TYPE" == "copy" && -d "makefiles" ]]; then
-        local old_commit=""
-        if [[ -d makefiles/.git ]]; then
-            old_commit=$(git -C makefiles rev-parse HEAD 2>/dev/null || echo "")
-        fi
-
-        local temp_dir
-        temp_dir=$(mktemp -d)
-        trap "rm -rf $temp_dir" EXIT
-        log_info "Cloning latest version from $REPO_URL"
-        git clone "$REPO_URL" "$temp_dir/universal-makefile"
-
-        cp -r "$temp_dir/universal-makefile/makefiles" .
-        cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true
-        cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true
-        [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .
-        log_success "Copied latest files from remote."
-
-        local new_commit
-        new_commit=$(git -C "$temp_dir/universal-makefile" rev-parse HEAD 2>/dev/null || echo "")
-
-        show_changelog "$temp_dir/universal-makefile" "$old_commit" "$new_commit"
+    log_info "Detecting installation type..."
+    local installed_type=""
+    if grep -q "path = ${MAKEFILE_DIR}" .gitmodules 2>/dev/null; then
+        installed_type="submodule"
+    elif git log --grep="git-subtree-dir: ${MAKEFILE_DIR}" --oneline | grep -q .; then
+        installed_type="subtree"
+    elif [[ -d "makefiles" ]]; then
+        installed_type="copy"
     else
         log_error "Universal Makefile System installation not found. Cannot update."
         exit 1
     fi
-}
+    log_info "-> Installation type detected as: ${installed_type}"
+    echo ""
 
+    case "$installed_type" in
+        submodule)
+            local old_commit
+            old_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
+
+            log_info "Fetching latest changes for submodule..."
+            git -C "$MAKEFILE_DIR" fetch origin "$MAIN_BRANCH"
+
+            if [[ "$FORCE_INSTALL" == true ]]; then
+                log_warn "Forcibly updating submodule to the latest version..."
+                git -C "$MAKEFILE_DIR" reset --hard "origin/$MAIN_BRANCH"
+                log_success "Submodule forcibly updated to latest commit from remote."
+            else
+                log_info "Attempting to merge latest changes..."
+                if ! git -C "$MAKEFILE_DIR" merge "origin/$MAIN_BRANCH"; then
+                    echo ""
+                    log_error "Merge conflict occurred in submodule."
+                    log_warn "This usually means you have local changes in '${MAKEFILE_DIR}'."
+                    if [[ "$DEBUG_MODE" == true ]]; then
+                        show_diff
+                    else
+                        log_info "To see the conflicting changes, run again with the --debug flag."
+                    fi
+                    echo ""
+                    log_warn "You can resolve conflicts manually, or run update again with --force to overwrite."
+                    exit 1
+                fi
+                log_success "Submodule updated with merge."
+            fi
+
+            local new_commit
+            new_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
+            show_changelog "$MAKEFILE_DIR" "$old_commit" "$new_commit"
+            echo "👉 Don't forget to run 'git add ${MAKEFILE_DIR}' and commit the new submodule version!"
+            ;;
+
+        subtree)
+       
+            log_info "Pulling latest changes into git subtree..."
+            if ! git subtree pull --prefix="$MAKEFILE_DIR" "$REPO_URL" "$MAIN_BRANCH" --squash; then
+                log_error "Failed to pull git subtree."
+                exit 1
+            fi
+            log_success "Git subtree pulled successfully."
+            ;;
+
+        copy)
+            log_info "Updating by re-copying latest files..."
+            local temp_dir
+            temp_dir=$(mktemp -d)
+            trap "rm -rf $temp_dir" EXIT
+            log_info "Cloning latest version from $REPO_URL"
+            git clone "$REPO_URL" "$temp_dir/universal-makefile"
+
+            cp -r "$temp_dir/universal-makefile/makefiles" .
+            cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true
+            cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true
+            [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .
+            log_success "Copied latest files from remote."
+            ;;
+    esac
+}
 
 is_universal_makefile_installed() {
     local ok=true
