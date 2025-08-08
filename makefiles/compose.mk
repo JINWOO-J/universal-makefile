@@ -168,10 +168,7 @@ env: ## 🔧 Create .env file from current configuration
 	@echo "CURRENT_COMMIT_SHORT=$(CURRENT_COMMIT_SHORT)" >> .env
 	@echo "CURRENT_BRANCH=$(CURRENT_BRANCH)" >> .env
 	@echo "BUILD_REVISION=$(BUILD_REVISION)" >> .env
-
-
-	@$(call success, ".
-	@echo  file created successfully")
+	@$(call success, ".env file created successfully")
 
 env-show: env ## 🧐 Show current environment variables
 	@echo "$(BLUE)Current Environment Configuration:$(RESET)"
@@ -181,10 +178,10 @@ env-show: env ## 🧐 Show current environment variables
 	@echo "  Project Name (NAME) : $(NAME)"
 	@echo "  Version (VERSION)   : $(VERSION)"
 	@echo "  Image Tag (TAGNAME) : $(TAGNAME)"
-	@echo "  Build Revision      : $(BUILD_REVISION)"
-	@echo "  Current Commit Long : $(CURRENT_COMMIT_LONG)"
-	@echo "  Current Commit Short: $(CURRENT_COMMIT_SHORT)"
-	@echo "  Current Branch      : $(CURRENT_BRANCH)"
+	@echo "  Build Revision (BUILD_REVISION) : $(BUILD_REVISION)"
+	@echo "  Current Commit Long (CURRENT_COMMIT_LONG) : $(CURRENT_COMMIT_LONG)"
+	@echo "  Current Commit Short (CURRENT_COMMIT_SHORT) : $(CURRENT_COMMIT_SHORT)"
+	@echo "  Current Branch (CURRENT_BRANCH) : $(CURRENT_BRANCH)"
 	@echo ""
 	@if [ -f .env ]; then \
 		echo "$(BLUE).env file contents:$(RESET)"; \
