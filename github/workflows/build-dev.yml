@@ -28,8 +28,8 @@ jobs:
       - name: Load project settings
         id: load_settings
         run: |
-          # project.mk 파일을 소스하여 환경 변수 설정
-          source project.mk
+          make env-show
+          source .env
           echo "REPO_HUB=${REPO_HUB}" >> $GITHUB_ENV
           echo "NAME=${NAME}" >> $GITHUB_ENV
           echo "ROLE=${ROLE}" >> $GITHUB_ENV
