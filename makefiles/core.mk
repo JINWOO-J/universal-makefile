@@ -89,6 +89,9 @@ ENV_VARS_DKR  := DOCKERFILE_PATH DOCKER_BUILD_OPTION DOCKER_BUILDKIT BUILDKIT_IN
 ENV_VARS_DEFAULT := $(ENV_VARS_BASE) $(ENV_VARS_GIT)
 ENV_VARS_ALL     := $(ENV_VARS_BASE) $(ENV_VARS_GIT) $(ENV_VARS_DKR)
 
+# export variables so shell recipes can read them via printenv
+export $(ENV_VARS_ALL)
+
 # ================================================================
 # 공통 함수들
 # ================================================================
@@ -281,8 +284,8 @@ DEBUG_ARGS_CONTENT := $(BUILD_ARGS_CONTENT)
 
 
 env-keys: ## 🔧 env-show 기본/전체 키 목록 출력
-	@echo "DEFAULT: $(ENV_VARS_DEFAULT)"
-	@echo "ALL:     $(ENV_VARS_ALL)"
+    @echo "DEFAULT: $(ENV_VARS_DEFAULT)"
+    @echo "ALL:     $(ENV_VARS_ALL)"
 
 env-get: ## 🔧 지정 변수 값만 출력 (사용법: make env-get VAR=NAME)
 	@[ -n "$(VAR)" ] || { echo "VAR is required (e.g., make env-get VAR=NAME)" >&2; exit 1; }
@@ -296,32 +299,23 @@ env-get: ## 🔧 지정 변수 값만 출력 (사용법: make env-get VAR=NAME)
 #  - make env-show ALL=true SKIP_EMPTY=true
 #  - make env-show SHOW_SECRETS=true
 env-show: ## 🔧 key=value 형식 출력(FORMAT=kv|dotenv|github, VARS/ENV_VARS/PREFIX/ALL/SKIP_EMPTY/SHOW_SECRETS)
-	@LIST1='$(strip $(if $(strip $(VARS)),$(VARS),$(if $(strip $(ENV_VARS)),$(ENV_VARS),$(ENV_VARS_DEFAULT))))'; \
-	if [ "$(ALL)" = "true" ]; then LIST1='$(strip $(ENV_VARS_ALL))'; fi; \
-	if [ -n "$(PREFIX)" ]; then \
-		FILT=""; for k in $$LIST1; do case "$$k" in $(PREFIX)*) FILT="$$FILT $$k";; esac; done; \
-		LIST="$$FILT"; \
-	else \
-		LIST="$$LIST1"; \
-	fi; \
-	FORMAT='$(FORMAT)'; [ -n "$$FORMAT" ] || FORMAT="dotenv"; \
-	SKIP_EMPTY='$(SKIP_EMPTY)'; [ -n "$$SKIP_EMPTY" ] || SKIP_EMPTY="false"; \
-	SHOW_SECRETS='$(SHOW_SECRETS)'; [ -n "$$SHOW_SECRETS" ] || SHOW_SECRETS="false"; \
-	for k in $$LIST; do \
-		# POSIX sh 호환: 간접확장은 eval 사용
-		eval "v=\$$k"; \
-		if [ "$$SKIP_EMPTY" = "true" ] && [ -z "$$v" ]; then continue; fi; \
-		case "$$k" in *TOKEN*|*PASSWORD*|*SECRET*|*KEY*|*WEBHOOK*) \
-			if [ "$$SHOW_SECRETS" != "true" ]; then v="****"; fi ;; \
-		esac; \
-		if [ "$$FORMAT" = "github" ]; then \
-			one=$$(printf '%s' "$$v" | tr '\n' ' '); \
-			printf '%s=%s\n' "$$k" "$$one"; \
-		else \
-			one=$$(printf '%s' "$$v" | tr '\n' ' ' | sed 's/"/\\"/g'); \
-			printf '%s="%s"\n' "$$k" "$$one"; \
-		fi; \
-	done
+    @FORMAT='$(FORMAT)'; [ -n "$$FORMAT" ] || FORMAT="dotenv"; \
+    SKIP_EMPTY='$(SKIP_EMPTY)'; [ -n "$$SKIP_EMPTY" ] || SKIP_EMPTY="false"; \
+    SHOW_SECRETS='$(SHOW_SECRETS)'; [ -n "$$SHOW_SECRETS" ] || SHOW_SECRETS="false"; \
+    for k in $(if $(strip $(PREFIX)),$(filter $(PREFIX)%,$(if $(filter true,$(ALL)),$(ENV_VARS_ALL),$(if $(strip $(VARS)),$(VARS),$(if $(strip $(ENV_VARS)),$(ENV_VARS),$(ENV_VARS_DEFAULT))))) ,$(if $(filter true,$(ALL)),$(ENV_VARS_ALL),$(if $(strip $(VARS)),$(VARS),$(if $(strip $(ENV_VARS)),$(ENV_VARS),$(ENV_VARS_DEFAULT))))) ; do \
+        v=$$(printenv "$$k"); \
+        if [ "$$SKIP_EMPTY" = "true" ] && [ -z "$$v" ]; then continue; fi; \
+        case "$$k" in *TOKEN*|*PASSWORD*|*SECRET*|*KEY*|*WEBHOOK*) \
+            if [ "$$SHOW_SECRETS" != "true" ]; then v="****"; fi ;; \
+        esac; \
+        if [ "$$FORMAT" = "github" ]; then \
+            one=$$(printf '%s' "$$v" | tr '\n' ' '); \
+            printf '%s=%s\n' "$$k" "$$one"; \
+        else \
+            one=$$(printf '%s' "$$v" | tr '\n' ' ' | sed 's/"/\\"/g'); \
+            printf '%s="%s"\n' "$$k" "$$one"; \
+        fi; \
+    done
 
 
 
