@@ -16,6 +16,9 @@ COMPOSE_FILE ?= docker-compose.yml
 DEV_COMPOSE_FILE ?= docker-compose.dev.yml
 PROD_COMPOSE_FILE ?= docker-compose.prod.yml
 
+ENV_VARS_DEFAULT := REPO_HUB NAME ROLE VERSION TAGNAME ENV IMAGE_NAME FULL_TAG LATEST_TAG CURRENT_BRANCH COMMIT_TAG BUILD_REVISION CURRENT_COMMIT_LONG CURRENT_COMMIT_SHORT CURRENT_BRANCH
+
+
 # 환경별 Compose 파일 선택
 ifeq ($(ENV),development)
     ACTIVE_COMPOSE_FILE := $(DEV_COMPOSE_FILE)
@@ -191,7 +194,6 @@ env: ## 🔧 Create .env file from current configuration
 # 	fi
 
 
-
 env-keys: ## 🔧 사용 가능한 env-show 기본 키 목록 출력
 	@echo "$(ENV_VARS_DEFAULT)"
 
@@ -199,7 +201,7 @@ env-get: ## 🔧 지정 변수 값만 출력 (사용법: make env-get VAR=NAME)
 	@[ -n "$(VAR)" ] || { echo "VAR is required (e.g., make env-get VAR=NAME)" >&2; exit 1; }
 	@printf "%s\n" "$($(VAR))"
 
-env-show: ## 🔧 key=value 형식으로 환경 변수 출력 (VARS 또는 ENV_VARS로 키 선택 가능)
+env-show: env ## 🔧 key=value 형식으로 환경 변수 출력 (VARS 또는 ENV_VARS로 키 선택 가능)
 	@$(foreach k,$(or $(strip $(VARS)),$(strip $(ENV_VARS)),$(ENV_VARS_DEFAULT)), printf "%s=%s\n" "$(k)" "$($(k))" ; )
 
 # ================================================================
