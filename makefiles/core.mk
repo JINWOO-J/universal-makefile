@@ -308,7 +308,8 @@ env-show: ## 🔧 key=value 형식 출력(FORMAT=kv|dotenv|github, VARS/ENV_VARS
 	SKIP_EMPTY='$(SKIP_EMPTY)'; [ -n "$$SKIP_EMPTY" ] || SKIP_EMPTY="false"; \
 	SHOW_SECRETS='$(SHOW_SECRETS)'; [ -n "$$SHOW_SECRETS" ] || SHOW_SECRETS="false"; \
 	for k in $$LIST; do \
-		v=$${!k}; \
+		# POSIX sh 호환: 간접확장은 eval 사용
+		eval "v=\$$k"; \
 		if [ "$$SKIP_EMPTY" = "true" ] && [ -z "$$v" ]; then continue; fi; \
 		case "$$k" in *TOKEN*|*PASSWORD*|*SECRET*|*KEY*|*WEBHOOK*) \
 			if [ "$$SHOW_SECRETS" != "true" ]; then v="****"; fi ;; \
@@ -323,7 +324,6 @@ env-show: ## 🔧 key=value 형식 출력(FORMAT=kv|dotenv|github, VARS/ENV_VARS
 	done
 
 
-	
 
 
 check-check:
