@@ -288,7 +288,7 @@ env-get: ## 🔧 지정 변수 값만 출력 (사용법: make env-get VAR=NAME)
 	@[ -n "$(VAR)" ] || { echo "VAR is required (e.g., make env-get VAR=NAME)" >&2; exit 1; }
 	@printf "%s\n" "$($(VAR))"
 
-# 사용법 예:
+# 사용 예:
 #  - make env-show -s >> $$GITHUB_ENV
 #  - make env-show FORMAT=kv
 #  - make env-show VARS="REPO_HUB NAME ROLE"
@@ -296,59 +296,35 @@ env-get: ## 🔧 지정 변수 값만 출력 (사용법: make env-get VAR=NAME)
 #  - make env-show ALL=true SKIP_EMPTY=true
 #  - make env-show SHOW_SECRETS=true
 env-show: ## 🔧 key=value 형식 출력(FORMAT=kv|dotenv|github, VARS/ENV_VARS/PREFIX/ALL/SKIP_EMPTY/SHOW_SECRETS)
-	@{ \
-		# 선택 키 결정
-		list="$(strip $(VARS))"; \
-		[ -z "$$list" ] && list="$(strip $(ENV_VARS))"; \
-		[ -z "$$list" ] && list="$(strip $(ENV_VARS_DEFAULT))"; \
-		[ "$(ALL)" = "true" ] && list="$(strip $(ENV_VARS_ALL))"; \
-		# PREFIX 필터
-		if [ -n "$(PREFIX)" ]; then \
-			filt=""; \
-			for k in $$list; do case "$$k" in $(PREFIX)*) filt="$$filt $$k";; esac; done; \
-			list="$$filt"; \
+	@LIST1='$(strip $(if $(strip $(VARS)),$(VARS),$(if $(strip $(ENV_VARS)),$(ENV_VARS),$(ENV_VARS_DEFAULT))))'; \
+	if [ "$(ALL)" = "true" ]; then LIST1='$(strip $(ENV_VARS_ALL))'; fi; \
+	if [ -n "$(PREFIX)" ]; then \
+		FILT=""; for k in $$LIST1; do case "$$k" in $(PREFIX)*) FILT="$$FILT $$k";; esac; done; \
+		LIST="$$FILT"; \
+	else \
+		LIST="$$LIST1"; \
+	fi; \
+	FORMAT='$(FORMAT)'; [ -n "$$FORMAT" ] || FORMAT="dotenv"; \
+	SKIP_EMPTY='$(SKIP_EMPTY)'; [ -n "$$SKIP_EMPTY" ] || SKIP_EMPTY="false"; \
+	SHOW_SECRETS='$(SHOW_SECRETS)'; [ -n "$$SHOW_SECRETS" ] || SHOW_SECRETS="false"; \
+	for k in $$LIST; do \
+		v=$${!k}; \
+		if [ "$$SKIP_EMPTY" = "true" ] && [ -z "$$v" ]; then continue; fi; \
+		case "$$k" in *TOKEN*|*PASSWORD*|*SECRET*|*KEY*|*WEBHOOK*) \
+			if [ "$$SHOW_SECRETS" != "true" ]; then v="****"; fi ;; \
+		esac; \
+		if [ "$$FORMAT" = "github" ]; then \
+			one=$$(printf '%s' "$$v" | tr '\n' ' '); \
+			printf '%s=%s\n' "$$k" "$$one"; \
+		else \
+			one=$$(printf '%s' "$$v" | tr '\n' ' ' | sed 's/"/\\"/g'); \
+			printf '%s="%s"\n' "$$k" "$$one"; \
 		fi; \
-		# 포맷/옵션
-		fmt="$(FORMAT)"; [ -z "$$fmt" ] && fmt="dotenv"; \
-		skip="$(SKIP_EMPTY)"; [ -z "$$skip" ] && skip="false"; \
-		show="$(SHOW_SECRETS)"; [ -z "$$show" ] && show="false"; \
-		# 출력
-		first_json=1; \
-		[ "$$fmt" = "json" ] && printf "{"; \
-		for k in $$list; do \
-			# 값 읽기 (환경에서) — 위에서 export했으므로 사용 가능
-			v="$${!k}"; \
-			# 빈값 스킵
-			if [ "$$skip" = "true" ] && [ -z "$$v" ]; then continue; fi; \
-			# 시크릿 마스킹
-			case "$$k" in *TOKEN*|*PASSWORD*|*SECRET*|*KEY*|*WEBHOOK*) \
-				[ "$$show" = "true" ] || v="****";; \
-			esac; \
-			case "$$fmt" in \
-				kv|dotenv) \
-					esc=$$(printf '%s' "$$v" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\n/\\n/g'); \
-					printf '%s="%s"\n' "$$k" "$$esc";; \
-				github) \
-					# GITHUB_ENV는 단일 라인 key=value 사용 권장
-					one=$$(printf '%s' "$$v" | tr '\n' ' '); \
-					printf '%s=%s\n' "$$k" "$$one";; \
-				json) \
-					# 간단 JSON 객체 구성
-					VAL="$$v"; jv=$$(python -c 'import json,os; print(json.dumps(os.environ.get("VAL","")))'); \
-					if [ $$first_json -eq 0 ]; then printf ","; fi; \
-					first_json=0; \
-					printf '"%s":%s' "$$k" "$$jv";; \
-				yaml) \
-					esc=$$(printf '%s' "$$v" | sed -e "s/'/''/g"); \
-					printf '%s: ''%s''\n' "$$k" "$$esc";; \
-				*) \
-					esc=$$(printf '%s' "$$v" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\n/\\n/g'); \
-					printf '%s="%s"\n' "$$k" "$$esc";; \
-			esac; \
-		done; \
-		[ "$$fmt" = "json" ] && printf "}"; \
-	}
+	done
+
+
 	
+
 
 check-check:
 	$(call success, "All required tools are available")
