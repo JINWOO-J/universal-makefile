@@ -83,6 +83,12 @@ else
 
 endif
 
+ENV_VARS_BASE := REPO_HUB NAME ROLE VERSION TAGNAME ENV IMAGE_NAME APP_IMAGE_NAME FULL_TAG LATEST_TAG
+ENV_VARS_GIT  := CURRENT_BRANCH MAIN_BRANCH DEVELOP_BRANCH CURRENT_COMMIT_SHORT CURRENT_COMMIT_LONG COMMIT_TAG BUILD_REVISION
+ENV_VARS_DKR  := DOCKERFILE_PATH DOCKER_BUILD_OPTION DOCKER_BUILDKIT BUILDKIT_INLINE_CACHE
+ENV_VARS_DEFAULT := $(ENV_VARS_BASE) $(ENV_VARS_GIT)
+ENV_VARS_ALL     := $(ENV_VARS_BASE) $(ENV_VARS_GIT) $(ENV_VARS_DKR)
+
 # ================================================================
 # 공통 함수들
 # ================================================================
@@ -260,7 +266,90 @@ DEBUG_ARGS_CONTENT := $(BUILD_ARGS_CONTENT)
 # 기본 검증 타겟들
 # ================================================================
 
-.PHONY: check-deps check-docker check-git-clean make_debug_mode make_build_args
+.PHONY: check-deps check-docker check-git-clean make_debug_mode make_build_args env-keys env-get env-show
+
+
+# env-keys: ## 🔧 사용 가능한 env-show 기본 키 목록 출력
+# 	@echo "$(ENV_VARS_DEFAULT)"
+
+# env-get: ## 🔧 지정 변수 값만 출력 (사용법: make env-get VAR=NAME)
+# 	@[ -n "$(VAR)" ] || { echo "VAR is required (e.g., make env-get VAR=NAME)" >&2; exit 1; }
+# 	@printf "%s\n" "$($(VAR))"
+
+# env-show: env ## 🔧 key=value 형식으로 환경 변수 출력 (VARS 또는 ENV_VARS로 키 선택 가능)
+# 	@$(foreach k,$(or $(strip $(VARS)),$(strip $(ENV_VARS)),$(ENV_VARS_DEFAULT)), printf "%s=%s\n" "$(k)" "$($(k))" ; )
+
+
+env-keys: ## 🔧 env-show 기본/전체 키 목록 출력
+	@echo "DEFAULT: $(ENV_VARS_DEFAULT)"
+	@echo "ALL:     $(ENV_VARS_ALL)"
+
+env-get: ## 🔧 지정 변수 값만 출력 (사용법: make env-get VAR=NAME)
+	@[ -n "$(VAR)" ] || { echo "VAR is required (e.g., make env-get VAR=NAME)" >&2; exit 1; }
+	@printf "%s\n" "$($(VAR))"
+
+# 사용법 예:
+#  - make env-show -s >> $$GITHUB_ENV
+#  - make env-show FORMAT=kv
+#  - make env-show VARS="REPO_HUB NAME ROLE"
+#  - make env-show PREFIX=DOCKER_
+#  - make env-show ALL=true SKIP_EMPTY=true
+#  - make env-show SHOW_SECRETS=true
+env-show: ## 🔧 key=value 형식 출력(FORMAT=kv|dotenv|github, VARS/ENV_VARS/PREFIX/ALL/SKIP_EMPTY/SHOW_SECRETS)
+	@{ \
+		# 선택 키 결정
+		list="$(strip $(VARS))"; \
+		[ -z "$$list" ] && list="$(strip $(ENV_VARS))"; \
+		[ -z "$$list" ] && list="$(strip $(ENV_VARS_DEFAULT))"; \
+		[ "$(ALL)" = "true" ] && list="$(strip $(ENV_VARS_ALL))"; \
+		# PREFIX 필터
+		if [ -n "$(PREFIX)" ]; then \
+			filt=""; \
+			for k in $$list; do case "$$k" in $(PREFIX)*) filt="$$filt $$k";; esac; done; \
+			list="$$filt"; \
+		fi; \
+		# 포맷/옵션
+		fmt="$(FORMAT)"; [ -z "$$fmt" ] && fmt="dotenv"; \
+		skip="$(SKIP_EMPTY)"; [ -z "$$skip" ] && skip="false"; \
+		show="$(SHOW_SECRETS)"; [ -z "$$show" ] && show="false"; \
+		# 출력
+		first_json=1; \
+		[ "$$fmt" = "json" ] && printf "{"; \
+		for k in $$list; do \
+			# 값 읽기 (환경에서) — 위에서 export했으므로 사용 가능
+			v="$${!k}"; \
+			# 빈값 스킵
+			if [ "$$skip" = "true" ] && [ -z "$$v" ]; then continue; fi; \
+			# 시크릿 마스킹
+			case "$$k" in *TOKEN*|*PASSWORD*|*SECRET*|*KEY*|*WEBHOOK*) \
+				[ "$$show" = "true" ] || v="****";; \
+			esac; \
+			case "$$fmt" in \
+				kv|dotenv) \
+					esc=$$(printf '%s' "$$v" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\n/\\n/g'); \
+					printf '%s="%s"\n' "$$k" "$$esc";; \
+				github) \
+					# GITHUB_ENV는 단일 라인 key=value 사용 권장
+					one=$$(printf '%s' "$$v" | tr '\n' ' '); \
+					printf '%s=%s\n' "$$k" "$$one";; \
+				json) \
+					# 간단 JSON 객체 구성
+					VAL="$$v"; jv=$$(python -c 'import json,os; print(json.dumps(os.environ.get("VAL","")))'); \
+					if [ $$first_json -eq 0 ]; then printf ","; fi; \
+					first_json=0; \
+					printf '"%s":%s' "$$k" "$$jv";; \
+				yaml) \
+					esc=$$(printf '%s' "$$v" | sed -e "s/'/''/g"); \
+					printf '%s: ''%s''\n' "$$k" "$$esc";; \
+				*) \
+					esc=$$(printf '%s' "$$v" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\n/\\n/g'); \
+					printf '%s="%s"\n' "$$k" "$$esc";; \
+			esac; \
+		done; \
+		[ "$$fmt" = "json" ] && printf "}"; \
+	}
+	
+
 check-check:
 	$(call success, "All required tools are available")
 	$(call check_docker_command)
