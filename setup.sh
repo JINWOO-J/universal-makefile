@@ -28,6 +28,51 @@ log_warn()    { echo -e "${YELLOW}⚠️  $1${RESET}"; }
 CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
 CURL_RETRY_DELAY_SEC=${CURL_RETRY_DELAY_SEC:-2}
 
+# --- CLI 옵션 ---
+FORCE_UPDATE=${FORCE_UPDATE:-false}
+CLI_VERSION=""
+
+is_true() { case "${1:-}" in true|1|yes|on|Y|y) return 0;; *) return 1;; esac; }
+
+prompt_confirm() {
+    # $1: message
+    local msg="$1"
+    if [ -t 0 ]; then
+        read -r -p "${msg} [y/N]: " reply || true
+        case "$reply" in
+            [yY][eE][sS]|[yY]) return 0 ;;
+            *) return 1 ;;
+        esac
+    else
+        # 비대화형: 질문 불가 → 기본 거부
+        return 1
+    fi
+}
+
+parse_cli_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --force|-f)
+                FORCE_UPDATE=true; shift ;;
+            --version|-v)
+                shift || true
+                CLI_VERSION="${1:-}"
+                if [ -z "${CLI_VERSION}" ]; then
+                    echo "--version requires a value" >&2
+                    exit 2
+                fi
+                shift ;;
+            --)
+                shift
+                break ;;
+            *)
+                # 남은 인자는 make로 전달
+                break ;;
+        esac
+    done
+    # 남은 인자는 그대로 유지하여 최종 exec make "$@"에 전달됨
+}
+
 verify_sha256() {
     # $1: file path, $2: expected sha256
     local file_path="$1"
@@ -81,8 +126,19 @@ install_from_release() {
     cleanup_tmp() { rm -rf "${TMPDIR}" >/dev/null 2>&1 || true; }
     trap cleanup_tmp EXIT INT TERM
 
-    PRIMARY_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/tags/${desired}.tar.gz"
-    MIRROR_URL="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/tags/${desired}"
+    # 토큰 인증(API tarball) 우선: 프라이빗 레포 지원
+    local auth_args=()
+    local PRIMARY_URL=""
+    local MIRROR_URL=""
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        PRIMARY_URL="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/tarball/${desired}"
+        MIRROR_URL="${PRIMARY_URL}"
+        auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Accept: application/vnd.github+json")
+    else
+        PRIMARY_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/tags/${desired}.tar.gz"
+        MIRROR_URL="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/tags/${desired}"
+        auth_args=()
+    fi
     TARBALL_PATH="${TMPDIR}/umf.tar.gz"
 
     # 재시도 포함 다운로드 (기본 URL → 미러 URL)
@@ -91,7 +147,7 @@ install_from_release() {
         url="$([ "$src" = "primary" ] && echo "${PRIMARY_URL}" || echo "${MIRROR_URL}")"
         for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
             log_info "Downloading (${src} try ${attempt}/${CURL_RETRY_MAX}): ${url}"
-            if curl -fSL --connect-timeout 10 --max-time 300 -o "${TARBALL_PATH}" "${url}"; then
+            if curl -fSL --connect-timeout 10 --max-time 300 "${auth_args[@]}" -o "${TARBALL_PATH}" "${url}"; then
                 if [ -s "${TARBALL_PATH}" ]; then
                     success=1
                     break
@@ -232,6 +288,8 @@ install_repo_from_release() {
 
 
 # 현재 디렉토리가 Git 리포지토리인지 확인
+parse_cli_args "$@"
+
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # === 로컬 실행 모드 ===
     # 이미 프로젝트가 clone된 상태에서 실행된 경우
@@ -239,7 +297,10 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     log_info "Project repository found. Verifying Makefile system..."
 
     # 1. GitHub Release 방식인지 확인 (버전 파일 존재 여부)
-    if [ -f ".ums-version" ]; then
+    if [ -n "${CLI_VERSION}" ]; then
+        DESIRED_VERSION="${CLI_VERSION}"
+        log_info "CLI version specified: ${DESIRED_VERSION}"
+    elif [ -f ".ums-version" ]; then
         DESIRED_VERSION=$(cat .ums-version)
         if [ -f "${MAKEFILE_SYSTEM_DIR}/.version" ]; then
             CURRENT_VERSION="$(cat "${MAKEFILE_SYSTEM_DIR}/.version")"
@@ -247,7 +308,13 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             CURRENT_VERSION=""
         fi
         if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]]; then
-            log_warn "Makefile system is missing or out of date. Installing version ${DESIRED_VERSION}..."
+            if ! is_true "${FORCE_UPDATE}"; then
+                if ! prompt_confirm "New version available (${CURRENT_VERSION:-none} → ${DESIRED_VERSION}). Update now?"; then
+                    log_info "Skipped update by user choice."
+                    DESIRED_VERSION="${CURRENT_VERSION:-${DESIRED_VERSION}}"
+                fi
+            fi
+            log_warn "Installing version ${DESIRED_VERSION}..."
             # 준비: 임시 작업 디렉토리
             TMPDIR="$(mktemp -d)" || {
                 log_warn "Failed to create temp directory"; exit 1;
@@ -346,6 +413,12 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
                 CURRENT_VERSION=""
             fi
             if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]]; then
+                if ! is_true "${FORCE_UPDATE}"; then
+                    if ! prompt_confirm "New release found (${CURRENT_VERSION:-none} → ${DESIRED_VERSION}). Update now?"; then
+                        log_info "Skipped update by user choice."
+                        DESIRED_VERSION="${CURRENT_VERSION:-${DESIRED_VERSION}}"
+                    fi
+                fi
                 install_from_release "${DESIRED_VERSION}"
             else
                 log_success "Makefile system version ${DESIRED_VERSION} is up to date."
@@ -381,6 +454,11 @@ else
         else
             log_info "Resolved latest release tag: ${DESIRED_VERSION}"
         fi
+    fi
+
+    if [ -n "${CLI_VERSION}" ]; then
+        DESIRED_VERSION="${CLI_VERSION}"
+        log_info "CLI version specified: ${DESIRED_VERSION}"
     fi
 
     if [ "${DESIRED_VERSION}" = "${MAIN_BRANCH}" ]; then
