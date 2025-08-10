@@ -64,7 +64,7 @@ jobs:
           SLACK_ICON_EMOJI: ':rocket:'
           SLACK_COLOR: '#A5D6A7'
           SLACK_MESSAGE: |
-            *Build for `devel` branch has started!*
+            *Build for `${{ github.ref_name }}` branch has started!*
             - *Commit*: `${{ github.event.head_commit.message }}`
             - *Tag*: `${{ needs.setup.outputs.image_name }}:${{ needs.setup.outputs.tag_name }}`      
             - *Triggered by*: `${{ github.actor }}`
@@ -127,7 +127,7 @@ jobs:
           SLACK_ICON_EMOJI: ':github:'
           SLACK_COLOR: ${{ needs.build-and-push.result == 'success' && 'good' || 'danger' }}
           SLACK_MESSAGE: |
-            *Build for `devel` branch finished with status: `${{ needs.build-and-push.result }}`*
+            *Build for `${{ github.ref_name }}` branch finished with status: `${{ needs.build-and-push.result }}`*
             - *Commit*: `${{ github.event.head_commit.message }}`
             - *Tag*: `${{ needs.setup.outputs.image_name }}:${{ needs.setup.outputs.tag_name }}`    
             - *Triggered by*: `${{ github.actor }}`

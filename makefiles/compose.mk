@@ -170,25 +170,37 @@ env: ## 🔧 Create .env file from current configuration
 	@echo "BUILD_REVISION=$(BUILD_REVISION)" >> .env
 	@$(call success, ".env file created successfully")
 
-env-show: env ## 🧐 Show current environment variables
-	@echo "$(BLUE)Current Environment Configuration:$(RESET)"
-	@echo "  Environment (ENV)   : $(ENV)"
-	@echo "  Compose CLI         : $(COMPOSE_CLI)"
-	@echo "  Active Compose File : $(COMPOSE_FILE_TO_USE)"
-	@echo "  Project Name (NAME) : $(NAME)"
-	@echo "  Version (VERSION)   : $(VERSION)"
-	@echo "  Image Tag (TAGNAME) : $(TAGNAME)"
-	@echo "  Build Revision (BUILD_REVISION) : $(BUILD_REVISION)"
-	@echo "  Current Commit Long (CURRENT_COMMIT_LONG) : $(CURRENT_COMMIT_LONG)"
-	@echo "  Current Commit Short (CURRENT_COMMIT_SHORT) : $(CURRENT_COMMIT_SHORT)"
-	@echo "  Current Branch (CURRENT_BRANCH) : $(CURRENT_BRANCH)"
-	@echo ""
-	@if [ -f .env ]; then \
-		echo "$(BLUE).env file contents:$(RESET)"; \
-		cat .env | sed 's/^/  /'; \
-	else \
-		echo "$(YELLOW)NOTE: .env file not found. Create one with 'make env'.$(RESET)"; \
-	fi
+# env-show: env ## 🧐 Show current environment variables
+# 	@echo "$(BLUE)Current Environment Configuration:$(RESET)"
+# 	@echo "  Environment (ENV)   : $(ENV)"
+# 	@echo "  Compose CLI         : $(COMPOSE_CLI)"
+# 	@echo "  Active Compose File : $(COMPOSE_FILE_TO_USE)"
+# 	@echo "  Project Name (NAME) : $(NAME)"
+# 	@echo "  Version (VERSION)   : $(VERSION)"
+# 	@echo "  Image Tag (TAGNAME) : $(TAGNAME)"
+# 	@echo "  Build Revision (BUILD_REVISION) : $(BUILD_REVISION)"
+# 	@echo "  Current Commit Long (CURRENT_COMMIT_LONG) : $(CURRENT_COMMIT_LONG)"
+# 	@echo "  Current Commit Short (CURRENT_COMMIT_SHORT) : $(CURRENT_COMMIT_SHORT)"
+# 	@echo "  Current Branch (CURRENT_BRANCH) : $(CURRENT_BRANCH)"
+# 	@echo ""
+# 	@if [ -f .env ]; then \
+# 		echo "$(BLUE).env file contents:$(RESET)"; \
+# 		cat .env | sed 's/^/  /'; \
+# 	else \
+# 		echo "$(YELLOW)NOTE: .env file not found. Create one with 'make env'.$(RESET)"; \
+# 	fi
+
+
+
+env-keys: ## 🔧 사용 가능한 env-show 기본 키 목록 출력
+	@echo "$(ENV_VARS_DEFAULT)"
+
+env-get: ## 🔧 지정 변수 값만 출력 (사용법: make env-get VAR=NAME)
+	@[ -n "$(VAR)" ] || { echo "VAR is required (e.g., make env-get VAR=NAME)" >&2; exit 1; }
+	@printf "%s\n" "$($(VAR))"
+
+env-show: ## 🔧 key=value 형식으로 환경 변수 출력 (VARS 또는 ENV_VARS로 키 선택 가능)
+	@$(foreach k,$(or $(strip $(VARS)),$(strip $(ENV_VARS)),$(ENV_VARS_DEFAULT)), printf "%s=%s\n" "$(k)" "$($(k))" ; )
 
 # ================================================================
 # 정리 작업
