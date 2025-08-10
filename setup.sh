@@ -283,7 +283,68 @@ install_repo_from_release() {
     fi
 
     mv "${TMPDIR}/${ROOT_DIR_NAME}" "${target_dir}"
+    # 설치 버전 기록: 다음 비교에 사용
+    echo "${desired}" > "${target_dir}/.ums-release-version" || true
+    # 내부 시스템 핀(없을 때만 설정)
+    if [ ! -f "${target_dir}/.ums-version" ]; then
+        echo "${desired}" > "${target_dir}/.ums-version" || true
+    fi
     log_success "Project downloaded to '${target_dir}' from release ${desired}."
+}
+
+update_repo_from_release() {
+    # $1: desired version tag (e.g., v1.2.3)
+    local desired="$1"
+    local target_dir="${GITHUB_REPO}"
+    log_info "Updating existing '${target_dir}' to ${desired} (release archive)..."
+
+    local auth_args=()
+    local DOWNLOAD_URL_PRIMARY=""
+    local DOWNLOAD_URL_MIRROR=""
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        DOWNLOAD_URL_PRIMARY="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/tarball/${desired}"
+        DOWNLOAD_URL_MIRROR="${DOWNLOAD_URL_PRIMARY}"
+        auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Accept: application/vnd.github+json")
+    else
+        DOWNLOAD_URL_PRIMARY="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/tags/${desired}.tar.gz"
+        DOWNLOAD_URL_MIRROR="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/tags/${desired}"
+    fi
+
+    local TMPDIR
+    TMPDIR="$(mktemp -d)" || { log_warn "Failed to create temp directory"; exit 1; }
+    cleanup_tmp_update() { rm -rf "${TMPDIR}" >/dev/null 2>&1 || true; }
+    trap cleanup_tmp_update EXIT INT TERM
+
+    local TARBALL_PATH="${TMPDIR}/repo.tar.gz"
+    local success=0
+    for src in primary mirror; do
+        local url="$([ "$src" = "primary" ] && echo "${DOWNLOAD_URL_PRIMARY}" || echo "${DOWNLOAD_URL_MIRROR}")"
+        for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
+            log_info "Downloading repository (${src} try ${attempt}/${CURL_RETRY_MAX}): ${url}"
+            if curl -fSL --connect-timeout 10 --max-time 300 \
+                "${auth_args[@]}" \
+                -o "${TARBALL_PATH}" "${url}"; then
+                if [ -s "${TARBALL_PATH}" ]; then success=1; break; fi
+            fi
+            sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
+        done
+        [ "${success}" = "1" ] && break
+    done
+    [ "${success}" != "1" ] && log_warn "Failed to download release tarball for ${desired}." && exit 1
+
+    tar -xzf "${TARBALL_PATH}" -C "${TMPDIR}"
+    local ROOT_DIR_NAME
+    ROOT_DIR_NAME="$(tar -tzf "${TARBALL_PATH}" | head -1 | cut -d/ -f1)"
+    [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
+
+    # 파괴적 업데이트: 기존 디렉토리 교체
+    rm -rf "${target_dir}"
+    mv "${TMPDIR}/${ROOT_DIR_NAME}" "${target_dir}"
+    echo "${desired}" > "${target_dir}/.ums-release-version" || true
+    if [ ! -f "${target_dir}/.ums-version" ]; then
+        echo "${desired}" > "${target_dir}/.ums-version" || true
+    fi
+    log_success "Project updated to '${desired}'."
 }
 
 
@@ -497,7 +558,25 @@ else
         tar -xzf "${TARBALL_PATH}" -C "${TMPDIR}"
         ROOT_DIR_NAME_FALLBACK="$(tar -tzf "${TARBALL_PATH}" | head -1 | cut -d/ -f1)"
         [ -z "${ROOT_DIR_NAME_FALLBACK}" ] && log_warn "Extracted directory not found." && exit 1
-        [ -e "${GITHUB_REPO}" ] && log_warn "Target directory '${GITHUB_REPO}' already exists." && exit 1
+        if [ -e "${GITHUB_REPO}" ]; then
+            # 이미 존재하면 현재/최신 버전 로그만
+            local current_bootstrap=""
+            if [ -f "${GITHUB_REPO}/.ums-release-version" ]; then
+                current_bootstrap="$(cat "${GITHUB_REPO}/.ums-release-version")"
+            elif [ -f "${GITHUB_REPO}/VERSION" ]; then
+                current_bootstrap="$(tr -d '\n\r' < "${GITHUB_REPO}/VERSION")"
+            fi
+            log_warn "Target directory '${GITHUB_REPO}' already exists."
+            [ -n "${current_bootstrap}" ] && log_info "Current installed release: ${current_bootstrap}"
+            log_info "Latest available release: ${DESIRED_VERSION}"
+            if is_true "${FORCE_UPDATE}"; then
+                log_info "--force specified: updating in place..."
+                update_repo_from_release "${DESIRED_VERSION}"
+            else
+                log_warn "Run with --force to overwrite/update the existing directory."
+            fi
+            exit 1
+        fi
         mv "${TMPDIR}/${ROOT_DIR_NAME_FALLBACK}" "${GITHUB_REPO}"
         log_success "Project downloaded to '${GITHUB_REPO}' from branch ${MAIN_BRANCH}."
         if [ -f "${GITHUB_REPO}/install.sh" ]; then
@@ -508,12 +587,34 @@ else
         fi
     else
         # Release-archive bootstrap
-        install_repo_from_release "${DESIRED_VERSION}"
-        if [ -f "${GITHUB_REPO}/install.sh" ]; then
-            log_info "Running install.sh --release in ${GITHUB_REPO}..."
-            bash ${GITHUB_REPO}/install.sh install --release
+        if [ -e "${GITHUB_REPO}" ]; then
+            local current_bootstrap=""
+            if [ -f "${GITHUB_REPO}/.ums-release-version" ]; then
+                current_bootstrap="$(cat "${GITHUB_REPO}/.ums-release-version")"
+            elif [ -f "${GITHUB_REPO}/VERSION" ]; then
+                current_bootstrap="$(tr -d '\n\r' < "${GITHUB_REPO}/VERSION")"
+            fi
+            log_warn "Target directory '${GITHUB_REPO}' already exists."
+            [ -n "${current_bootstrap}" ] && log_info "Current installed release: ${current_bootstrap}"
+            log_info "Desired release: ${DESIRED_VERSION}"
+            if is_true "${FORCE_UPDATE}"; then
+                log_info "--force specified: updating in place..."
+                update_repo_from_release "${DESIRED_VERSION}"
+            else
+                if prompt_confirm "Overwrite existing directory with release ${DESIRED_VERSION}?"; then
+                    update_repo_from_release "${DESIRED_VERSION}"
+                else
+                    log_info "Skipping update."
+                fi
+            fi
         else
-            log_warn "install.sh not found in '${GITHUB_REPO}'. Skipping install step."
+            install_repo_from_release "${DESIRED_VERSION}"
+            if [ -f "${GITHUB_REPO}/install.sh" ]; then
+                log_info "Running install.sh --release in ${GITHUB_REPO}..."
+                bash ${GITHUB_REPO}/install.sh install --release
+            else
+                log_warn "install.sh not found in '${GITHUB_REPO}'. Skipping install step."
+            fi
         fi
     fi
 
