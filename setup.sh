@@ -422,7 +422,7 @@ else
         install_repo_from_release "${DESIRED_VERSION}"
         if [ -f "${GITHUB_REPO}/install.sh" ]; then
             log_info "Running install.sh --release in ${GITHUB_REPO}..."
-            (cd "${GITHUB_REPO}" && bash install.sh install --release)
+            bash ${GITHUB_REPO}/install.sh install --release
         else
             log_warn "install.sh not found in '${GITHUB_REPO}'. Skipping install step."
         fi

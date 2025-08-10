@@ -27,43 +27,47 @@
 
 ## 🚀 빠른 시작
 
-### 방법 1: Git Submodule (권장)
+### 방법 1: setup.sh (권장, 릴리스 기반 자동 부트스트랩)
 
 ```bash
-# 기존 프로젝트에 추가
-cd your-project
-```
+# 원격 부트스트랩: 레포가 없는 곳에서 실행 → 프로젝트 디렉토리 생성, 릴리스 설치, 스캐폴딩까지 자동
+curl -fsSL https://raw.githubusercontent.com/jinwoo-j/universal-makefile/master/setup.sh | \
+  GITHUB_TOKEN=YOUR_TOKEN bash
 
-
-```bash
-git submodule add https://github.com/jinwoo-j/universal-makefile .makefile-system
-
-# 설치 및 설정
-./.makefile-system/install.sh
-
-# 프로젝트 설정 (project.mk 편집)
-vim project.mk
-
-# 사용 가능한 명령어 확인
+# 자동으로 <universal-makefile> 디렉토리가 생기고, 내부에서 install.sh --release가 실행됩니다.
+cd universal-makefile
 make help
 ```
 
-### 방법 2: 스크립트 설치
-
 ```bash
-# 원격 설치
-curl -sSL https://raw.githubusercontent.com/jinwoo-j/universal-makefile/main/install.sh | bash
-
-# 또는 수동 설치
-wget https://github.com/jinwoo-j/universal-makefile/archive/main.zip
-unzip main.zip && cd universal-makefile-main
-./install.sh --copy
+# 로컬(레포 안)에서 버전 고정 후 동기화
+echo "vX.Y.Z" > .ums-version          # 선택: 미지정 시 최신 태그 사용
+echo "<SHA256>" > .ums-version.sha256 # 선택: 무결성 검증
+./setup.sh                            # 릴리스 동기화 후 make로 위임
 ```
 
-### 기존 프로젝트에 추가
+토큰 사용 팁: 사설 레포일 경우 `GITHUB_TOKEN` 환경변수를 설정하면 API tarball로 인증 다운로드가 됩니다.
+
+### 방법 2: 고급(install.sh 직접 사용)
 
 ```bash
-# 기존 Makefile이 있는 프로젝트
+# 릴리스 설치(토큰 인증 지원)
+./install.sh install --release
+
+# Submodule 설치
+./install.sh install --submodule
+
+# Subtree 설치
+./install.sh install --subtree
+
+# 파일 복사 설치
+./install.sh install --copy
+```
+
+### 기존 프로젝트에 추가(선택)
+
+```bash
+# Submodule 방식으로 포함하고 싶을 때
 git submodule add https://github.com/jinwoo-j/universal-makefile .makefile-system
 ./.makefile-system/install.sh --existing-project
 ```
@@ -263,6 +267,16 @@ make help-build      # build 타겟 상세 정보
 
 ## 🔄 업데이트
 
+### Release/Setup 방식
+
+```bash
+# .ums-version에 버전을 고정했을 때
+./setup.sh         # 해당 버전으로 동기화
+
+# 미지정 시 최신 태그로 동기화
+./setup.sh
+```
+
 ### Submodule 방식
 
 ```bash
@@ -278,6 +292,20 @@ git submodule update --remote .makefile-system
 ```bash
 # 재설치 필요
 ./install.sh --copy --force
+```
+
+### Subtree 방식
+
+```bash
+./install.sh update   # 서브트리 갱신
+```
+
+## 🗑️ 제거(언인스톨)
+
+```bash
+# 릴리스/복사/서브트리/서브모듈 환경 모두에서 동작
+./install.sh uninstall          # 안전 제거 (서브모듈은 --force 필요할 수 있음)
+./install.sh uninstall --force  # 서브모듈 강제 제거 포함
 ```
 
 ## 🤝 팀 협업

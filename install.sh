@@ -37,6 +37,7 @@ DRY_RUN=false
 BACKUP=false
 EXISTING_PROJECT=false
 DEBUG_MODE=false
+CURRENT_CMD=""
 
 # 다운로드/검증 유틸 (setup.sh와 일치)
 CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
@@ -213,14 +214,16 @@ has_universal_id() {
 
 check_requirements() {
     log_info "Checking requirements..."
-    if [[ "$INSTALLATION_TYPE" == "submodule" || "$INSTALLATION_TYPE" == "subtree" ]]; then
-        if ! command -v git >/dev/null 2>&1; then
-            log_error "Git is required for $INSTALLATION_TYPE installation"
-            exit 1
-        fi
-        if ! git rev-parse --git-dir >/dev/null 2>&1; then
-            log_error "Not in a git repository. Initialize git first or use --copy"
-            exit 1
+    if [[ "$CURRENT_CMD" == "install" || "$CURRENT_CMD" == "update" ]]; then
+        if [[ "$INSTALLATION_TYPE" == "submodule" || "$INSTALLATION_TYPE" == "subtree" ]]; then
+            if ! command -v git >/dev/null 2>&1; then
+                log_error "Git is required for $INSTALLATION_TYPE installation"
+                exit 1
+            fi
+            if ! git rev-parse --git-dir >/dev/null 2>&1; then
+                log_error "Not in a git repository. Initialize git first or use --copy"
+                exit 1
+            fi
         fi
     fi
     if ! command -v make >/dev/null 2>&1; then
@@ -774,13 +777,22 @@ uninstall() {
     [[ -d templates ]] && safe_rm templates
 
     if [[ -d "$MAKEFILE_DIR" ]]; then
-        if [[ "$FORCE_INSTALL" == true ]]; then
-            git submodule deinit -f "$MAKEFILE_DIR" || true
-            git rm -f "$MAKEFILE_DIR" || true
-            rm -rf ".git/modules/$MAKEFILE_DIR" "$MAKEFILE_DIR"
-            log_info "Removed submodule directory ($MAKEFILE_DIR)"
+        # Submodule vs plain directory 판단
+        if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1 \
+           && git config --file .gitmodules --get "submodule.$MAKEFILE_DIR.path" >/dev/null 2>&1; then
+            # Submodule로 설치된 경우
+            if [[ "$FORCE_INSTALL" == true ]]; then
+                git submodule deinit -f "$MAKEFILE_DIR" || true
+                git rm -f "$MAKEFILE_DIR" || true
+                rm -rf ".git/modules/$MAKEFILE_DIR" "$MAKEFILE_DIR"
+                log_info "Removed submodule directory ($MAKEFILE_DIR)"
+            else
+                log_warn "Submodule directory ($MAKEFILE_DIR) not removed. Use --force option to remove."
+            fi
         else
-            log_warn "Submodule directory ($MAKEFILE_DIR) not removed. Use --force option to remove."
+            # 릴리스/복사 등 일반 디렉토리로 존재하는 경우 바로 제거
+            safe_rm "$MAKEFILE_DIR"
+            log_info "Removed directory $MAKEFILE_DIR"
         fi
     fi
 
@@ -1124,6 +1136,7 @@ main() {
 
     case "$cmd" in
         install)
+            CURRENT_CMD="install"
             parse_install_args "$@"
             check_requirements            
             check_existing_installation
@@ -1153,12 +1166,14 @@ main() {
             show_status
             ;;            
         update|pull)            
+            CURRENT_CMD="update"
             parse_update_args "$@"
             check_requirements
             show_status
             update_makefile_system
             ;;
         uninstall)
+            CURRENT_CMD="uninstall"
             parse_uninstall_args "$@"
             check_requirements
             uninstall
