@@ -353,6 +353,12 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         fi
     fi
 
+    # 사용자가 원하는 방식: setup.sh만으로 release 설치 효과
+    if command -v bash >/dev/null 2>&1 && [ -f "install.sh" ]; then
+        log_info "Delegating to install.sh --release for scaffolding and integration..."
+        bash install.sh install --release
+    fi
+
     log_info "Handing over to make: make $@"
     echo "------------------------------------------------------------"
     exec make "$@"
@@ -405,15 +411,27 @@ else
         [ -e "${GITHUB_REPO}" ] && log_warn "Target directory '${GITHUB_REPO}' already exists." && exit 1
         mv "${TMPDIR}/${ROOT_DIR_NAME_FALLBACK}" "${GITHUB_REPO}"
         log_success "Project downloaded to '${GITHUB_REPO}' from branch ${MAIN_BRANCH}."
+        if [ -f "${GITHUB_REPO}/install.sh" ]; then
+            log_info "Running install.sh --release in ${GITHUB_REPO}..."
+            (cd "${GITHUB_REPO}" && bash install.sh install --release)
+        else
+            log_warn "install.sh not found in '${GITHUB_REPO}'. Skipping install step."
+        fi
     else
         # Release-archive bootstrap
         install_repo_from_release "${DESIRED_VERSION}"
+        if [ -f "${GITHUB_REPO}/install.sh" ]; then
+            log_info "Running install.sh --release in ${GITHUB_REPO}..."
+            (cd "${GITHUB_REPO}" && bash install.sh install --release)
+        else
+            log_warn "install.sh not found in '${GITHUB_REPO}'. Skipping install step."
+        fi
     fi
 
     echo ""
     log_info "Next steps:"
     echo "1. cd ${GITHUB_REPO}"
-    echo "2. ./setup.sh -- help (or ./setup.sh up/build/test)"
+    echo "2. make help"
 fi
 
 
