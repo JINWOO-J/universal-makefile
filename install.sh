@@ -38,6 +38,48 @@ BACKUP=false
 EXISTING_PROJECT=false
 DEBUG_MODE=false
 
+# 다운로드/검증 유틸 (setup.sh와 일치)
+CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
+CURL_RETRY_DELAY_SEC=${CURL_RETRY_DELAY_SEC:-2}
+
+verify_sha256() {
+    # $1: file path, $2: expected sha256
+    local file_path="$1"
+    local expected="$2"
+    if [ -z "$expected" ]; then
+        return 2
+    fi
+    if command -v sha256sum >/dev/null 2>&1; then
+        echo "${expected}  ${file_path}" | sha256sum -c --status
+        return $?
+    elif command -v shasum >/dev/null 2>&1; then
+        echo "${expected}  ${file_path}" | shasum -a 256 -c --status
+        return $?
+    else
+        return 3
+    fi
+}
+
+fetch_latest_release_tag() {
+    # 최신 릴리스 태그 조회 (API → git ls-remote 폴백)
+    local api_url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest"
+    local auth_args=()
+    [[ -n "${GITHUB_TOKEN:-}" ]] && auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+    local tag
+    tag=$(curl -fsSL "${auth_args[@]}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+    if [ -n "$tag" ]; then
+        echo "$tag"; return 0
+    fi
+    if command -v git >/dev/null 2>&1; then
+        tag=$(git ls-remote --tags --refs "https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git" 2>/dev/null \
+            | awk '{print $2}' | sed 's@refs/tags/@@' | sort -Vr | head -n1)
+        if [ -n "$tag" ]; then
+            echo "$tag"; return 0
+        fi
+    fi
+    return 1
+}
+
 usage() {
     cat <<EOF
 Universal Makefile System Installer
@@ -62,6 +104,7 @@ Common options:
 Install options:
     --copy              Install by copying files instead of submodule
     --submodule         Install using git submodule (instead of default subtree)
+    --release           Install using GitHub release tarball (token-aware, private repos OK)
     --existing-project  Setup in existing project (preserve existing files)
 
 Examples:
@@ -138,6 +181,8 @@ parse_install_args() {
                 INSTALLATION_TYPE="copy"; shift ;;
             --subtree)
                 INSTALLATION_TYPE="subtree"; shift ;;
+            --release)
+                INSTALLATION_TYPE="release"; shift ;;
             --existing-project)
                 EXISTING_PROJECT=true; shift ;;
             --help|-h)
@@ -168,9 +213,9 @@ has_universal_id() {
 
 check_requirements() {
     log_info "Checking requirements..."
-    if [[ "$INSTALLATION_TYPE" == "submodule" ]]; then
+    if [[ "$INSTALLATION_TYPE" == "submodule" || "$INSTALLATION_TYPE" == "subtree" ]]; then
         if ! command -v git >/dev/null 2>&1; then
-            log_error "Git is required for submodule installation"
+            log_error "Git is required for $INSTALLATION_TYPE installation"
             exit 1
         fi
         if ! git rev-parse --git-dir >/dev/null 2>&1; then
@@ -246,6 +291,140 @@ install_copy() {
     [[ "$FORCE_INSTALL" == true || ! -d "templates" ]] && cp -r "$source_dir/templates" . 2>/dev/null || true
     [[ -f "$source_dir/VERSION" ]] && cp "$source_dir/VERSION" .
     log_success "Copy installation completed"
+}
+
+install_subtree() {
+    log_info "Installing via git subtree..."
+    # Preconditions
+    if ! command -v git >/dev/null 2>&1; then
+        log_error "Git is required for subtree installation"; exit 1; fi
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        log_error "Not in a git repository. Initialize git first (git init; git add .; git commit -m 'init') or use --copy"; exit 1; fi
+
+    local prefix_dir="$MAKEFILE_DIR"
+    local remote_name="universal-makefile-remote"
+
+    # Add remote if missing
+    if ! git remote get-url "$remote_name" >/dev/null 2>&1; then
+        git remote add "$remote_name" "$REPO_URL"
+        log_info "Added remote '$remote_name' -> $REPO_URL"
+    fi
+
+    # Fetch
+    git fetch "$remote_name" "$MAIN_BRANCH" --tags --quiet
+
+    # Try initial add
+    if git rev-parse --verify "$MAIN_BRANCH" >/dev/null 2>&1; then :; fi
+
+    if [[ -d "$prefix_dir" ]]; then
+        log_warn "Directory '$prefix_dir' already exists. Attempting to merge updates..."
+        if ! git subtree pull --prefix="$prefix_dir" "$remote_name" "$MAIN_BRANCH" --squash; then
+            log_error "git subtree pull failed. Resolve conflicts then retry or run with --copy"
+            exit 1
+        fi
+        log_success "Subtree updated at '$prefix_dir'"
+    else
+        if ! git subtree add --prefix="$prefix_dir" "$remote_name" "$MAIN_BRANCH" --squash; then
+            log_error "git subtree add failed. Ensure repository is clean and committed."
+            exit 1
+        fi
+        log_success "Subtree installed at '$prefix_dir'"
+    fi
+}
+
+install_release() {
+    log_info "Installing via GitHub release tarball..."
+
+    # 원하는 버전 결정: .ums-version > 최신 릴리스 > 브랜치 스냅샷
+    local desired=""
+    if [ -f ".ums-version" ]; then
+        desired="$(cat .ums-version)"
+        log_info "Pinned version found in .ums-version: ${desired}"
+    else
+        desired="$(fetch_latest_release_tag || true)"
+        if [ -z "${desired}" ]; then
+            log_warn "Could not resolve latest release via API. Falling back to branch snapshot: ${MAIN_BRANCH}"
+            desired="${MAIN_BRANCH}"
+        else
+            log_info "Resolved latest release tag: ${desired}"
+        fi
+    fi
+
+    local TMPDIR
+    TMPDIR="$(mktemp -d)" || { log_error "Failed to create temp directory"; exit 1; }
+    trap 'rm -rf "${TMPDIR}" >/dev/null 2>&1 || true' EXIT INT TERM
+    local TARBALL_PATH="${TMPDIR}/umf.tar.gz"
+
+    local auth_args=()
+    local primary_url="" mirror_url=""
+    if [[ "${desired}" = "${MAIN_BRANCH}" ]]; then
+        # 브랜치 스냅샷
+        primary_url="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/heads/${MAIN_BRANCH}.tar.gz"
+        mirror_url="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/heads/${MAIN_BRANCH}"
+    else
+        if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            # API tarball (프라이빗 지원)
+            primary_url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/tarball/${desired}"
+            mirror_url="${primary_url}"
+            auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Accept: application/vnd.github+json")
+            log_info "Using authenticated API tarball download"
+        else
+            primary_url="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/tags/${desired}.tar.gz"
+            mirror_url="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/tags/${desired}"
+        fi
+    fi
+
+    local success=0
+    for src in primary mirror; do
+        local url="$([ "$src" = "primary" ] && echo "${primary_url}" || echo "${mirror_url}")"
+        for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
+            log_info "Downloading (${src} try ${attempt}/${CURL_RETRY_MAX}): ${url}"
+            if curl -fSL --connect-timeout 10 --max-time 300 "${auth_args[@]}" -o "${TARBALL_PATH}" "${url}"; then
+                if [ -s "${TARBALL_PATH}" ]; then success=1; break; fi
+            fi
+            sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
+        done
+        [ "${success}" = "1" ] && break
+    done
+    if [ "${success}" != "1" ]; then
+        log_error "Failed to download release tarball for ${desired}."
+        [[ -n "${GITHUB_TOKEN:-}" ]] && log_warn "If private repo, ensure token has proper scopes and SSO authorization."
+        exit 1
+    fi
+
+    # 체크섬 검증 (릴리스 태그일 때만)
+    if [[ "${desired}" != "${MAIN_BRANCH}" ]]; then
+        local EXPECTED_SHA256="${UMS_TARBALL_SHA256:-}"
+        if [ -z "${EXPECTED_SHA256}" ] && [ -f ".ums-version.sha256" ]; then
+            EXPECTED_SHA256="$(tr -d ' \n\r' < .ums-version.sha256)"
+        fi
+        if [ -n "${EXPECTED_SHA256}" ]; then
+            if verify_sha256 "${TARBALL_PATH}" "${EXPECTED_SHA256}"; then
+                log_success "SHA256 checksum verified."
+            else
+                log_error "SHA256 checksum mismatch or verification unavailable."
+                exit 1
+            fi
+        fi
+    fi
+
+    # 전개
+    tar -xzf "${TARBALL_PATH}" -C "${TMPDIR}"
+    # 루트 디렉토리명은 가변적(특히 API tarball). 첫 엔트리 기준으로 판별
+    local ROOT_DIR_NAME
+    ROOT_DIR_NAME="$(tar -tzf "${TARBALL_PATH}" | head -1 | cut -d/ -f1)"
+    if [ -z "${ROOT_DIR_NAME}" ] || [ ! -d "${TMPDIR}/${ROOT_DIR_NAME}" ]; then
+        log_error "Extracted directory not found."
+        exit 1
+    fi
+
+    # 기존 시스템 제거 후 교체
+    rm -rf "${MAKEFILE_DIR}"
+    mv "${TMPDIR}/${ROOT_DIR_NAME}" "${MAKEFILE_DIR}"
+    if [[ "${desired}" != "${MAIN_BRANCH}" ]]; then
+        echo "${desired}" > "${MAKEFILE_DIR}/.version"
+    fi
+    log_success "Makefile system installed at '${MAKEFILE_DIR}' (source: ${desired})."
 }
 
 # create_main_makefile 함수 전체를 이 코드로 교체합니다.
@@ -951,6 +1130,8 @@ main() {
             case "$INSTALLATION_TYPE" in
                 submodule) install_submodule ;;
                 copy) install_copy ;;
+                subtree) install_subtree ;;
+                release) install_release ;;
                 *) log_error "Invalid installation type: $INSTALLATION_TYPE"; exit 1 ;;
             esac
             create_main_makefile
