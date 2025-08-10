@@ -24,6 +24,29 @@ log_warn()    { echo -e "${YELLOW}⚠️  $1${RESET}"; }
 
 # --- 핵심 로직 ---
 
+# --- 다운로드/검증 유틸 ---
+CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
+CURL_RETRY_DELAY_SEC=${CURL_RETRY_DELAY_SEC:-2}
+
+verify_sha256() {
+    # $1: file path, $2: expected sha256
+    local file_path="$1"
+    local expected="$2"
+    if [ -z "$expected" ]; then
+        return 2
+    fi
+    if command -v sha256sum >/dev/null 2>&1; then
+        echo "${expected}  ${file_path}" | sha256sum -c --status
+        return $?
+    elif command -v shasum >/dev/null 2>&1; then
+        # macOS
+        echo "${expected}  ${file_path}" | shasum -a 256 -c --status
+        return $?
+    else
+        return 3
+    fi
+}
+
 # 현재 디렉토리가 Git 리포지토리인지 확인
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # === 로컬 실행 모드 ===
@@ -34,13 +57,77 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # 1. GitHub Release 방식인지 확인 (버전 파일 존재 여부)
     if [ -f ".ums-version" ]; then
         DESIRED_VERSION=$(cat .ums-version)
-        CURRENT_VERSION=$([ -f "${MAKEFILE_SYSTEM_DIR}/.version" ] && cat "${MAKEFILE_SYSTEM_DIR}/.version")
+        if [ -f "${MAKEFILE_SYSTEM_DIR}/.version" ]; then
+            CURRENT_VERSION="$(cat "${MAKEFILE_SYSTEM_DIR}/.version")"
+        else
+            CURRENT_VERSION=""
+        fi
         if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]]; then
             log_warn "Makefile system is missing or out of date. Installing version ${DESIRED_VERSION}..."
+            # 준비: 임시 작업 디렉토리
+            TMPDIR="$(mktemp -d)" || {
+                log_warn "Failed to create temp directory"; exit 1;
+            }
+            cleanup_tmp() { rm -rf "${TMPDIR}" >/dev/null 2>&1 || true; }
+            trap cleanup_tmp EXIT INT TERM
+
+            PRIMARY_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/tags/${DESIRED_VERSION}.tar.gz"
+            MIRROR_URL="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/tags/${DESIRED_VERSION}"
+            TARBALL_PATH="${TMPDIR}/umf.tar.gz"
+
+            # 재시도 포함 다운로드 (기본 URL → 미러 URL)
+            success=0
+            for src in primary mirror; do
+                url="$([ "$src" = "primary" ] && echo "${PRIMARY_URL}" || echo "${MIRROR_URL}")"
+                for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
+                    log_info "Downloading (${src} try ${attempt}/${CURL_RETRY_MAX}): ${url}"
+                    if curl -fSL --connect-timeout 10 --max-time 300 -o "${TARBALL_PATH}" "${url}"; then
+                        if [ -s "${TARBALL_PATH}" ]; then
+                            success=1
+                            break
+                        fi
+                    fi
+                    sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
+                done
+                [ "$success" = "1" ] && break
+            done
+
+            if [ "$success" != "1" ]; then
+                log_warn "Failed to download release tarball for ${DESIRED_VERSION}."
+                exit 1
+            fi
+
+            # 선택적 SHA256 검증: 환경변수 또는 .ums-version.sha256 사용
+            EXPECTED_SHA256="${UMS_TARBALL_SHA256:-}"
+            if [ -z "${EXPECTED_SHA256}" ] && [ -f ".ums-version.sha256" ]; then
+                EXPECTED_SHA256="$(cat .ums-version.sha256 | tr -d ' \n\r')"
+            fi
+            if [ -n "${EXPECTED_SHA256}" ]; then
+                if verify_sha256 "${TARBALL_PATH}" "${EXPECTED_SHA256}"; then
+                    log_success "SHA256 checksum verified."
+                else
+                    log_warn "SHA256 checksum mismatch or verification unavailable. Aborting."
+                    exit 1
+                fi
+            else
+                log_warn "No SHA256 provided (.ums-version.sha256 or UMS_TARBALL_SHA256). Skipping integrity verification."
+            fi
+
+            # 기존 디렉토리 제거 후 전개
             rm -rf "${MAKEFILE_SYSTEM_DIR}"
-            local ARCHIVE_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/tags/${DESIRED_VERSION}.tar.gz"
-            curl -fsSL "${ARCHIVE_URL}" | tar -xz
-            mv "${GITHUB_REPO}-${DESIRED_VERSION:1}" "${MAKEFILE_SYSTEM_DIR}"
+            tar -xzf "${TARBALL_PATH}" -C "${TMPDIR}"
+            VERSION_DIR_NAME="${GITHUB_REPO}-${DESIRED_VERSION#v}"
+            if [ ! -d "${TMPDIR}/${VERSION_DIR_NAME}" ]; then
+                # 혹시 다른 아카이브 구조 대비: 첫 번째 디렉토리를 추정
+                VERSION_DIR_NAME_FALLBACK="$(tar -tzf "${TARBALL_PATH}" | head -1 | cut -d/ -f1)"
+                if [ -n "${VERSION_DIR_NAME_FALLBACK}" ] && [ -d "${TMPDIR}/${VERSION_DIR_NAME_FALLBACK}" ]; then
+                    VERSION_DIR_NAME="${VERSION_DIR_NAME_FALLBACK}"
+                else
+                    log_warn "Extracted directory not found. Aborting."
+                    exit 1
+                fi
+            fi
+            mv "${TMPDIR}/${VERSION_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
             echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"
             log_success "Makefile system version ${DESIRED_VERSION} is now ready."
         else
