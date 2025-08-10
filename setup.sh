@@ -307,6 +307,12 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         else
             CURRENT_VERSION=""
         fi
+        LATEST_TAG="$(fetch_latest_release_tag || true)"
+        if [ -n "${LATEST_TAG}" ]; then
+            log_info "Version status: current=${CURRENT_VERSION:-none}, desired=${DESIRED_VERSION}, latest=${LATEST_TAG}"
+        else
+            log_info "Version status: current=${CURRENT_VERSION:-none}, desired=${DESIRED_VERSION}"
+        fi
         if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]]; then
             if ! is_true "${FORCE_UPDATE}"; then
                 if ! prompt_confirm "New version available (${CURRENT_VERSION:-none} → ${DESIRED_VERSION}). Update now?"; then
@@ -382,7 +388,11 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"
             log_success "Makefile system version ${DESIRED_VERSION} is now ready."
         else
-            log_success "Makefile system version ${DESIRED_VERSION} is up to date."
+            if [ -n "${LATEST_TAG:-}" ] && [ "${DESIRED_VERSION}" = "${LATEST_TAG}" ]; then
+                log_success "Up to date (latest: ${LATEST_TAG})."
+            else
+                log_success "Up to date (pinned: ${DESIRED_VERSION}${LATEST_TAG:+, latest: ${LATEST_TAG}})."
+            fi
         fi
 
     # 2. Submodule 방식인지 확인 (.gitmodules 파일 존재 여부)
@@ -412,6 +422,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             else
                 CURRENT_VERSION=""
             fi
+            log_info "Version status: current=${CURRENT_VERSION:-none}, latest=${DESIRED_VERSION}"
             if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]]; then
                 if ! is_true "${FORCE_UPDATE}"; then
                     if ! prompt_confirm "New release found (${CURRENT_VERSION:-none} → ${DESIRED_VERSION}). Update now?"; then
@@ -421,7 +432,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
                 fi
                 install_from_release "${DESIRED_VERSION}"
             else
-                log_success "Makefile system version ${DESIRED_VERSION} is up to date."
+                log_success "Already up to date (latest: ${DESIRED_VERSION})."
             fi
         fi
     fi
