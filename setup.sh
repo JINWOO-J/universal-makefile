@@ -560,7 +560,7 @@ else
         [ -z "${ROOT_DIR_NAME_FALLBACK}" ] && log_warn "Extracted directory not found." && exit 1
         if [ -e "${GITHUB_REPO}" ]; then
             # 이미 존재하면 현재/최신 버전 로그만
-            local current_bootstrap=""
+            current_bootstrap=""
             if [ -f "${GITHUB_REPO}/.ums-release-version" ]; then
                 current_bootstrap="$(cat "${GITHUB_REPO}/.ums-release-version")"
             elif [ -f "${GITHUB_REPO}/VERSION" ]; then
@@ -588,7 +588,7 @@ else
     else
         # Release-archive bootstrap
         if [ -e "${GITHUB_REPO}" ]; then
-            local current_bootstrap=""
+            current_bootstrap=""
             if [ -f "${GITHUB_REPO}/.ums-release-version" ]; then
                 current_bootstrap="$(cat "${GITHUB_REPO}/.ums-release-version")"
             elif [ -f "${GITHUB_REPO}/VERSION" ]; then
