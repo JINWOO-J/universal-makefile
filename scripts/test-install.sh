@@ -16,6 +16,11 @@ assert_file() { [[ -f "$1" ]]; }
 assert_dir() { [[ -d "$1" ]]; }
 assert_contains() { grep -qE "$2" "$1"; }
 
+export -f assert_file
+export -f assert_dir
+export -f assert_contains
+
+
 case_run() {
   local name="$1"; shift
   blue "==> $name"
@@ -27,13 +32,14 @@ case_run() {
   git config user.name test
   git commit --allow-empty -m init >/dev/null
 
-  if "$@"; then
+  if bash -c "$*"; then
     green "✅ $name"; pass=$((pass+1))
   else
     red "❌ $name"; fail=$((fail+1))
   fi
   popd >/dev/null
 }
+
 
 # 1) subtree install
 case_run "subtree install" bash -c '
