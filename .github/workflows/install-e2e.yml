@@ -1,11 +1,12 @@
 name: install.sh e2e
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
 
 env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  
-on:
-  push:
-  pull_request:
+  GITHUB_TOKEN: ${{ github.token }}
 
 jobs:
   test:
