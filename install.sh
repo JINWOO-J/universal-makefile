@@ -2,6 +2,14 @@
 set -euo pipefail
 unalias -a 2>/dev/null || true
 
+# ---- CI-safe temp setup (avoid unbound TMPDIR & trap scope issues) ----
+: "${TMPDIR:=/tmp}"
+TMPDIR="${TMPDIR%/}"
+UMF_TMP_DIR="$(mktemp -d "${TMPDIR}/umf-install.XXXXXX")"
+_umf_cleanup_tmp() { rm -rf "${UMF_TMP_DIR}" >/dev/null 2>&1 || true; }
+trap _umf_cleanup_tmp EXIT INT TERM
+
+
 # 색상 정의
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
     RED=$(tput setaf 1)
