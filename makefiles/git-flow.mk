@@ -3,8 +3,10 @@ include $(MAKEFILE_DIR)/makefiles/colors.mk
 # Git Flow and Release Management
 # ================================================================
 
+REMOTE ?= origin
+
 .PHONY: git-status sync-develop start-release list-old-branches clean-old-branches
-.PHONY: bump-version create-release-branch push-release-branch finish-release auto-release
+.PHONY: bump-version create-release-branch push-release-branch finish-release auto-release push-release push-release-clean
 
 # ================================================================
 # 버전 관리 로직
@@ -25,6 +27,13 @@ endef
 # ================================================================
 # Git 상태 확인
 # ================================================================
+
+ensure-clean:
+	@git update-index -q --refresh
+	@if ! git diff-index --quiet HEAD --; then \
+		echo "$(RED)Error: You have uncommitted changes. Commit or stash first.$(RESET)"; \
+		exit 1; \
+	fi
 
 git-status: ## 🌿 Show comprehensive git status
 	@echo "$(BLUE)Git Repository Status:$(RESET)"
@@ -309,12 +318,42 @@ finish-release: ## 🚀 Complete release process (merge to main and develop, cre
 # 자동화된 릴리스 프로세스
 # ================================================================
 
+
+
+push-release: ## 📤 Push main, develop, and tags to remote
+	@echo "$(BLUE)📤 Pushing branches and tags to $(REMOTE)...$(RESET)"
+	@if ! git rev-parse --verify main >/dev/null 2>&1; then \
+		echo "$(RED)Error: main branch not found$(RESET)"; exit 1; \
+	fi
+	@if ! git rev-parse --verify develop >/dev/null 2>&1; then \
+		echo "$(RED)Error: develop branch not found$(RESET)"; exit 1; \
+	fi
+	@git push $(REMOTE) main develop
+	@git push --tags || true
+	@echo "$(GREEN)✅ Successfully pushed main, develop, and tags$(RESET)"
+
+# (옵션) 원격 release 브랜치도 지우고 싶다면 사용
+push-release-clean: push-release ## 🧹 Also delete remote release/* branch (optional)
+	@CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	if echo "$$CUR_BRANCH" | grep -q "^release/"; then \
+		echo "$(BLUE)🧹 Deleting remote $$CUR_BRANCH on $(REMOTE)...$(RESET)"; \
+		git push $(REMOTE) --delete "$$CUR_BRANCH" || true; \
+	else \
+		if [ -f .NEW_VERSION.tmp ]; then \
+			V=$$(cat .NEW_VERSION.tmp); RB="release/$$V"; \
+			if git ls-remote --heads $(REMOTE) "$$RB" >/dev/null 2>&1; then \
+				echo "$(BLUE)🧹 Deleting remote $$RB on $(REMOTE)...$(RESET)"; \
+				git push $(REMOTE) --delete "$$RB" || true; \
+			fi; \
+		fi; \
+	fi
+
+
 # Auto release process
 auto-release: ## 🚀 Automated release process
-	@echo "$(BLUE)🚀 [auto-release] Starting automated release...$(RESET)"
-	@if [ -n "$(VERSION)" ]; then \
-		export NEW_VERSION="$(VERSION)"; \
-	fi; \
+	@set -e; \
+	echo "$(BLUE)🚀 [auto-release] Starting automated release...$(RESET)"; \
+	if [ -n "$(VERSION)" ]; then export NEW_VERSION="$(VERSION)"; fi; \
 	$(MAKE) bump-version NEW_VERSION="$$NEW_VERSION" && \
 	if [ -f .NEW_VERSION.tmp ]; then \
 		NEXT_VERSION=$$(cat .NEW_VERSION.tmp); \
@@ -322,7 +361,8 @@ auto-release: ## 🚀 Automated release process
 		$(MAKE) create-release-branch NEW_VERSION="$$NEXT_VERSION" && \
 		$(MAKE) update-version-file NEW_VERSION="$$NEXT_VERSION" && \
 		$(MAKE) version-tag TAG_VERSION="$$NEXT_VERSION" && \
-		$(MAKE) merge-release; \
+		$(MAKE) merge-release && \
+		$(MAKE) push-release; \
 	else \
 		echo "$(RED)Error: Failed to determine version$(RESET)" >&2; \
 		exit 1; \
@@ -330,8 +370,15 @@ auto-release: ## 🚀 Automated release process
 	echo "$(GREEN)🎉 Auto-release completed successfully!$(RESET)"
 
 
+update-and-release: ## 📝 Update version, then run auto-release
+	@echo "$(BLUE)📝 Updating version, then starting auto-release...$(RESET)"
+	$(MAKE) update-version
+	$(MAKE) auto-release
+
+ur: update-and-release
+
 # Merge release branch
-merge-release: ## 🔄 Merge release branch to main branches
+merge-release: ensure-clean ## 🔄 Merge release branch to main branches
 	@echo "$(BLUE)🔄 Merging release branch...$(RESET)"
 	@CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	if ! echo "$$CUR_BRANCH" | grep -q "^release/"; then \
