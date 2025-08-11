@@ -879,6 +879,9 @@ update_makefile_system() {
         installed_type="subtree"
     elif [[ -d "makefiles" ]]; then
         installed_type="copy"
+    elif [[ -f "${MAKEFILE_DIR}/.version" ]]; then
+        # setup.sh release install leaves a version pin file here
+        installed_type="release"
     else
         log_error "Universal Makefile System installation not found. Cannot update."
         exit 1
@@ -892,7 +895,12 @@ update_makefile_system() {
             old_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
 
             log_info "Fetching latest changes for submodule..."
-            git -C "$MAKEFILE_DIR" fetch origin "$MAIN_BRANCH"
+            if ! git -C "$MAKEFILE_DIR" fetch origin "$MAIN_BRANCH"; then
+                log_warn "Remote does not have branch '$MAIN_BRANCH'. Trying common defaults..."
+                if ! git -C "$MAKEFILE_DIR" fetch origin main; then
+                    git -C "$MAKEFILE_DIR" fetch origin master || true
+                fi
+            fi
 
             if [[ "$FORCE_INSTALL" == true ]]; then
                 log_warn "Forcibly updating submodule to the latest version..."
@@ -935,6 +943,13 @@ update_makefile_system() {
             temp_dir="$(mktemp -d "${UMF_TMP_DIR}/copy-update.XXXXXX")"
             log_info "Cloning latest version from $REPO_URL"
             git clone "$REPO_URL" "$temp_dir/universal-makefile"
+        release)
+            log_info "Re-installing latest release archive..."
+            # Preserve desired ref if specified via .ums-version, else latest
+            install_release || {
+                log_error "Release update failed"; exit 1; }
+            log_success "Release archive updated"
+            ;;
 
             cp -r "$temp_dir/universal-makefile/makefiles" .
             cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true
