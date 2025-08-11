@@ -4,6 +4,7 @@ include $(MAKEFILE_DIR)/makefiles/colors.mk
 # ================================================================
 
 REMOTE ?= origin
+AUTO_RELEASE_ALLOWED_BRANCH ?= $(DEVELOP_BRANCH)
 
 .PHONY: git-status sync-develop start-release list-old-branches clean-old-branches
 .PHONY: bump-version create-release-branch push-release-branch finish-release auto-release push-release push-release-clean
@@ -406,6 +407,11 @@ github-release:
 auto-release: ## 🚀 Automated release process
 	@set -Eeuo pipefail; \
 	START_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	if [ "$$CUR_BRANCH" != "$(AUTO_RELEASE_ALLOWED_BRANCH)" ]; then \
+		echo "$(RED)Error: auto-release is allowed only on '$(AUTO_RELEASE_ALLOWED_BRANCH)'. Current: $$CUR_BRANCH$(RESET)"; \
+		exit 1; \
+	fi; \
 	rollback(){ echo "$(YELLOW)↩️  Error occurred. Returning to '$$START_BRANCH'...$(RESET)"; git checkout -q "$$START_BRANCH" || true; }; \
 	trap rollback ERR; \
 	echo "$(BLUE)🚀 [auto-release] Starting automated release...$(RESET)"; \

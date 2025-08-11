@@ -60,7 +60,7 @@ show-makefile-info: ## 🔧 Show makefile system information
 	@echo "  Installation Type: $(MAKEFILE_TYPE)"
 	@echo "  Makefile Directory: $(MAKEFILE_DIR)"
 	@echo "  System Version: $(shell cat $(MAKEFILE_DIR)/VERSION 2>/dev/null || echo 'unknown')"
-	@echo "  Project: $(NAME) v$(VERSION)"
+	@echo "  Project: $(NAME) $(VERSION)"
 
 # 프로젝트별 커스텀 타겟들은 여기 아래에 추가
 # 예시:
