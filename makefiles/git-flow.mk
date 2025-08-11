@@ -28,6 +28,13 @@ endef
 # Git 상태 확인
 # ================================================================
 
+ensure-clean:
+	@git update-index -q --refresh
+	@if ! git diff-index --quiet HEAD --; then \
+		echo "$(RED)Error: You have uncommitted changes. Commit or stash first.$(RESET)"; \
+		exit 1; \
+	fi
+
 git-status: ## 🌿 Show comprehensive git status
 	@echo "$(BLUE)Git Repository Status:$(RESET)"
 	@echo "  Current Branch: $(CURRENT_BRANCH)"
@@ -371,7 +378,7 @@ update-and-release: ## 📝 Update version, then run auto-release
 ur: update-and-release
 
 # Merge release branch
-merge-release: ## 🔄 Merge release branch to main branches
+merge-release: ensure-clean ## 🔄 Merge release branch to main branches
 	@echo "$(BLUE)🔄 Merging release branch...$(RESET)"
 	@CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	if ! echo "$$CUR_BRANCH" | grep -q "^release/"; then \
