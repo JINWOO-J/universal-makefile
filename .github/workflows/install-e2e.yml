@@ -12,23 +12,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup git user
-        run: |
+      - uses: actions/checkout@v4
+      - run: |
           git config --global user.email test@example.com
           git config --global user.name test
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git make wget
-
-      - name: Make test script executable
-        run: chmod +x scripts/test-install.sh
-
-      - name: Run e2e tests
-        run: scripts/test-install.sh
+          # private fetch 통과용 https+token 강제
+          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadof "https://github.com/"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: sudo apt-get update && sudo apt-get install -y git make wget
+      - run: chmod +x scripts/test-install.sh
+      - run: scripts/test-install.sh
 
 
