@@ -8,7 +8,7 @@ set -euo pipefail
 # --- 설정 (프로젝트에 맞게 수정) ---
 GITHUB_OWNER="jinwoo-j"
 GITHUB_REPO="universal-makefile" # 여기에 실제 사용할 '부모' 프로젝트 리포지토리 이름을 넣습니다.
-MAIN_BRANCH="master"
+MAIN_BRANCH="main"
 MAKEFILE_SYSTEM_DIR=".makefile-system"
 
 # --- 로깅 함수 ---
