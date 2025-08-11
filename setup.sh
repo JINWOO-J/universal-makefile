@@ -11,8 +11,7 @@ GITHUB_REPO="universal-makefile" # 여기에 실제 사용할 '부모' 프로젝
 MAIN_BRANCH="main"
 MAKEFILE_SYSTEM_DIR=".makefile-system"
 
-# --- 로깅 함수 ---
-# (이전 스크립트와 동일한 log_info, log_success 등을 여기에 포함)
+
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
     RED=$(tput setaf 1); GREEN=$(tput setaf 2); YELLOW=$(tput setaf 3); BLUE=$(tput setaf 4); RESET=$(tput sgr0)
 else
@@ -22,20 +21,17 @@ log_info()    { echo -e "${BLUE}ℹ️  $1${RESET}"; }
 log_success() { echo -e "${GREEN}✅ $1${RESET}"; }
 log_warn()    { echo -e "${YELLOW}⚠️  $1${RESET}"; }
 
-# --- 핵심 로직 ---
 
-# --- 다운로드/검증 유틸 ---
 CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
 CURL_RETRY_DELAY_SEC=${CURL_RETRY_DELAY_SEC:-2}
 
-# --- CLI 옵션 ---
+
 FORCE_UPDATE=${FORCE_UPDATE:-false}
 CLI_VERSION=""
 
 is_true() { case "${1:-}" in true|1|yes|on|Y|y) return 0;; *) return 1;; esac; }
 
 prompt_confirm() {
-    # $1: message
     local msg="$1"
     if [ -t 0 ]; then
         read -r -p "${msg} [y/N]: " reply || true
@@ -44,7 +40,6 @@ prompt_confirm() {
             *) return 1 ;;
         esac
     else
-        # 비대화형: 질문 불가 → 기본 거부
         return 1
     fi
 }
@@ -66,15 +61,12 @@ parse_cli_args() {
                 shift
                 break ;;
             *)
-                # 남은 인자는 make로 전달
                 break ;;
         esac
     done
-    # 남은 인자는 그대로 유지하여 최종 exec make "$@"에 전달됨
 }
 
 verify_sha256() {
-    # $1: file path, $2: expected sha256
     local file_path="$1"
     local expected="$2"
     if [ -z "$expected" ]; then

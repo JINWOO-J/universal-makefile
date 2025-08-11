@@ -351,22 +351,26 @@ push-release-clean: push-release ## 🧹 Also delete remote release/* branch (op
 
 # Auto release process
 auto-release: ## 🚀 Automated release process
-	@set -e; \
+	@set -Eeuo pipefail; \
+	START_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	rollback(){ echo "$(YELLOW)↩️  Error occurred. Returning to '$$START_BRANCH'...$(RESET)"; git checkout -q "$$START_BRANCH" || true; }; \
+	trap rollback ERR; \
 	echo "$(BLUE)🚀 [auto-release] Starting automated release...$(RESET)"; \
 	if [ -n "$(VERSION)" ]; then export NEW_VERSION="$(VERSION)"; fi; \
-	$(MAKE) bump-version NEW_VERSION="$$NEW_VERSION" && \
+	$(MAKE) bump-version NEW_VERSION="$$NEW_VERSION"; \
 	if [ -f .NEW_VERSION.tmp ]; then \
 		NEXT_VERSION=$$(cat .NEW_VERSION.tmp); \
 		echo "$(BLUE)Using version: $$NEXT_VERSION$(RESET)"; \
-		$(MAKE) create-release-branch NEW_VERSION="$$NEXT_VERSION" && \
-		$(MAKE) update-version-file NEW_VERSION="$$NEXT_VERSION" && \
-		$(MAKE) version-tag TAG_VERSION="$$NEXT_VERSION" && \
-		$(MAKE) merge-release && \
+		$(MAKE) create-release-branch NEW_VERSION="$$NEXT_VERSION"; \
+		$(MAKE) update-version-file NEW_VERSION="$$NEXT_VERSION"; \
+		$(MAKE) version-tag TAG_VERSION="$$NEXT_VERSION"; \
+		$(MAKE) ensure-clean; \
+		$(MAKE) merge-release; \
 		$(MAKE) push-release; \
 	else \
-		echo "$(RED)Error: Failed to determine version$(RESET)" >&2; \
-		exit 1; \
+		echo "$(RED)Error: Failed to determine version$(RESET)" >&2; exit 1; \
 	fi; \
+	trap - ERR; \
 	echo "$(GREEN)🎉 Auto-release completed successfully!$(RESET)"
 
 
