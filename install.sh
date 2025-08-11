@@ -894,34 +894,54 @@ update_makefile_system() {
             local old_commit
             old_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
 
-            log_info "Fetching latest changes for submodule..."
-            if ! git -C "$MAKEFILE_DIR" fetch origin "$MAIN_BRANCH"; then
-                log_warn "Remote does not have branch '$MAIN_BRANCH'. Trying common defaults..."
-                if ! git -C "$MAKEFILE_DIR" fetch origin main; then
-                    git -C "$MAKEFILE_DIR" fetch origin master || true
+            # Determine remote default branch dynamically
+            log_info "Detecting remote default branch..."
+            local remote_head
+            remote_head=$(git -C "$MAKEFILE_DIR" remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p' | head -n1)
+            if [[ -z "$remote_head" ]]; then
+                remote_head=$(git -C "$MAKEFILE_DIR" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' || true)
+            fi
+            if [[ -z "$remote_head" ]]; then
+                # fallbacks
+                if git -C "$MAKEFILE_DIR" ls-remote --exit-code --heads origin main >/dev/null 2>&1; then
+                    remote_head=main
+                elif git -C "$MAKEFILE_DIR" ls-remote --exit-code --heads origin master >/dev/null 2>&1; then
+                    remote_head=master
+                else
+                    remote_head="$MAIN_BRANCH"
                 fi
             fi
+            log_info "-> Remote default branch: ${remote_head}"
+
+            log_info "Fetching latest changes for submodule..."
+            git -C "$MAKEFILE_DIR" fetch origin --prune || true
+
+            local current_branch
+            current_branch=$(git -C "$MAKEFILE_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
 
             if [[ "$FORCE_INSTALL" == true ]]; then
-                log_warn "Forcibly updating submodule to the latest version..."
-                git -C "$MAKEFILE_DIR" reset --hard "origin/$MAIN_BRANCH"
+                log_warn "Forcibly updating submodule to origin/${remote_head}..."
+                git -C "$MAKEFILE_DIR" reset --hard "origin/${remote_head}"
                 log_success "Submodule forcibly updated to latest commit from remote."
             else
-                log_info "Attempting to merge latest changes..."
-                if ! git -C "$MAKEFILE_DIR" merge "origin/$MAIN_BRANCH"; then
+                # If detached, check out a local branch tracking remote head to allow merge
+                if [[ "$current_branch" = "HEAD" ]]; then
+                    log_warn "Submodule is in detached HEAD. Checking out local branch '${remote_head}' to proceed with merge..."
+                    git -C "$MAKEFILE_DIR" checkout -B "$remote_head" "origin/${remote_head}" --no-track || true
+                fi
+                log_info "Attempting to merge origin/${remote_head}..."
+                if ! git -C "$MAKEFILE_DIR" merge --ff-only "origin/${remote_head}"; then
                     echo ""
-                    log_error "Merge conflict occurred in submodule."
-                    log_warn "This usually means you have local changes in '${MAKEFILE_DIR}'."
+                    log_error "Merge into submodule failed (non fast-forward)."
+                    log_warn "You may have local changes or diverged history in '${MAKEFILE_DIR}'."
                     if [[ "$DEBUG_MODE" == true ]]; then
                         show_diff
                     else
-                        log_info "To see the conflicting changes, run again with the --debug flag."
+                        log_info "Re-run with --debug to see local changes, or use --force to hard reset."
                     fi
-                    echo ""
-                    log_warn "You can resolve conflicts manually, or run update again with --force to overwrite."
                     exit 1
                 fi
-                log_success "Submodule updated with merge."
+                log_success "Submodule updated with fast-forward merge."
             fi
 
             local new_commit
