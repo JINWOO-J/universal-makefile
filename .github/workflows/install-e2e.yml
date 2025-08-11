@@ -1,5 +1,7 @@
 name: install.sh e2e
-on: [push, pull_request]
+on:
+  release:
+    types: [published]
 
 permissions:
   contents: read
