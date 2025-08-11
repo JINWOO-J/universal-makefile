@@ -346,17 +346,30 @@ install_subtree() {
         log_info "Added remote '$remote_name' -> $REPO_URL"
     fi
 
-    git fetch "$remote_name" "$MAIN_BRANCH" --tags --quiet
+    # Discover remote default branch
+    local remote_head
+    remote_head=$(git ls-remote --symref "$remote_name" HEAD 2>/dev/null | sed -n 's@^ref: refs/heads/\([^\t\n\r ]*\)[\t ]*HEAD@\1@p' | head -n1)
+    if [[ -z "$remote_head" ]]; then
+        if git ls-remote --exit-code --heads "$remote_name" main >/dev/null 2>&1; then
+            remote_head=main
+        elif git ls-remote --exit-code --heads "$remote_name" master >/dev/null 2>&1; then
+            remote_head=master
+        else
+            remote_head="$MAIN_BRANCH"
+        fi
+    fi
+    log_info "Using remote default branch: ${remote_head}"
+    git fetch "$remote_name" "$remote_head" --tags --quiet || git fetch "$remote_name" --tags --quiet
 
     if [[ -d "$prefix_dir" ]]; then
         log_warn "Directory '$prefix_dir' already exists. Attempting to merge updates..."
-        if ! git subtree pull --prefix="$prefix_dir" "$remote_name" "$MAIN_BRANCH" --squash; then
+        if ! git subtree pull --prefix="$prefix_dir" "$remote_name" "$remote_head" --squash; then
             log_error "git subtree pull failed. Resolve conflicts then retry or run with --copy"
             exit 1
         fi
         log_success "Subtree updated at '$prefix_dir'"
     else
-        if ! git subtree add --prefix="$prefix_dir" "$remote_name" "$MAIN_BRANCH" --squash; then
+        if ! git subtree add --prefix="$prefix_dir" "$remote_name" "$remote_head" --squash; then
             log_error "git subtree add failed. Ensure repository is clean and committed."
             exit 1
         fi
