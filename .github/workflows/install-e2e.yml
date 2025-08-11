@@ -22,6 +22,8 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: sudo apt-get update && sudo apt-get install -y git make wget
       - run: chmod +x scripts/test-install.sh
+      - run: chmod +x scripts/test-setup.sh
       - run: scripts/test-install.sh
+      - run: scripts/test-setup.sh
 
 
