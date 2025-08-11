@@ -1,0 +1,30 @@
+name: install.sh e2e
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup git user
+        run: |
+          git config --global user.email test@example.com
+          git config --global user.name test
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git make wget
+
+      - name: Make test script executable
+        run: chmod +x scripts/test-install.sh
+
+      - name: Run e2e tests
+        run: scripts/test-install.sh
+
+
