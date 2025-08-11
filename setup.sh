@@ -185,7 +185,9 @@ install_from_release() {
     VERSION_DIR_NAME="${GITHUB_REPO}-${desired#v}"
     if [ ! -d "${TMPDIR}/${VERSION_DIR_NAME}" ]; then
         # 혹시 다른 아카이브 구조 대비: 첫 번째 디렉토리를 추정
-        VERSION_DIR_NAME_FALLBACK="$(tar -tzf "${TARBALL_PATH}" | head -1 | cut -d/ -f1)"
+        set +o pipefail
+        VERSION_DIR_NAME_FALLBACK="$(tar -tzf "${TARBALL_PATH}" 2>/dev/null | head -n1 | cut -d/ -f1 || true)"
+        set -o pipefail
         if [ -n "${VERSION_DIR_NAME_FALLBACK}" ] && [ -d "${TMPDIR}/${VERSION_DIR_NAME_FALLBACK}" ]; then
             VERSION_DIR_NAME="${VERSION_DIR_NAME_FALLBACK}"
         else
@@ -276,7 +278,9 @@ install_repo_from_release() {
     tar -xzf "${TARBALL_PATH}" -C "${TMPDIR}"
     # API tarball의 루트 디렉터리명은 커밋 SHA 기반으로 가변적일 수 있으므로 반드시 1번째 엔트리로 판별
     local ROOT_DIR_NAME
-    ROOT_DIR_NAME="$(tar -tzf "${TARBALL_PATH}" | head -1 | cut -d/ -f1)"
+    set +o pipefail
+    ROOT_DIR_NAME="$(tar -tzf "${TARBALL_PATH}" 2>/dev/null | head -n1 | cut -d/ -f1 || true)"
+    set -o pipefail
     if [ -z "${ROOT_DIR_NAME}" ] || [ ! -d "${TMPDIR}/${ROOT_DIR_NAME}" ]; then
         log_warn "Extracted directory not found. Aborting."
         exit 1
@@ -334,7 +338,9 @@ update_repo_from_release() {
 
     tar -xzf "${TARBALL_PATH}" -C "${TMPDIR}"
     local ROOT_DIR_NAME
-    ROOT_DIR_NAME="$(tar -tzf "${TARBALL_PATH}" | head -1 | cut -d/ -f1)"
+    set +o pipefail
+    ROOT_DIR_NAME="$(tar -tzf "${TARBALL_PATH}" 2>/dev/null | head -n1 | cut -d/ -f1 || true)"
+    set -o pipefail
     [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
 
     # 파괴적 업데이트: 기존 디렉토리 교체
@@ -556,7 +562,9 @@ else
         done
         [ "$success" != "1" ] && log_warn "Failed to download branch snapshot." && exit 1
         tar -xzf "${TARBALL_PATH}" -C "${TMPDIR}"
-        ROOT_DIR_NAME_FALLBACK="$(tar -tzf "${TARBALL_PATH}" | head -1 | cut -d/ -f1)"
+        set +o pipefail
+        ROOT_DIR_NAME_FALLBACK="$(tar -tzf "${TARBALL_PATH}" 2>/dev/null | head -n1 | cut -d/ -f1 || true)"
+        set -o pipefail
         [ -z "${ROOT_DIR_NAME_FALLBACK}" ] && log_warn "Extracted directory not found." && exit 1
         if [ -e "${GITHUB_REPO}" ]; then
             # 이미 존재하면 현재/최신 버전 로그만

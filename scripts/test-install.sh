@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT="${REPO_ROOT}/install.sh"
+SETUP="${REPO_ROOT}/setup.sh"
 
 : "${TMPDIR:=/tmp}"
 TMPDIR="${TMPDIR%/}"
@@ -38,6 +39,22 @@ case_run() {
   git commit --allow-empty -m init >/dev/null
 
   # bash -c 중첩로 인한 "option requires an argument" 방지: eval로 현재 셸에서 실행
+  if eval "$cmd"; then
+    green "✅ $name"; pass=$((pass+1))
+  else
+    red "❌ $name"; fail=$((fail+1))
+  fi
+  popd >/dev/null
+}
+
+# Git 리포 없이 실행하는 케이스 (setup.sh 부트스트랩 모드 검증용)
+case_run_no_git() {
+  local name="$1"; shift
+  local cmd="$1"
+  blue "==> $name"
+  local dir="${TMP_ROOT}/${name// /_}"
+  mkdir -p "$dir"; pushd "$dir" >/dev/null
+
   if eval "$cmd"; then
     green "✅ $name"; pass=$((pass+1))
   else
@@ -88,6 +105,35 @@ case_run "uninstall dry-run" '
   "'"$SCRIPT"'" install --subtree -y &&
   "'"$SCRIPT"'" uninstall --dry-run &&
   assert_dir ".makefile-system"
+'
+
+## setup.sh tests
+
+# 7) setup local: delegate and make help
+case_run "setup local: delegate and make help" '
+  cp '"$SCRIPT"' ./install.sh &&
+  ( FORCE_UPDATE=true '"$SETUP"' -- help ) &&
+  assert_file "Makefile" &&
+  assert_dir ".makefile-system" &&
+  make help >/dev/null
+'
+
+# 8) setup bootstrap: default
+case_run_no_git "setup bootstrap: default" '
+  '"$SETUP"' &&
+  assert_dir "universal-makefile" &&
+  assert_file "universal-makefile/Makefile" &&
+  assert_dir "universal-makefile/.makefile-system" &&
+  make -C universal-makefile help >/dev/null
+'
+
+# 9) setup bootstrap: -v master
+case_run_no_git "setup bootstrap: -v master" '
+  '"$SETUP"' -v master &&
+  assert_dir "universal-makefile" &&
+  assert_file "universal-makefile/Makefile" &&
+  assert_dir "universal-makefile/.makefile-system" &&
+  make -C universal-makefile help >/dev/null
 '
 
 echo
