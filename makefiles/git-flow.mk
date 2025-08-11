@@ -359,18 +359,16 @@ push-release-clean: push-release ## 🧹 Also delete remote release/* branch (op
 	fi
 
 
-github-release: ## 🐙 Create GitHub Release for the current tag
+github-release:
 	@TAG=$$(cat .NEW_VERSION.tmp); \
-	if ! command -v gh >/dev/null 2>&1; then \
-		echo "$(YELLOW)gh CLI not found. Skipping GitHub Release.$(RESET)"; exit 0; \
-	fi; \
-	if gh release view "$$TAG" >/dev/null 2>&1; then \
-		echo "$(BLUE)GitHub Release $$TAG already exists. Skipping.$(RESET)"; \
-	else \
-		echo "$(BLUE)Creating GitHub Release $$TAG...$(RESET)"; \
-		gh release create "$$TAG" --title "Release $$TAG" --generate-notes; \
-		echo "$(GREEN)✅ GitHub Release $$TAG created$(RESET)"; \
-	fi
+	set -e; \
+	if ! gh release create "$$TAG" --title "Release $$TAG" --generate-notes 2>err.log; then \
+		if grep -q "HTTP 403" err.log; then \
+			echo "$(RED)403: Token lacks release permission.$(RESET)"; \
+			echo "Try: gh auth switch -h github.com -s keyring  # or export GH_TOKEN=<PAT with repo>"; \
+		fi; \
+		cat err.log >&2; rm -f err.log; exit 1; \
+	fi; rm -f err.log; echo "$(GREEN)✅ Release $$TAG created$(RESET)"
 
 
 # Auto release process

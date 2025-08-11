@@ -1,0 +1,37 @@
+---
+alwaysApply: true
+description: Overview of repository structure and primary entrypoints
+---
+
+# Repository Structure Guide
+
+- Main entrypoints
+  - [install.sh](mdc:install.sh): CLI installer that supports subtree, submodule, copy, and release installs. Generates project scaffolding (`Makefile`, `Makefile.universal`, `project.mk`, `environments/*`).
+  - [setup.sh](mdc:setup.sh): Smart bootstrap/setup runner. Works in two modes:
+    - Local (inside an existing git repo): verifies/installs the Makefile system, scaffolds missing files, then hands off to `make`.
+    - Bootstrap (outside a git repo): downloads the repository from a release (or branch snapshot), installs the Makefile system into the new directory, scaffolds minimal files.
+  - [Makefile](mdc:Makefile): Template Makefile for projects that consume the Universal Makefile System.
+
+- Makefile system
+  - Root variable `MAKEFILE_DIR` points to the system root.
+  - Primary modules live under [makefiles/](mdc:makefiles/core.mk).
+  - Typical include chain in `Makefile.universal`:
+    - `include $(MAKEFILE_DIR)/makefiles/core.mk`
+    - `include $(MAKEFILE_DIR)/makefiles/help.mk`
+    - `include $(MAKEFILE_DIR)/makefiles/version.mk`
+    - `include $(MAKEFILE_DIR)/makefiles/docker.mk`
+    - `include $(MAKEFILE_DIR)/makefiles/compose.mk`
+    - `include $(MAKEFILE_DIR)/makefiles/git-flow.mk`
+    - `include $(MAKEFILE_DIR)/makefiles/cleanup.mk`
+
+- Templates
+  - [templates/project.mk.template](mdc:templates/project.mk.template) is copied into `project.mk` when available.
+
+- Examples
+  - See [examples/](mdc:examples/README.md) for language-specific example projects.
+
+- Conventions
+  - Default system path is `.makefile-system`.
+  - `Makefile.universal` is included from the project `Makefile` and defines common targets.
+  - Keep `MAKEFILE_DIR` consistent to avoid include path issues.
+
