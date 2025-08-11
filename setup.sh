@@ -558,9 +558,24 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 
     # 설치 위임 대신 직접 통합은 이미 위에서 처리됨. 중복 작업 방지 위해 위임 생략
 
-    log_info "Handing over to make: make $@"
+    # 최소 스캐폴드 생성 (없을 때만)
+    if [ ! -f "project.mk" ] || [ ! -f "Makefile" ]; then
+        scaffold_project_files
+    fi
+
+    # make 인자 정규화: '--' 제거, 비어있으면 'help'
+    make_args=()
+    for arg in "$@"; do
+        [ "$arg" = "--" ] && continue
+        make_args+=("$arg")
+    done
+    if [ "${#make_args[@]}" -eq 0 ]; then
+        make_args=(help)
+    fi
+
+    log_info "Handing over to make: make ${make_args[*]}"
     echo "------------------------------------------------------------"
-    exec make "$@"
+    exec make "${make_args[@]}"
 
 else
     # === 원격 실행 (부트스트랩) 모드 ===
@@ -685,6 +700,14 @@ else
               log_info "Installing Makefile system via release ${DESIRED_VERSION}..."
               install_from_release "${DESIRED_VERSION}"
               scaffold_project_files
+            )
+        fi
+
+        # 안전망: 상위에서 한 번 더 스캐폴드 보장
+        if [ -d "${GITHUB_REPO}" ]; then
+            (
+              cd "${GITHUB_REPO}" &&
+              [ -f "project.mk" ] || scaffold_project_files
             )
         fi
     fi
