@@ -993,5 +993,186 @@ install_github_workflow() {
 
     if [[ ${#files[@]} -eq 0 ]]; then
         log_warn "No workflows to install in $src_dir"
-        return
+        return 0
+    fi
+
+    log_info "Copying the following workflow files:"
+    for f in "${files[@]}"; do
+        echo "  - $f"
+    done
+
+    cp -rf "${files[@]}" .github/workflows/
+    log_success "GitHub Actions workflow installed"
 }
+
+setup_app_example() {
+    local app_type="${1:-}"
+
+    local examples_dir="$MAKEFILE_DIR/examples"
+    [[ ! -d "$examples_dir" ]] && log_error "examples directory not found!" && exit 1
+
+    if [[ -z "$app_type" ]]; then
+        echo ""
+        log_info "Available example apps:"
+        local apps=()
+        local i=1
+        for dir in "$examples_dir"/*/; do
+            local app_name=$(basename "$dir")
+            [[ "$app_name" == "environments" ]] && continue
+            apps+=("$app_name")
+            echo "  $i) $app_name"
+            ((i++))
+        done
+        if [[ ${#apps[@]} -eq 0 ]]; then
+            log_warn "No app examples found!"
+            exit 1
+        fi
+        echo ""
+        if [[ "$YES" == true ]]; then
+            choice=1
+            log_info "--yes provided; selecting first example: ${apps[0]}"
+        else
+            read -rp "Select example to setup (1-${#apps[@]}) [q to quit]: " choice
+        fi
+        [[ "$choice" == "q" || "$choice" == "Q" ]] && log_warn "Aborted by user." && exit 0
+        [[ "$choice" =~ ^[0-9]+$ ]] || { log_error "Invalid input"; exit 1; }
+        app_type="${apps[$((choice-1))]}"
+        [[ -z "$app_type" ]] && log_error "Invalid selection" && exit 1
+    fi
+
+    local template_dir="$examples_dir/$app_type"
+    [[ ! -d "$template_dir" ]] && log_error "No template directory for '$app_type'" && exit 1
+
+    log_info "Setting up example for '$app_type'..."
+
+    for file in "$template_dir"/*; do
+        fname=$(basename "$file")
+        if [[ -e "$fname" && "$FORCE_INSTALL" != true && "$YES" != true ]]; then
+            read -rp "File $fname already exists. Overwrite? [y/N]: " yn
+            [[ "$yn" =~ ^[Yy]$ ]] || { log_warn "Skipped $fname"; continue; }
+        fi
+        cp -rf "$file" .
+
+        log_success "Installed $fname"
+    done
+
+    log_success "$app_type example setup complete!"
+    echo "Try: make help"
+}
+
+show_status() {
+    log_info "Checking status of the installed Universal Makefile System..."
+    echo ""
+
+    if [[ -d "$MAKEFILE_DIR" ]] && (cd "$MAKEFILE_DIR" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
+        local git_dir="$MAKEFILE_DIR"
+        local remote; remote=$(git -C "$git_dir" remote get-url origin 2>/dev/null || echo "N/A")
+        local branch; branch=$(git -C "$git_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "N/A")
+        local commit; commit=$(git -C "$git_dir" rev-parse --short HEAD 2>/dev/null || echo "N/A")
+        local status; status=$(git -C "$git_dir" status --porcelain 2>/dev/null)
+
+        echo "  Installation Type : Submodule"
+        echo "  Path              : ${git_dir}"
+        echo "  Remote URL        : ${remote}"
+        echo "  Branch            : ${branch}"
+        echo "  Commit            : ${commit}"
+        
+        if [[ -n "$status" ]]; then
+            log_warn "Status            : Modified (Local changes detected in system files)"
+            if [[ "$DEBUG_MODE" == "true" ]]; then
+                echo ""
+                log_info "Showing local modifications (--debug enabled):"
+                git --no-pager -C "$git_dir" diff --color=always
+            fi
+        else
+            log_success "  Status            : Clean"
+        fi
+    elif [[ -d "makefiles" ]]; then
+        echo "  Installation Type : Copied Files"
+        if [[ -f "VERSION" ]]; then
+            local version; version=$(cat VERSION)
+            echo "  Version File      : ${version}"
+        else
+            echo "  Version File      : Not found"
+        fi
+        log_warn "  Cannot determine specific git commit for copied files."
+    else
+        log_error "Universal Makefile System installation not found."
+        exit 1
+    fi
+    echo ""
+}
+
+
+main() {
+    local cmd=${1:-install}
+    shift || true
+
+    case "$cmd" in
+        install)
+            CURRENT_CMD="install"
+            parse_install_args "$@"
+            check_requirements            
+            check_existing_installation
+            case "$INSTALLATION_TYPE" in
+                submodule) install_submodule ;;
+                copy) install_copy ;;
+                subtree) install_subtree ;;
+                release) install_release ;;
+                *) log_error "Invalid installation type: $INSTALLATION_TYPE"; exit 1 ;;
+            esac
+            create_main_makefile
+            create_project_config
+            update_gitignore
+            create_environments
+            [[ "$EXISTING_PROJECT" == false ]] && create_sample_compose
+            install_github_workflow
+            show_completion_message
+            ;;
+        app|setup-app)
+            local app_type="${1:-}"
+            parse_common_args "${@:2}"
+            check_requirements
+            setup_app_example "$app_type"
+            ;;
+        status)
+            parse_common_args "$@"
+            show_status
+            ;;            
+        update|pull)            
+            CURRENT_CMD="update"
+            parse_update_args "$@"
+            check_requirements
+            show_status
+            update_makefile_system
+            ;;
+        uninstall)
+            CURRENT_CMD="uninstall"
+            parse_uninstall_args "$@"
+            check_requirements
+            uninstall
+            ;;
+        update-script|self-update-script)
+            self_update_script
+            ;;
+        check)
+            is_universal_makefile_installed
+            ;;
+        diff)
+            show_diff
+            ;;
+        help|-h|--help|'')
+            usage
+            ;;
+        *)
+            log_error "Unknown command: $cmd"
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
