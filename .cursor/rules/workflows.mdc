@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+description: CI workflows and when they run
+---
+
+# CI Workflows
+
+- [github/workflows/install-e2e.yml](mdc:.github/workflows/install-e2e.yml)
+  - Purpose: Runs end-to-end install/setup tests (`scripts/test-install.sh`).
+  - Trigger: Only on GitHub Releases (`release` with `types: [published]`).
+  - Requires `GITHUB_TOKEN` (set as `secrets.UMF_TOKEN`) for private/API tarball downloads.
+

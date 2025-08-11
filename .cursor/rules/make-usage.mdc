@@ -1,0 +1,21 @@
+---
+alwaysApply: true
+description: How to use Make targets and the git-flow release process
+---
+
+# Make Usage and Git-Flow
+
+- Common variables
+  - `MAKEFILE_SYSTEM_DIR` default is `.makefile-system`
+  - `MAKEFILE_DIR` should point to the system directory; most includes use `$(MAKEFILE_DIR)/makefiles/*.mk`
+
+- Release flow (from [makefiles/git-flow.mk](mdc:makefiles/git-flow.mk))
+  - `make bump-version` → creates/updates `.NEW_VERSION.tmp`
+  - `make create-release-branch` → creates `release/<version>` from `develop`
+  - `make push-release-branch` → push current `release/*` branch (reads NEW_VERSION from env or `.NEW_VERSION.tmp`)
+  - `make finish-release` → merges to main/develop, tags, optional GitHub Release
+
+- Tips
+  - Run on `develop` for starting a release.
+  - Ensure `NEW_VERSION` or `.NEW_VERSION.tmp` exists before `push-release-branch`.
+
