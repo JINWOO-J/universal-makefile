@@ -1,3 +1,4 @@
+# install.sh
 #!/bin/bash
 set -euo pipefail
 unalias -a 2>/dev/null || true
@@ -8,7 +9,6 @@ TMPDIR="${TMPDIR%/}"
 UMF_TMP_DIR="$(mktemp -d "${TMPDIR}/umf-install.XXXXXX")"
 _umf_cleanup_tmp() { rm -rf "${UMF_TMP_DIR}" >/dev/null 2>&1 || true; }
 trap _umf_cleanup_tmp EXIT INT TERM
-
 
 # 색상 정의
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
@@ -52,6 +52,16 @@ CURRENT_CMD=""
 # 다운로드/검증 유틸 (setup.sh와 일치)
 CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
 CURL_RETRY_DELAY_SEC=${CURL_RETRY_DELAY_SEC:-2}
+
+log_debug() { [[ "${DEBUG_MODE:-false}" == "true" ]] && echo "${YELLOW}🔎 $*${RESET}"; }
+
+enable_xtrace_if_debug() {
+  if [[ "${DEBUG_MODE:-false}" == "true" ]]; then
+    set -x
+    # tar/curl 등 외부 툴 stderr까지 보고 싶을 때 유용
+    log_debug "xtrace enabled"
+  fi
+}
 
 verify_sha256() {
     # $1: file path, $2: expected sha256
@@ -123,8 +133,8 @@ Common options:
 
 Install options:
     --copy              Install by copying files instead of submodule
-    --submodule         Install using git submodule (instead of default subtree)
     --subtree           Install using git subtree
+    --submodule         Install using git submodule
     --release           Install using GitHub release tarball (token-aware, private repos OK)
     --prefix DIR        Install universal system under DIR (default: .makefile-system)
     --version TAG       Pin to a specific release tag (e.g., v1.2.3)
@@ -194,7 +204,6 @@ parse_common_args() {
     eval set -- "${POSITIONAL_ARGS[@]:-}"
 }
 
-
 parse_install_args() {
     INSTALLATION_TYPE="subtree"
     EXISTING_PROJECT=false
@@ -202,26 +211,16 @@ parse_install_args() {
     local remaining_args=()
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --copy)
-                INSTALLATION_TYPE="copy"; shift ;;
-            --subtree)
-                INSTALLATION_TYPE="subtree"; shift ;;
-            --submodule)
-                INSTALLATION_TYPE="submodule"; shift ;;
-            --release)
-                INSTALLATION_TYPE="release"; shift ;;
-            --prefix)
-                MAKEFILE_DIR="$2"; shift 2 ;;
-            --version)
-                DESIRED_REF="$2"; shift 2 ;;
-            --ref)
-                DESIRED_REF="$2"; shift 2 ;;
-            --existing-project)
-                EXISTING_PROJECT=true; shift ;;
-            --help|-h)
-                usage; exit 0 ;;
-            *)
-                remaining_args+=("$1"); shift ;;
+            --copy)       INSTALLATION_TYPE="copy"; shift ;;
+            --subtree)    INSTALLATION_TYPE="subtree"; shift ;;
+            --submodule)  INSTALLATION_TYPE="submodule"; shift ;;
+            --release)    INSTALLATION_TYPE="release"; shift ;;
+            --prefix)     MAKEFILE_DIR="$2"; shift 2 ;;
+            --version)    DESIRED_REF="$2"; shift 2 ;;
+            --ref)        DESIRED_REF="$2"; shift 2 ;;
+            --existing-project) EXISTING_PROJECT=true; shift ;;
+            --help|-h)    usage; exit 0 ;;
+            *)            remaining_args+=("$1"); shift ;;
         esac
     done
     parse_common_args "${remaining_args[@]:-}"
@@ -235,11 +234,9 @@ parse_uninstall_args() {
     parse_common_args "$@"
 }
 
-
 parse_update_args() {
     parse_common_args "$@"
 }
-
 
 has_universal_id() {
     local file=$1
@@ -273,7 +270,6 @@ check_requirements() {
     log_success "Requirements check passed"
 }
 
-
 check_existing_installation() {
     if [[ -d "$MAKEFILE_DIR" && ! -f Makefile && ! -f project.mk && ! -d makefiles && ! -f Makefile.universal ]]; then
         log_info "Only submodule detected; proceeding as new installation."
@@ -295,7 +291,6 @@ check_existing_installation() {
         fi
     fi
 }
-
 
 install_submodule() {
     log_info "Installing as git submodule..."
@@ -319,8 +314,8 @@ install_submodule() {
 
 install_copy() {
     log_info "Installing by copying files..."
-    local temp_dir=$(mktemp -d)
-    trap "rm -rf $temp_dir" EXIT
+    local temp_dir
+    temp_dir="$(mktemp -d "${UMF_TMP_DIR}/copy.XXXXXX")"
     if [[ -f "$SCRIPT_DIR/makefiles/core.mk" ]]; then
         log_info "Using local repository files"
         local source_dir="$SCRIPT_DIR"
@@ -338,7 +333,6 @@ install_copy() {
 
 install_subtree() {
     log_info "Installing via git subtree..."
-    # Preconditions
     if ! command -v git >/dev/null 2>&1; then
         log_error "Git is required for subtree installation"; exit 1; fi
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
@@ -347,17 +341,12 @@ install_subtree() {
     local prefix_dir="$MAKEFILE_DIR"
     local remote_name="universal-makefile-remote"
 
-    # Add remote if missing
     if ! git remote get-url "$remote_name" >/dev/null 2>&1; then
         git remote add "$remote_name" "$REPO_URL"
         log_info "Added remote '$remote_name' -> $REPO_URL"
     fi
 
-    # Fetch
     git fetch "$remote_name" "$MAIN_BRANCH" --tags --quiet
-
-    # Try initial add
-    if git rev-parse --verify "$MAIN_BRANCH" >/dev/null 2>&1; then :; fi
 
     if [[ -d "$prefix_dir" ]]; then
         log_warn "Directory '$prefix_dir' already exists. Attempting to merge updates..."
@@ -375,8 +364,10 @@ install_subtree() {
     fi
 }
 
+
 install_release() {
     log_info "Installing via GitHub release tarball..."
+    enable_xtrace_if_debug
 
     # 1) 원하는 버전 결정
     local desired=""
@@ -396,10 +387,16 @@ install_release() {
         fi
     fi
 
-    # 2) 작업 디렉토리 준비 (전역 UMF_TMP_DIR 하위 사용)
+    # 2) 작업 디렉토리/경로 준비
     local workdir="${UMF_TMP_DIR}/release.$$"
     mkdir -p "${workdir}"
     local tarball="${workdir}/umf.tar.gz"
+    local extract_dir="${workdir}/extract"
+    mkdir -p "${extract_dir}"
+    log_debug "workdir=${workdir}"
+    log_debug "tarball=${tarball}"
+    log_debug "extract_dir=${extract_dir}"
+    log_debug "INSTALL_PREFIX(MAKEFILE_DIR)=${MAKEFILE_DIR}"
 
     # 3) 다운로드 URL/헤더 준비
     local auth_args=()
@@ -418,6 +415,8 @@ install_release() {
             mirror_url="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/tags/${desired}"
         fi
     fi
+    log_debug "primary_url=${primary_url}"
+    log_debug "mirror_url=${mirror_url}"
 
     # 4) 다운로드 (재시도 포함)
     local success=0
@@ -443,150 +442,91 @@ install_release() {
     if [[ "${success}" != "1" ]]; then
         log_error "Failed to download release tarball for ${desired}."
         [[ -n "${GITHUB_TOKEN:-}" ]] && log_warn "If private repo, ensure token has proper scopes and SSO authorization."
-        exit 1
+        return 1
     fi
 
-    # 5) 무결성 확인
+    # 5) 무결성/메타 정보 출력
     if ! tar -tzf "${tarball}" >/dev/null 2>&1; then
         log_error "Downloaded file is not a valid tar.gz archive"
-        exit 1
+        return 1
     fi
     log_success "Download verified: valid tar.gz archive."
+    log_debug "tarball size=$(stat -c%s "${tarball}" 2>/dev/null || wc -c <"${tarball}") bytes"
+    log_debug "tar (first 10 entries):"
+    tar -tzf "${tarball}" 2>/dev/null | head -n 10 | sed 's/^/  - /'
 
-    # 6) 해제 (stdout 사용 금지, tar 경고 억제)
-    local extract_dir="${workdir}/extract"
-    mkdir -p "${extract_dir}"
-    tar -xzf "${tarball}" -C "${extract_dir}"
-
-    # 최상위 디렉터리 이름 판별 (stderr 억제로 SIGPIPE 경고 숨김)
+    # 6) 최상위 디렉터리명 판별 (stderr 억제로 SIGPIPE 경고 숨김)
     local ROOT_DIR_NAME
     ROOT_DIR_NAME="$(tar -tzf "${tarball}" 2>/dev/null | head -n1 | cut -d/ -f1)"
-    if [[ -z "${ROOT_DIR_NAME}" || ! -d "${extract_dir}/${ROOT_DIR_NAME}" ]]; then
-        log_error "Extracted directory not found."
-        exit 1
+    log_debug "ROOT_DIR_NAME(raw)='${ROOT_DIR_NAME}'"
+    if [[ -z "${ROOT_DIR_NAME}" ]]; then
+        log_error "Could not determine top-level directory inside the archive."
+        return 1
     fi
 
-    # 7) 설치 위치 갱신
-    rm -rf "${MAKEFILE_DIR}"
-    mv "${extract_dir}/${ROOT_DIR_NAME}" "${MAKEFILE_DIR}"
+    # 7) 해제
+    log_debug "Extracting tarball to ${extract_dir} ..."
+    if ! tar -xzf "${tarball}" -C "${extract_dir}" 2> "${workdir}/tar.extract.stderr"; then
+        log_error "tar extraction failed"
+        log_debug "tar stderr:"
+        sed 's/^/  ! /' "${workdir}/tar.extract.stderr" || true
+        return 1
+    fi
+    log_debug "tar extraction stderr (if any):"
+    sed 's/^/  ! /' "${workdir}/tar.extract.stderr" || true
 
+    # 8) 풀린 실제 경로 확인 및 목록 출력
+    local top="${extract_dir}/${ROOT_DIR_NAME}"
+    log_debug "top extracted dir='${top}'"
+    if [[ ! -d "${top}" ]]; then
+        # API tarball에서 첫 엔트리가 디렉터리가 아닐 가능성 극소수 → 폴백 스캔
+        log_warn "Top dir '${top}' not found; scanning extract_dir for candidates..."
+        top="$(find "${extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -n1 || true)"
+        log_debug "scanned top='${top}'"
+        [[ -z "${top}" || ! -d "${top}" ]] && log_error "Extracted directory not found." && return 1
+    fi
+
+    log_debug "Listing extracted top (max 50 entries):"
+    (cd "${top}" && find . -maxdepth 2 | head -n 50 | sed 's/^/  • /') || true
+
+    # 9) 설치 위치 갱신
+    log_debug "Replacing '${MAKEFILE_DIR}' with extracted content..."
+    rm -rf "${MAKEFILE_DIR}"
+    if ! mv "${top}" "${MAKEFILE_DIR}"; then
+        log_error "Failed to move extracted content to '${MAKEFILE_DIR}'"
+        return 1
+    fi
+
+    # 10) 버전 기록 및 최종 확인
     if [[ "${desired}" != "${MAIN_BRANCH}" ]]; then
         echo "${desired}" > "${MAKEFILE_DIR}/.version"
     fi
     log_success "Makefile system installed at '${MAKEFILE_DIR}' (source: ${desired})."
+
+    # 11) 핵심 파일 존재 확인 (추가 검증 로그)
+    local must_have=(
+      "makefiles/core.mk"
+      "makefiles/help.mk"
+      "makefiles/version.mk"
+    )
+    local missing=0
+    for rel in "${must_have[@]}"; do
+        if [[ ! -f "${MAKEFILE_DIR}/${rel}" ]]; then
+            log_warn "Missing expected file: ${MAKEFILE_DIR}/${rel}"
+            missing=1
+        fi
+    done
+    if [[ "${missing}" -eq 1 ]]; then
+        log_warn "Some expected files are missing. Archive layout may have changed."
+    fi
 }
 
 
-# create_main_makefile 함수 전체를 이 코드로 교체합니다.
-# create_main_makefile() {
-#     # 1. Makefile.universal 생성 (이 부분은 기존과 동일)
-#     local universal_makefile="Makefile.universal"
-#     log_info "Creating ${universal_makefile}..."
-#     cat > "$universal_makefile" << EOF
-# # === Created by Universal Makefile System Installer ===
-# # This file is the entry point for the universal makefile system.
-# # It should be included by the project's main Makefile.
-
-# .DEFAULT_GOAL := help
-
-# # Detect installation type (submodule vs. copied files)
-# ifneq (,\$(wildcard ${MAKEFILE_DIR}/))
-#     MAKEFILE_DIR := ${MAKEFILE_DIR}
-#     MAKEFILE_TYPE := ${INSTALLATION_TYPE}
-# else ifneq (,\$(wildcard makefiles/core.mk))
-#     MAKEFILE_DIR := .
-#     MAKEFILE_TYPE := script
-# else
-#     \$(error Universal Makefile System not found. Please run 'install.sh' or 'git submodule update --init')
-# endif
-
-# # Ensure project.mk exists and include it
-# ifeq (,\$(wildcard project.mk))
-#     \$(error project.mk not found. Please run 'install.sh' to generate it.)
-# endif
-# include project.mk
-
-# # Include environment-specific overrides
-# ENV ?= development
-# -include environments/\$(ENV).mk
-# -include .project.local.mk
-
-# # Include core system modules
-# include \$(MAKEFILE_DIR)/makefiles/core.mk
-# include \$(MAKEFILE_DIR)/makefiles/help.mk
-# include \$(MAKEFILE_DIR)/makefiles/version.mk
-# include \$(MAKEFILE_DIR)/makefiles/docker.mk
-# include \$(MAKEFILE_DIR)/makefiles/compose.mk
-# include \$(MAKEFILE_DIR)/makefiles/git-flow.mk
-# include \$(MAKEFILE_DIR)/makefiles/cleanup.mk
-# EOF
-#     log_success "${universal_makefile} created"
-
-
-#     # 2. 최상위 Makefile 생성 또는 수정 안내 (이 부분이 핵심 변경사항)
-#     local main_makefile="Makefile"
-    
-#     if [[ ! -f ${main_makefile} ]]; then
-#         log_info "Creating main ${main_makefile} with submodule auto-initialization logic..."
-#         # Makefile이 없으면, 자동 초기화 로직이 포함된 Makefile을 새로 생성합니다.
-#         # 셸의 변수($MAKEFILE_DIR)와 make의 변수(\$(MAKEFILE_DIR))를 구분하기 위해 \`를 사용합니다.
-#         cat > "${main_makefile}" << EOF
-# # === Created by Universal Makefile System Installer ===
-# # This Makefile automatically initializes the submodule system on the first run.
-
-# # Define the location of the Makefile system and the file to check for.
-# MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
-# MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile.universal
-
-# # If the check file is missing (e.g., after a fresh git clone),
-# # run 'git submodule update' automatically.
-# ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
-# \$(warning ⚠️  Makefile system not found in \$(MAKEFILE_SYSTEM_DIR). Initializing submodule...)
-# \$(shell @git submodule update --init --recursive || exit 1)
-# endif
-
-# # Now that the system is guaranteed to be present, include it.
-# include \$(MAKEFILE_SYSTEM_CHECK_FILE)
-
-# # Project-specific targets can be added below this line.
-# # e.g.,
-# # build:
-# #	@echo "Building the main project..."
-
-# EOF
-#         log_success "Created ${main_makefile} with auto-init logic."
-#     else
-#         # Makefile이 이미 존재하면, 사용자에게 직접 추가하도록 안내합니다.
-#         log_warn "Existing ${main_makefile} detected."
-#         echo ""
-#         log_info "To enable automatic submodule initialization, add the following lines to the TOP of your Makefile:"
-#         # 사용자에게 보여줄 안내 메시지 생성
-#         local instructions
-#         instructions=$(cat <<EOF
-
-# # --- Start of Universal Makefile System ---
-# # Automatically initialize submodule if it's missing.
-# MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
-# MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile.universal
-# ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
-# \$(warning ⚠️  Makefile system not found. Initializing submodule...)
-# \$(shell @git submodule update --init --recursive || exit 1)
-# endif
-# include \$(MAKEFILE_SYSTEM_CHECK_FILE)
-# # --- End of Universal Makefile System ---
-
-# EOF
-# )
-#         echo -e "${YELLOW}${instructions}${RESET}"
-#     fi
-# }
-# install.sh의 create_main_makefile 함수
-
+# create_main_makefile 함수
 create_main_makefile() {
-    # 1. Makefile.universal을 사용자가 제공한 새로운 내용으로 생성합니다.
     local universal_makefile="Makefile.universal"
     log_info "Creating ${universal_makefile}..."
-    cat > "$universal_makefile" << EOF
+    cat > "$universal_makefile" << 'EOF'
 # === Created by Universal Makefile System Installer ===
 # This file is the entry point for the universal makefile system.
 # It should be included by the project's main Makefile.
@@ -594,72 +534,60 @@ create_main_makefile() {
 .DEFAULT_GOAL := help
 
 # 1. 먼저 project.mk를 include하여 MAKEFILE_DIR 같은 핵심 변수를 로드합니다.
-ifeq (\$(wildcard project.mk),)
-    \$(error project.mk not found. Please run 'install.sh' to generate it.)
+ifeq ($(wildcard project.mk),)
+    $(error project.mk not found. Please run 'install.sh' to generate it.)
 endif
 include project.mk
 
 # 2. 이제 MAKEFILE_DIR 변수가 정의되었으므로, Makefile 시스템의 존재 여부를 확인합니다.
 # 이 검사는 설치 유형(submodule 또는 copy)을 감지하고 올바른 경로를 설정합니다.
-ifneq (\$(wildcard \$(MAKEFILE_DIR)/makefiles/core.mk),)
-    # Submodule 설치: project.mk에 정의된 MAKEFILE_DIR 경로가 유효합니다.
-    # 설치 유형을 'submodule'로 명시적으로 설정합니다.
+ifneq ($(wildcard $(MAKEFILE_DIR)/makefiles/core.mk),)
+    # Submodule 설치
     MAKEFILE_TYPE := submodule
-else ifneq (\$(wildcard makefiles/core.mk),)
-    # Copy 설치: project.mk의 MAKEFILE_DIR이 유효하지 않을 수 있습니다.
-    # 현재 디렉토리를 기준으로 시스템 파일을 찾습니다.
+else ifneq ($(wildcard makefiles/core.mk),)
+    # Copy 설치
     MAKEFILE_DIR := .
     MAKEFILE_TYPE := copy
 else
-    # 두 경우 모두 실패 시 사용자에게 친절한 에러 메시지를 보여줍니다.
-    \$(warning ⚠️  Universal Makefile System files not found in '\$(MAKEFILE_DIR)')
-    \$(error Please run 'git submodule update --init --recursive' and try again.)
+    $(warning ⚠️  Universal Makefile System files not found in '$(MAKEFILE_DIR)')
+    $(error Please run 'git submodule update --init --recursive' and try again.)
 endif
 
 # 3. 환경별 오버라이드 파일을 include 합니다.
 ENV ?= development
--include environments/\$(ENV).mk
+-include environments/$(ENV).mk
 -include .project.local.mk
 
-# 4. 모든 변수와 경로 설정이 끝났으므로, 핵심 시스템 모듈들을 include 합니다.
-include \$(MAKEFILE_DIR)/makefiles/core.mk
-include \$(MAKEFILE_DIR)/makefiles/help.mk
-include \$(MAKEFILE_DIR)/makefiles/version.mk
-include \$(MAKEFILE_DIR)/makefiles/docker.mk
-include \$(MAKEFILE_DIR)/makefiles/compose.mk
-include \$(MAKEFILE_DIR)/makefiles/git-flow.mk
-include \$(MAKEFILE_DIR)/makefiles/cleanup.mk
+# 4. 핵심 시스템 모듈들을 include 합니다.
+include $(MAKEFILE_DIR)/makefiles/core.mk
+include $(MAKEFILE_DIR)/makefiles/help.mk
+include $(MAKEFILE_DIR)/makefiles/version.mk
+include $(MAKEFILE_DIR)/makefiles/docker.mk
+include $(MAKEFILE_DIR)/makefiles/compose.mk
+include $(MAKEFILE_DIR)/makefiles/git-flow.mk
+include $(MAKEFILE_DIR)/makefiles/cleanup.mk
 EOF
     log_success "${universal_makefile} created"
 
-
-    # 2. 최상위 Makefile을 생성하거나 사용자에게 추가 방법을 안내합니다.
     local main_makefile="Makefile"
-    
     if [[ ! -f ${main_makefile} ]]; then
         log_info "Creating main ${main_makefile} with submodule auto-initialization logic..."
-        # Makefile이 없으면, 자동 초기화 로직이 포함된 Makefile을 새로 생성합니다.
         cat > "${main_makefile}" << EOF
 # === Created by Universal Makefile System Installer ===
 # This Makefile automatically initializes the submodule system on the first run.
 
-# Define the location of the Makefile system and the file to check for.
 MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
 MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile
 
-# If the check file is missing (e.g., after a fresh git clone),
-# run 'git submodule update' automatically.
 ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
 \$(warning ⚠️  Makefile system not found in \$(MAKEFILE_SYSTEM_DIR). Initializing submodule...)
 \$(shell git submodule update --init --recursive || exit 1)
 endif
 
-# Now that the system is guaranteed to be present, include it.
 include Makefile.universal
 EOF
         log_success "Created ${main_makefile} with auto-init logic."
     else
-        # Makefile이 이미 존재하면, 사용자에게 직접 추가하도록 안내합니다.
         log_warn "Existing ${main_makefile} detected."
         echo ""
         log_info "To enable automatic submodule initialization, add the following lines to the TOP of your Makefile:"
@@ -667,7 +595,6 @@ EOF
         instructions=$(cat <<EOF
 
 # --- Start of Universal Makefile System ---
-# Automatically initialize submodule if it's missing.
 MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
 MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile
 ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
@@ -682,6 +609,7 @@ EOF
         echo -e "${YELLOW}${instructions}${RESET}"
     fi
 }
+
 create_project_config() {
     [[ -f "project.mk" && "$FORCE_INSTALL" == false ]] && return
     log_info "Creating project.mk..."
@@ -829,10 +757,8 @@ uninstall() {
     [[ -d templates ]] && safe_rm templates
 
     if [[ -d "$MAKEFILE_DIR" ]]; then
-        # Submodule vs plain directory 판단
         if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1 \
            && git config --file .gitmodules --get "submodule.$MAKEFILE_DIR.path" >/dev/null 2>&1; then
-            # Submodule로 설치된 경우
             if [[ "$FORCE_INSTALL" == true ]]; then
                 git submodule deinit -f "$MAKEFILE_DIR" || true
                 git rm -f "$MAKEFILE_DIR" || true
@@ -842,7 +768,6 @@ uninstall() {
                 log_warn "Submodule directory ($MAKEFILE_DIR) not removed. Use --force option to remove."
             fi
         else
-            # 릴리스/복사 등 일반 디렉토리로 존재하는 경우 바로 제거
             safe_rm "$MAKEFILE_DIR"
             log_info "Removed directory $MAKEFILE_DIR"
         fi
@@ -894,10 +819,10 @@ check_token_validity() {
     fi
 }
 
-
 self_update_script() {
     log_info "Updating installer script itself..."
-    local tmp_script; tmp_script=$(mktemp)
+    local tmp_script
+    tmp_script="$(mktemp "${UMF_TMP_DIR}/self.XXXXXX")"
     local curl_args=("-fsSL" "-L" "-H" "Cache-Control: no-cache")
     local wget_args=("-q" "--no-cache")
 
@@ -923,7 +848,7 @@ self_update_script() {
         log_success "Installer script updated successfully!"
     else
         rm -f "$tmp_script"
-        log_error "Failed to download installer script."        
+        log_error "Failed to download installer script."
         if [[ -n "${GITHUB_TOKEN:-}" ]]; then
             check_token_validity
         else
@@ -933,15 +858,12 @@ self_update_script() {
     fi
 }
 
-
 show_diff() {
     echo ""
     log_info "Debug mode enabled. Showing local changes that are blocking the update:"
     git --no-pager -C "$MAKEFILE_DIR" diff --color=always
     echo ""
 }
-
-# update_makefile_system 함수 전체를 이 코드로 교체
 
 update_makefile_system() {
     log_info "Updating Universal Makefile System..."
@@ -995,9 +917,7 @@ update_makefile_system() {
             show_changelog "$MAKEFILE_DIR" "$old_commit" "$new_commit"
             echo "👉 Don't forget to run 'git add ${MAKEFILE_DIR}' and commit the new submodule version!"
             ;;
-
         subtree)
-       
             log_info "Pulling latest changes into git subtree..."
             if ! git subtree pull --prefix="$MAKEFILE_DIR" "$REPO_URL" "$MAIN_BRANCH" --squash; then
                 log_error "Failed to pull git subtree."
@@ -1005,12 +925,10 @@ update_makefile_system() {
             fi
             log_success "Git subtree pulled successfully."
             ;;
-
         copy)
             log_info "Updating by re-copying latest files..."
             local temp_dir
-            temp_dir=$(mktemp -d)
-            trap "rm -rf $temp_dir" EXIT
+            temp_dir="$(mktemp -d "${UMF_TMP_DIR}/copy-update.XXXXXX")"
             log_info "Cloning latest version from $REPO_URL"
             git clone "$REPO_URL" "$temp_dir/universal-makefile"
 
@@ -1064,7 +982,6 @@ is_universal_makefile_installed() {
     fi
 }
 
-
 install_github_workflow() {
     log_info "Installing GitHub Actions workflow..."
     mkdir -p .github/workflows
@@ -1076,186 +993,4 @@ install_github_workflow() {
 
     if [[ ${#files[@]} -eq 0 ]]; then
         log_warn "No workflows to install in $src_dir"
-        return 0
-    fi
-
-    log_info "Copying the following workflow files:"
-    for f in "${files[@]}"; do
-        echo "  - $f"
-    done
-
-    cp -rf "${files[@]}" .github/workflows/
-    log_success "GitHub Actions workflow installed"
-}
-
-setup_app_example() {
-    local app_type="${1:-}"
-
-    local examples_dir="$MAKEFILE_DIR/examples"
-    [[ ! -d "$examples_dir" ]] && log_error "examples directory not found!" && exit 1
-
-    if [[ -z "$app_type" ]]; then
-        echo ""
-        log_info "Available example apps:"
-        local apps=()
-        local i=1
-        for dir in "$examples_dir"/*/; do
-            local app_name=$(basename "$dir")
-            [[ "$app_name" == "environments" ]] && continue
-            apps+=("$app_name")
-            echo "  $i) $app_name"
-            ((i++))
-        done
-        if [[ ${#apps[@]} -eq 0 ]]; then
-            log_warn "No app examples found!"
-            exit 1
-        fi
-        echo ""
-        if [[ "$YES" == true ]]; then
-            choice=1
-            log_info "--yes provided; selecting first example: ${apps[0]}"
-        else
-            read -rp "Select example to setup (1-${#apps[@]}) [q to quit]: " choice
-        fi
-        [[ "$choice" == "q" || "$choice" == "Q" ]] && log_warn "Aborted by user." && exit 0
-        [[ "$choice" =~ ^[0-9]+$ ]] || { log_error "Invalid input"; exit 1; }
-        app_type="${apps[$((choice-1))]}"
-        [[ -z "$app_type" ]] && log_error "Invalid selection" && exit 1
-    fi
-
-    local template_dir="$examples_dir/$app_type"
-    [[ ! -d "$template_dir" ]] && log_error "No template directory for '$app_type'" && exit 1
-
-    log_info "Setting up example for '$app_type'..."
-
-    for file in "$template_dir"/*; do
-        fname=$(basename "$file")
-        if [[ -e "$fname" && "$FORCE_INSTALL" != true && "$YES" != true ]]; then
-            read -rp "File $fname already exists. Overwrite? [y/N]: " yn
-            [[ "$yn" =~ ^[Yy]$ ]] || { log_warn "Skipped $fname"; continue; }
-        fi
-        cp -rf "$file" .
-
-        log_success "Installed $fname"
-    done
-
-    log_success "$app_type example setup complete!"
-    echo "Try: make help"
-}
-
-show_status() {
-    log_info "Checking status of the installed Universal Makefile System..."
-    echo ""
-
-    if [[ -d "$MAKEFILE_DIR" ]] && (cd "$MAKEFILE_DIR" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
-        local git_dir="$MAKEFILE_DIR"
-        local remote; remote=$(git -C "$git_dir" remote get-url origin 2>/dev/null || echo "N/A")
-        local branch; branch=$(git -C "$git_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "N/A")
-        local commit; commit=$(git -C "$git_dir" rev-parse --short HEAD 2>/dev/null || echo "N/A")
-        local status; status=$(git -C "$git_dir" status --porcelain 2>/dev/null)
-
-        echo "  Installation Type : Submodule"
-        echo "  Path              : ${git_dir}"
-        echo "  Remote URL        : ${remote}"
-        echo "  Branch            : ${branch}"
-        echo "  Commit            : ${commit}"
-        
-        if [[ -n "$status" ]]; then
-            log_warn "Status            : Modified (Local changes detected in system files)"
-            if [[ "$DEBUG_MODE" == "true" ]]; then
-                echo ""
-                log_info "Showing local modifications (--debug enabled):"
-                git --no-pager -C "$git_dir" diff --color=always
-            fi
-        else
-            log_success "  Status            : Clean"
-        fi
-    elif [[ -d "makefiles" ]]; then
-        echo "  Installation Type : Copied Files"
-        if [[ -f "VERSION" ]]; then
-            local version; version=$(cat VERSION)
-            echo "  Version File      : ${version}"
-        else
-            echo "  Version File      : Not found"
-        fi
-        log_warn "  Cannot determine specific git commit for copied files."
-    else
-        log_error "Universal Makefile System installation not found."
-        exit 1
-    fi
-    echo ""
-}
-
-
-main() {
-    local cmd=${1:-install}
-    shift || true
-
-    case "$cmd" in
-        install)
-            CURRENT_CMD="install"
-            parse_install_args "$@"
-            check_requirements            
-            check_existing_installation
-            case "$INSTALLATION_TYPE" in
-                submodule) install_submodule ;;
-                copy) install_copy ;;
-                subtree) install_subtree ;;
-                release) install_release ;;
-                *) log_error "Invalid installation type: $INSTALLATION_TYPE"; exit 1 ;;
-            esac
-            create_main_makefile
-            create_project_config
-            update_gitignore
-            create_environments
-            [[ "$EXISTING_PROJECT" == false ]] && create_sample_compose
-            install_github_workflow
-            show_completion_message
-            ;;
-        app|setup-app)
-            local app_type="${1:-}"
-            parse_common_args "${@:2}"
-            check_requirements
-            setup_app_example "$app_type"
-            ;;
-        status)
-            parse_common_args "$@"
-            show_status
-            ;;            
-        update|pull)            
-            CURRENT_CMD="update"
-            parse_update_args "$@"
-            check_requirements
-            show_status
-            update_makefile_system
-            ;;
-        uninstall)
-            CURRENT_CMD="uninstall"
-            parse_uninstall_args "$@"
-            check_requirements
-            uninstall
-            ;;
-        update-script|self-update-script)
-            self_update_script
-            ;;
-        check)
-            is_universal_makefile_installed
-            ;;
-        diff)
-            show_diff
-            ;;
-        help|-h|--help|'')
-            usage
-            ;;
-        *)
-            log_error "Unknown command: $cmd"
-            usage
-            exit 1
-            ;;
-    esac
-}
-
-
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
+        return
