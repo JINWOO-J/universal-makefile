@@ -359,6 +359,20 @@ push-release-clean: push-release ## 🧹 Also delete remote release/* branch (op
 	fi
 
 
+github-release: ## 🐙 Create GitHub Release for the current tag
+	@TAG=$$(cat .NEW_VERSION.tmp); \
+	if ! command -v gh >/dev/null 2>&1; then \
+		echo "$(YELLOW)gh CLI not found. Skipping GitHub Release.$(RESET)"; exit 0; \
+	fi; \
+	if gh release view "$$TAG" >/dev/null 2>&1; then \
+		echo "$(BLUE)GitHub Release $$TAG already exists. Skipping.$(RESET)"; \
+	else \
+		echo "$(BLUE)Creating GitHub Release $$TAG...$(RESET)"; \
+		gh release create "$$TAG" --title "Release $$TAG" --generate-notes; \
+		echo "$(GREEN)✅ GitHub Release $$TAG created$(RESET)"; \
+	fi
+
+
 # Auto release process
 auto-release: ## 🚀 Automated release process
 	@set -Eeuo pipefail; \
@@ -378,6 +392,7 @@ auto-release: ## 🚀 Automated release process
 		$(MAKE) ensure-clean; \
 		$(MAKE) merge-release; \
 		$(MAKE) push-release; \
+		$(MAKE) github-release; \
 	else \
 		echo "$(RED)Error: Failed to determine version$(RESET)"; exit 1; \
 	fi; \
