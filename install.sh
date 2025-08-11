@@ -31,6 +31,8 @@ INSTALLER_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO_SLUG}/${MA
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 INSTALLATION_TYPE="subtree"
+DESIRED_REF=""
+YES=false
 
 FORCE_INSTALL=false
 DRY_RUN=false
@@ -100,12 +102,17 @@ Common options:
     --force             Force installation/uninstall/update actions
     --dry-run           Show actions without performing them
     --backup            Backup files before removing (uninstall only)
-    -d, --debug         Show detailed debug info on failure # <-- 이 줄을 추가합니다.
+    -d, --debug         Show detailed debug info on failure
+    -y, --yes           Non-interactive mode; auto-approve prompts
 
 Install options:
     --copy              Install by copying files instead of submodule
     --submodule         Install using git submodule (instead of default subtree)
+    --subtree           Install using git subtree
     --release           Install using GitHub release tarball (token-aware, private repos OK)
+    --prefix DIR        Install universal system under DIR (default: .makefile-system)
+    --version TAG       Pin to a specific release tag (e.g., v1.2.3)
+    --ref REF           Pin to a git ref (branch/tag/commit)
     --existing-project  Setup in existing project (preserve existing files)
 
 Examples:
@@ -148,6 +155,7 @@ parse_common_args() {
     DRY_RUN=$(resolve_flag "DRY_RUN" "--dry-run" "" "$@")
     BACKUP=$(resolve_flag "BACKUP" "--backup" "" "$@")
     DEBUG_MODE=$(resolve_flag "DEBUG" "--debug" "-d" "$@")
+    YES=$(resolve_flag "YES" "--yes" "-y" "$@")
 
     if [[ "${DEBUG_MODE}" == "true" ]]; then
         log_info "Common flags resolved as follows:"
@@ -160,7 +168,7 @@ parse_common_args() {
     local POSITIONAL_ARGS=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --force|--dry-run|--backup|-d|--debug)
+            --force|--dry-run|--backup|-d|--debug|-y|--yes)
                 shift ;;
             *)
                 POSITIONAL_ARGS+=("$1")
@@ -182,8 +190,16 @@ parse_install_args() {
                 INSTALLATION_TYPE="copy"; shift ;;
             --subtree)
                 INSTALLATION_TYPE="subtree"; shift ;;
+            --submodule)
+                INSTALLATION_TYPE="submodule"; shift ;;
             --release)
                 INSTALLATION_TYPE="release"; shift ;;
+            --prefix)
+                MAKEFILE_DIR="$2"; shift 2 ;;
+            --version)
+                DESIRED_REF="$2"; shift 2 ;;
+            --ref)
+                DESIRED_REF="$2"; shift 2 ;;
             --existing-project)
                 EXISTING_PROJECT=true; shift ;;
             --help|-h)
@@ -195,6 +211,8 @@ parse_install_args() {
     parse_common_args "${remaining_args[@]:-}"
 
     log_info "Installation type: $INSTALLATION_TYPE"
+    [[ -n "${DESIRED_REF}" ]] && log_info "Pinned ref: ${DESIRED_REF}"
+    log_info "Install prefix: ${MAKEFILE_DIR}"
 }
 
 parse_uninstall_args() {
