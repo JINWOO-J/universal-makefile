@@ -243,6 +243,12 @@ check_requirements() {
                 exit 1
             fi
         fi
+        if [[ "$INSTALLATION_TYPE" == "release" ]]; then
+            if ! command -v tar >/dev/null 2>&1; then
+                log_error "tar is required for --release installation"; exit 1; fi
+            if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+                log_error "Either curl or wget is required for --release installation"; exit 1; fi
+        fi
     fi
     if ! command -v make >/dev/null 2>&1; then
         log_error "Make is required"
