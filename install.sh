@@ -395,17 +395,17 @@ install_release() {
 
     local auth_args=()
     local primary_url="" mirror_url=""
-    if [[ "${desired}" = "${MAIN_BRANCH}" ]]; then
-        # 브랜치 스냅샷
-        primary_url="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/heads/${MAIN_BRANCH}.tar.gz"
-        mirror_url="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/heads/${MAIN_BRANCH}"
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        # 토큰이 있으면 브랜치/태그 구분 없이 API tarball 사용 (프라이빗 지원)
+        primary_url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/tarball/${desired}"
+        mirror_url="${primary_url}"
+        auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Accept: application/vnd.github+json")
+        log_info "Using authenticated API tarball download"
     else
-        if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-            # API tarball (프라이빗 지원)
-            primary_url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/tarball/${desired}"
-            mirror_url="${primary_url}"
-            auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Accept: application/vnd.github+json")
-            log_info "Using authenticated API tarball download"
+        if [[ "${desired}" = "${MAIN_BRANCH}" ]]; then
+            # 브랜치 스냅샷 (퍼블릭 전제)
+            primary_url="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/heads/${MAIN_BRANCH}.tar.gz"
+            mirror_url="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/heads/${MAIN_BRANCH}"
         else
             primary_url="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/tags/${desired}.tar.gz"
             mirror_url="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/tags/${desired}"
@@ -437,6 +437,29 @@ install_release() {
         [[ -n "${GITHUB_TOKEN:-}" ]] && log_warn "If private repo, ensure token has proper scopes and SSO authorization."
         exit 1
     fi
+
+    # 추가 검증: 다운로드 파일 존재/크기 확인
+    if [ ! -s "${TARBALL_PATH}" ]; then
+        log_error "Downloaded tarball not found or empty: ${TARBALL_PATH}"
+        exit 1
+    fi
+
+    # 추가 검증: tar.gz 유효성 확인 (MIME 및 압축 무결성)
+    if command -v file >/dev/null 2>&1; then
+        mime=$(file -b --mime-type "${TARBALL_PATH}" || true)
+        case "$mime" in
+            application/x-gzip|application/gzip|application/octet-stream)
+                : ;; # 허용
+            *)
+                log_warn "Unexpected MIME type for tarball: ${mime}. Will validate with tar."
+                ;;
+        esac
+    fi
+    if ! tar -tzf "${TARBALL_PATH}" >/dev/null 2>&1; then
+        log_error "Downloaded file is not a valid tar.gz archive"
+        exit 1
+    fi
+    log_success "Download verified: valid tar.gz archive."
 
     # 체크섬 검증 (릴리스 태그일 때만)
     if [[ "${desired}" != "${MAIN_BRANCH}" ]]; then
