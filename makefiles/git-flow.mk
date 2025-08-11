@@ -121,6 +121,16 @@ clean-remote-branches: ## 🧹 Delete merged remote release branches (VERY CAREF
 # 버전 관리
 # ================================================================
 
+commit-version-bump: ## ✅ Commit version bump on release branch
+	@V=$$(cat .NEW_VERSION.tmp); \
+	git add -A; \
+	if ! git diff --cached --quiet; then \
+		git commit -m "chore(release): bump version to $$V"; \
+		echo "$(GREEN)✅ Committed version bump to $$V$(RESET)"; \
+	else \
+		echo "$(YELLOW)No changes to commit$(RESET)"; \
+	fi
+
 bump-version: ## 🔧 Bump version (patch by default)
 	@$(call colorecho, "📋 Calculating next version...")
 	@if [ -z "$(NEW_VERSION)" ]; then \
@@ -356,22 +366,24 @@ auto-release: ## 🚀 Automated release process
 	rollback(){ echo "$(YELLOW)↩️  Error occurred. Returning to '$$START_BRANCH'...$(RESET)"; git checkout -q "$$START_BRANCH" || true; }; \
 	trap rollback ERR; \
 	echo "$(BLUE)🚀 [auto-release] Starting automated release...$(RESET)"; \
-	if [ -n "$(VERSION)" ]; then export NEW_VERSION="$(VERSION)"; fi; \
+	[ -n "$(VERSION)" ] && export NEW_VERSION="$(VERSION)" || true; \
 	$(MAKE) bump-version NEW_VERSION="$$NEW_VERSION"; \
 	if [ -f .NEW_VERSION.tmp ]; then \
 		NEXT_VERSION=$$(cat .NEW_VERSION.tmp); \
 		echo "$(BLUE)Using version: $$NEXT_VERSION$(RESET)"; \
 		$(MAKE) create-release-branch NEW_VERSION="$$NEXT_VERSION"; \
 		$(MAKE) update-version-file NEW_VERSION="$$NEXT_VERSION"; \
+		$(MAKE) commit-version-bump; \
 		$(MAKE) version-tag TAG_VERSION="$$NEXT_VERSION"; \
 		$(MAKE) ensure-clean; \
 		$(MAKE) merge-release; \
 		$(MAKE) push-release; \
 	else \
-		echo "$(RED)Error: Failed to determine version$(RESET)" >&2; exit 1; \
+		echo "$(RED)Error: Failed to determine version$(RESET)"; exit 1; \
 	fi; \
 	trap - ERR; \
 	echo "$(GREEN)🎉 Auto-release completed successfully!$(RESET)"
+
 
 
 update-and-release: ## 📝 Update version, then run auto-release
