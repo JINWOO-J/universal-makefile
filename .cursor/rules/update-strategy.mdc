@@ -1,0 +1,28 @@
+---
+alwaysApply: true
+description: How install.sh detects installation type and updates (submodule/subtree/copy/release)
+---
+
+# Update Strategy (install.sh)
+
+- Detection (in order)
+  - Submodule: `.gitmodules` contains `path = $(MAKEFILE_DIR)`
+  - Subtree: `git log --grep="git-subtree-dir: $(MAKEFILE_DIR)"`
+  - Copy: local `makefiles/` directory present
+  - Release: `$(MAKEFILE_DIR)/.version` present (installed via release tarball)
+
+- Update behavior
+  - Submodule: `git fetch origin $(MAIN_BRANCH)` with fallback to `main` then `master`, then merge/reset
+  - Subtree: `git subtree pull --prefix=$(MAKEFILE_DIR) $(REPO_URL) $(MAIN_BRANCH) --squash`
+  - Copy: reclone repo to temp and re-copy `makefiles`, `templates`, selected files
+  - Release: re-run release archive installer (no git required), honors `.ums-version` pin
+
+- Recommendations
+  - For release installs (via `setup.sh`), use `.makefile-system/install.sh update` to refresh
+  - To pin a specific version, write the tag to `.ums-version` before running update
+  - Ensure `GITHUB_TOKEN` is exported in CI for private/API tarball downloads
+
+- References
+  - [install.sh](mdc:install.sh)
+  - [setup.sh](mdc:setup.sh)
+

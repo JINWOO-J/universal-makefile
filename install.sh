@@ -346,17 +346,30 @@ install_subtree() {
         log_info "Added remote '$remote_name' -> $REPO_URL"
     fi
 
-    git fetch "$remote_name" "$MAIN_BRANCH" --tags --quiet
+    # Discover remote default branch
+    local remote_head
+    remote_head=$(git ls-remote --symref "$remote_name" HEAD 2>/dev/null | sed -n 's@^ref: refs/heads/\([^\t\n\r ]*\)[\t ]*HEAD@\1@p' | head -n1)
+    if [[ -z "$remote_head" ]]; then
+        if git ls-remote --exit-code --heads "$remote_name" main >/dev/null 2>&1; then
+            remote_head=main
+        elif git ls-remote --exit-code --heads "$remote_name" master >/dev/null 2>&1; then
+            remote_head=master
+        else
+            remote_head="$MAIN_BRANCH"
+        fi
+    fi
+    log_info "Using remote default branch: ${remote_head}"
+    git fetch "$remote_name" "$remote_head" --tags --quiet || git fetch "$remote_name" --tags --quiet
 
     if [[ -d "$prefix_dir" ]]; then
         log_warn "Directory '$prefix_dir' already exists. Attempting to merge updates..."
-        if ! git subtree pull --prefix="$prefix_dir" "$remote_name" "$MAIN_BRANCH" --squash; then
+        if ! git subtree pull --prefix="$prefix_dir" "$remote_name" "$remote_head" --squash; then
             log_error "git subtree pull failed. Resolve conflicts then retry or run with --copy"
             exit 1
         fi
         log_success "Subtree updated at '$prefix_dir'"
     else
-        if ! git subtree add --prefix="$prefix_dir" "$remote_name" "$MAIN_BRANCH" --squash; then
+        if ! git subtree add --prefix="$prefix_dir" "$remote_name" "$remote_head" --squash; then
             log_error "git subtree add failed. Ensure repository is clean and committed."
             exit 1
         fi
@@ -879,6 +892,9 @@ update_makefile_system() {
         installed_type="subtree"
     elif [[ -d "makefiles" ]]; then
         installed_type="copy"
+    elif [[ -f "${MAKEFILE_DIR}/.version" ]]; then
+        # setup.sh release install leaves a version pin file here
+        installed_type="release"
     else
         log_error "Universal Makefile System installation not found. Cannot update."
         exit 1
@@ -891,29 +907,54 @@ update_makefile_system() {
             local old_commit
             old_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
 
+            # Determine remote default branch dynamically
+            log_info "Detecting remote default branch..."
+            local remote_head
+            remote_head=$(git -C "$MAKEFILE_DIR" remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p' | head -n1)
+            if [[ -z "$remote_head" ]]; then
+                remote_head=$(git -C "$MAKEFILE_DIR" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' || true)
+            fi
+            if [[ -z "$remote_head" ]]; then
+                # fallbacks
+                if git -C "$MAKEFILE_DIR" ls-remote --exit-code --heads origin main >/dev/null 2>&1; then
+                    remote_head=main
+                elif git -C "$MAKEFILE_DIR" ls-remote --exit-code --heads origin master >/dev/null 2>&1; then
+                    remote_head=master
+                else
+                    remote_head="$MAIN_BRANCH"
+                fi
+            fi
+            log_info "-> Remote default branch: ${remote_head}"
+
             log_info "Fetching latest changes for submodule..."
-            git -C "$MAKEFILE_DIR" fetch origin "$MAIN_BRANCH"
+            git -C "$MAKEFILE_DIR" fetch origin --prune || true
+
+            local current_branch
+            current_branch=$(git -C "$MAKEFILE_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
 
             if [[ "$FORCE_INSTALL" == true ]]; then
-                log_warn "Forcibly updating submodule to the latest version..."
-                git -C "$MAKEFILE_DIR" reset --hard "origin/$MAIN_BRANCH"
+                log_warn "Forcibly updating submodule to origin/${remote_head}..."
+                git -C "$MAKEFILE_DIR" reset --hard "origin/${remote_head}"
                 log_success "Submodule forcibly updated to latest commit from remote."
             else
-                log_info "Attempting to merge latest changes..."
-                if ! git -C "$MAKEFILE_DIR" merge "origin/$MAIN_BRANCH"; then
+                # If detached, check out a local branch tracking remote head to allow merge
+                if [[ "$current_branch" = "HEAD" ]]; then
+                    log_warn "Submodule is in detached HEAD. Checking out local branch '${remote_head}' to proceed with merge..."
+                    git -C "$MAKEFILE_DIR" checkout -B "$remote_head" "origin/${remote_head}" --no-track || true
+                fi
+                log_info "Attempting to merge origin/${remote_head}..."
+                if ! git -C "$MAKEFILE_DIR" merge --ff-only "origin/${remote_head}"; then
                     echo ""
-                    log_error "Merge conflict occurred in submodule."
-                    log_warn "This usually means you have local changes in '${MAKEFILE_DIR}'."
+                    log_error "Merge into submodule failed (non fast-forward)."
+                    log_warn "You may have local changes or diverged history in '${MAKEFILE_DIR}'."
                     if [[ "$DEBUG_MODE" == true ]]; then
                         show_diff
                     else
-                        log_info "To see the conflicting changes, run again with the --debug flag."
+                        log_info "Re-run with --debug to see local changes, or use --force to hard reset."
                     fi
-                    echo ""
-                    log_warn "You can resolve conflicts manually, or run update again with --force to overwrite."
                     exit 1
                 fi
-                log_success "Submodule updated with merge."
+                log_success "Submodule updated with fast-forward merge."
             fi
 
             local new_commit
@@ -935,12 +976,18 @@ update_makefile_system() {
             temp_dir="$(mktemp -d "${UMF_TMP_DIR}/copy-update.XXXXXX")"
             log_info "Cloning latest version from $REPO_URL"
             git clone "$REPO_URL" "$temp_dir/universal-makefile"
-
             cp -r "$temp_dir/universal-makefile/makefiles" .
             cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true
             cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true
             [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .
             log_success "Copied latest files from remote."
+            ;;
+        release)
+            log_info "Re-installing latest release archive..."
+            # Preserve desired ref if specified via .ums-version, else latest
+            install_release || {
+                log_error "Release update failed"; exit 1; }
+            log_success "Release archive updated"
             ;;
     esac
 }

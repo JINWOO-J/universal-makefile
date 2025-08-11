@@ -224,6 +224,72 @@ make finish-release
 make auto-release
 ```
 
+## 📦 GitHub Release 프로세스
+
+### 1) 기본 개념
+
+- 이 시스템은 Git Flow를 기반으로 릴리스를 만듭니다. 핵심 단계는 다음과 같습니다.
+  - 버전 계산: `make bump-version` → `.NEW_VERSION.tmp` 파일 생성/업데이트
+  - 릴리스 브랜치 생성: `make create-release-branch`
+  - 릴리스 브랜치 푸시: `make push-release-branch`
+  - 릴리스 마감: `make finish-release` (main/develop 병합, 태깅, 필요 시 GitHub Release 생성)
+- GitHub Actions: `install-e2e.yml`는 릴리스가 “published” 될 때만 실행되도록 구성되어 있습니다.
+
+### 2) 수동 릴리스 절차(권장)
+
+```bash
+# 0) 시작은 develop 브랜치에서
+git checkout develop && git pull
+
+# 1) 버전 계산(또는 직접 지정)
+make bump-version              # 자동 patch 증가 (vX.Y.Z → vX.Y.(Z+1))
+# 또는 직접 지정하고 싶다면
+# NEW_VERSION=v1.2.3 make bump-version
+
+# 2) 릴리스 브랜치 생성 (release/vX.Y.Z)
+make create-release-branch
+
+# 3) 필요한 변경/검증 커밋 후 푸시
+make push-release-branch
+
+# 4) 릴리스 마감: main/develop 병합 + 태그 + (옵션) GitHub Release 생성
+make finish-release
+```
+
+주의사항
+- `make push-release-branch`는 현재 브랜치가 `release/*`여야 합니다.
+- `.NEW_VERSION.tmp`가 없으면 `make bump-version`로 생성하거나 `NEW_VERSION` 환경변수를 지정하세요.
+- `make finish-release`는 `gh` CLI가 설치되어 있으면 GitHub Release까지 자동 생성합니다. 없으면 태그까지만 생성합니다.
+
+### 3) 버전 업데이트 후 자동 릴리스(ur)
+
+```bash
+# 버전 파일 업데이트(+ 커밋) 후 자동 릴리스 전체 실행
+make ur
+
+# 동의어
+make update-and-release
+```
+
+### 4) 완전 자동화
+
+```bash
+# VERSION 환경변수를 주면 해당 버전으로, 없으면 bump-version 규칙으로 동작
+make auto-release [VERSION=v1.2.3]
+```
+
+### 5) GitHub UI로 릴리스 만들기(대안)
+
+1. 릴리스 브랜치를 병합해 태그가 생성되었다면, GitHub의 “Releases → Draft a new release”에서 태그 `vX.Y.Z`를 선택합니다.
+2. 타이틀/노트를 작성하고 “Publish release”를 누릅니다.
+3. 이 레포의 `install-e2e.yml`은 릴리스가 공개되면 자동으로 e2e 설치 테스트를 실행합니다.
+
+### 6) 토큰/권한 관련
+
+- CI나 스크립트에서 private 아카이브/서브모듈 접근이 필요하다면 `GITHUB_TOKEN`을 환경변수로 제공하세요.
+- GitHub Actions에서는 `secrets.UMF_TOKEN`을 `GITHUB_TOKEN`으로 매핑하도록 워크플로가 구성되어 있습니다.
+
+
 ### 멀티플랫폼 빌드
 
 ```bash

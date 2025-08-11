@@ -1,0 +1,20 @@
+---
+alwaysApply: true
+description: End-to-end tests and CI execution for installer/setup scripts
+---
+
+# E2E Tests and CI
+
+- Test runner: [scripts/test-install.sh](mdc:scripts/test-install.sh)
+  - Covers installer modes: subtree, submodule, copy, release, prefix, uninstall dry-run
+  - Covers setup modes: local delegate, bootstrap default, bootstrap with version
+
+- CI workflow: [github/workflows/install-e2e.yml](mdc:.github/workflows/install-e2e.yml)
+  - Triggers only on GitHub Release published events
+  - Exports `GITHUB_TOKEN` from `secrets.UMF_TOKEN`
+  - Configures git to use HTTPS with token for private fetches
+
+- Notes
+  - Network flakiness is handled with `CURL_RETRY_MAX` and `CURL_RETRY_DELAY_SEC`
+  - Setup scaffolds `Makefile`, `Makefile.universal`, and `project.mk` to ensure `make help` succeeds
+

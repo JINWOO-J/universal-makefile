@@ -1,0 +1,31 @@
+---
+alwaysApply: true
+description: How setup.sh behaves in local and bootstrap modes, scaffolding, and tarball auth
+---
+
+# setup.sh Behavior
+
+- Modes
+  - Local (inside a git repo): verifies/installs Makefile system, scaffolds missing files, then runs `make`.
+  - Bootstrap (outside a git repo): downloads repo (release or branch snapshot), installs Makefile system into the new dir, scaffolds minimal files.
+
+- Local Mode
+  - Version resolution: reads `.ums-version` and `${MAKEFILE_SYSTEM_DIR}/.version` if present; otherwise fetches latest via API.
+  - Installation: uses internal `install_from_release` (no delegation) to populate `.makefile-system`.
+  - Scaffolding: if `Makefile` or `project.mk` is missing, creates them using `scaffold_project_files`.
+    - `Makefile.universal` sets `MAKEFILE_SYSTEM_DIR ?= .makefile-system` and `MAKEFILE_DIR ?= $(MAKEFILE_SYSTEM_DIR)`.
+    - All includes use `$(MAKEFILE_DIR)/makefiles/*.mk` to avoid absolute path issues.
+  - Make arguments: strips `--` and defaults to `help` when no target is provided.
+  - Pipefail: tar list extraction around `tar -tzf` is wrapped with `set +o pipefail`/`set -o pipefail` to avoid SIGPIPE failures.
+
+- Bootstrap Mode
+  - Selects desired version from `.ums-version` or latest release; falls back to `MAIN_BRANCH` snapshot if API lookup fails.
+  - With `GITHUB_TOKEN` set, uses API tarball URLs (works for private repos); otherwise public archive URLs.
+  - After extracting, runs `install_from_release` inside the new project directory and then `scaffold_project_files`.
+  - Ensures `project.mk`, `Makefile`, `Makefile.universal` exist so `make help` works immediately.
+
+- References
+  - [setup.sh](mdc:setup.sh)
+  - [makefiles/core.mk](mdc:makefiles/core.mk)
+  - [templates/project.mk.template](mdc:templates/project.mk.template)
+

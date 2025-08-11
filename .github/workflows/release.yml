@@ -1,0 +1,63 @@
+name: Create Release on tag
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v1.2.3). If empty, use GITHUB_REF_NAME on push.'
+        required: false
+
+permissions:
+  contents: write     # 릴리스/태그 쓰기에 꼭 필요
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select TAG
+        id: sel
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_REF_NAME}"   # push 이벤트면 여기로 들어옴
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
+          echo "$TAG" > .NEW_VERSION.tmp   
+
+      - name: Auth gh with GITHUB_TOKEN
+        env:
+          GITHUB_TOKEN: ${{ secrets.UMF_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | gh auth login --with-token
+
+      - name: Create or update release
+        env:
+          TAG: ${{ steps.sel.outputs.TAG }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Updating notes…"
+            gh release edit "$TAG" --generate-notes
+          else
+            gh release create "$TAG" --title "Release $TAG" --generate-notes
+          fi
+
+      # (선택) 빌드 아티팩트 올리려면 아래 주석 해제
+      # - name: Build
+      #   run: |
+      #     make build
+      #
+      # - name: Upload artifact to release
+      #   env:
+      #     TAG: ${{ steps.sel.outputs.TAG }}
+      #   run: |
+      #     gh release upload "$TAG" dist/* --clobber
