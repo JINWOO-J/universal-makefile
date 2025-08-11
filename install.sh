@@ -994,3 +994,4 @@ install_github_workflow() {
     if [[ ${#files[@]} -eq 0 ]]; then
         log_warn "No workflows to install in $src_dir"
         return
+}
