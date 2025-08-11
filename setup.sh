@@ -353,6 +353,58 @@ update_repo_from_release() {
     log_success "Project updated to '${desired}'."
 }
 
+scaffold_project_files() {
+    # Ensure minimal files so that `make help` works in a fresh directory
+    local mf_dir="${MAKEFILE_SYSTEM_DIR:-.makefile-system}"
+    if [ ! -f "Makefile.universal" ]; then
+        cat > Makefile.universal << 'EOF'
+# === Created by setup.sh (scaffold) ===
+
+# 1. Project config
+-include project.mk
+-include .project.local.mk
+
+# 2. Environments
+ENV ?= development
+-include environments/$(ENV).mk
+-include .project.local.mk
+
+# 3. Core system modules
+include $(MAKEFILE_SYSTEM_DIR)/makefiles/core.mk
+include $(MAKEFILE_SYSTEM_DIR)/makefiles/help.mk
+include $(MAKEFILE_SYSTEM_DIR)/makefiles/version.mk
+include $(MAKEFILE_SYSTEM_DIR)/makefiles/docker.mk
+include $(MAKEFILE_SYSTEM_DIR)/makefiles/compose.mk
+include $(MAKEFILE_SYSTEM_DIR)/makefiles/git-flow.mk
+include $(MAKEFILE_SYSTEM_DIR)/makefiles/cleanup.mk
+EOF
+        log_success "Makefile.universal scaffolded"
+    fi
+
+    if [ ! -f "Makefile" ]; then
+        cat > Makefile << 'EOF'
+# === Created by setup.sh (scaffold) ===
+MAKEFILE_SYSTEM_DIR := .makefile-system
+include Makefile.universal
+EOF
+        log_success "Makefile scaffolded"
+    fi
+
+    if [ ! -f "project.mk" ]; then
+        if [ -f "${mf_dir}/templates/project.mk.template" ]; then
+            cp "${mf_dir}/templates/project.mk.template" project.mk
+            log_success "project.mk created from template"
+        else
+            cat > project.mk << 'EOF'
+# === Created by setup.sh (scaffold) ===
+NAME = $(notdir $(CURDIR))
+MAKEFILE_DIR = .makefile-system
+EOF
+            log_success "project.mk scaffolded (minimal)"
+        fi
+    fi
+}
+
 
 # 현재 디렉토리가 Git 리포지토리인지 확인
 parse_cli_args "$@"
@@ -598,6 +650,7 @@ else
           if [ -n "${DESIRED_SYS_TAG}" ]; then
             log_info "Installing Makefile system via release ${DESIRED_SYS_TAG}..."
             install_from_release "${DESIRED_SYS_TAG}"
+            scaffold_project_files
           else
             log_warn "Failed to resolve latest release for Makefile system; skipping integration."
           fi
@@ -631,6 +684,7 @@ else
               cd "${GITHUB_REPO}" &&
               log_info "Installing Makefile system via release ${DESIRED_VERSION}..."
               install_from_release "${DESIRED_VERSION}"
+              scaffold_project_files
             )
         fi
     fi
