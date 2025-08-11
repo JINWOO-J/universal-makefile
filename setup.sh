@@ -504,11 +504,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         fi
     fi
 
-    # 사용자가 원하는 방식: setup.sh만으로 release 설치 효과
-    if command -v bash >/dev/null 2>&1 && [ -f "install.sh" ]; then
-        log_info "Delegating to install.sh --release for scaffolding and integration..."
-        bash install.sh install --release
-    fi
+    # 설치 위임 대신 직접 통합은 이미 위에서 처리됨. 중복 작업 방지 위해 위임 생략
 
     log_info "Handing over to make: make $@"
     echo "------------------------------------------------------------"
@@ -545,15 +541,23 @@ else
         TMPDIR="$(mktemp -d)" || { log_warn "Failed to create temp directory"; exit 1; }
         cleanup_tmp_branch() { rm -rf "${TMPDIR}" >/dev/null 2>&1 || true; }
         trap cleanup_tmp_branch EXIT INT TERM
-        SNAP_PRIMARY="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/heads/${MAIN_BRANCH}.tar.gz"
-        SNAP_MIRROR="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/heads/${MAIN_BRANCH}"
+        # 토큰이 있으면 API tarball을 사용하여 private 레포에서도 동작하도록 함
+        auth_args=()
+        if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            SNAP_PRIMARY="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/tarball/${MAIN_BRANCH}"
+            SNAP_MIRROR="${SNAP_PRIMARY}"
+            auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Accept: application/vnd.github+json")
+        else
+            SNAP_PRIMARY="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/heads/${MAIN_BRANCH}.tar.gz"
+            SNAP_MIRROR="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/heads/${MAIN_BRANCH}"
+        fi
         TARBALL_PATH="${TMPDIR}/repo.tar.gz"
         success=0
         for src in primary mirror; do
             url="$([ "$src" = "primary" ] && echo "${SNAP_PRIMARY}" || echo "${SNAP_MIRROR}")"
             for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
                 log_info "Downloading snapshot (${src} try ${attempt}/${CURL_RETRY_MAX}): ${url}"
-                if curl -fSL --connect-timeout 10 --max-time 300 -o "${TARBALL_PATH}" "${url}"; then
+                if curl -fSL --connect-timeout 10 --max-time 300 "${auth_args[@]}" -o "${TARBALL_PATH}" "${url}"; then
                     if [ -s "${TARBALL_PATH}" ]; then success=1; break; fi
                 fi
                 sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
@@ -587,12 +591,17 @@ else
         fi
         mv "${TMPDIR}/${ROOT_DIR_NAME_FALLBACK}" "${GITHUB_REPO}"
         log_success "Project downloaded to '${GITHUB_REPO}' from branch ${MAIN_BRANCH}."
-        if [ -f "${GITHUB_REPO}/install.sh" ]; then
-            log_info "Running install.sh --release in ${GITHUB_REPO}..."
-            (cd "${GITHUB_REPO}" && bash install.sh install --release)
-        else
-            log_warn "install.sh not found in '${GITHUB_REPO}'. Skipping install step."
-        fi
+        # 내부 install.sh 대신 현재 스크립트의 설치 함수로 .makefile-system 통합
+        (
+          cd "${GITHUB_REPO}" &&
+          DESIRED_SYS_TAG="$(fetch_latest_release_tag || true)"
+          if [ -n "${DESIRED_SYS_TAG}" ]; then
+            log_info "Installing Makefile system via release ${DESIRED_SYS_TAG}..."
+            install_from_release "${DESIRED_SYS_TAG}"
+          else
+            log_warn "Failed to resolve latest release for Makefile system; skipping integration."
+          fi
+        )
     else
         # Release-archive bootstrap
         if [ -e "${GITHUB_REPO}" ]; then
@@ -617,12 +626,12 @@ else
             fi
         else
             install_repo_from_release "${DESIRED_VERSION}"
-            if [ -f "${GITHUB_REPO}/install.sh" ]; then
-                log_info "Running install.sh --release in ${GITHUB_REPO}..."
-                bash ${GITHUB_REPO}/install.sh install --release
-            else
-                log_warn "install.sh not found in '${GITHUB_REPO}'. Skipping install step."
-            fi
+            # 내부 install.sh 대신 현재 스크립트의 설치 함수로 .makefile-system 통합
+            (
+              cd "${GITHUB_REPO}" &&
+              log_info "Installing Makefile system via release ${DESIRED_VERSION}..."
+              install_from_release "${DESIRED_VERSION}"
+            )
         fi
     fi
 

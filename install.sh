@@ -453,11 +453,15 @@ install_release() {
     log_success "Download verified: valid tar.gz archive."
     log_debug "tarball size=$(stat -c%s "${tarball}" 2>/dev/null || wc -c <"${tarball}") bytes"
     log_debug "tar (first 10 entries):"
-    tar -tzf "${tarball}" 2>/dev/null | head -n 10 | sed 's/^/  - /'
+   set +o pipefail
+   tar -tzf "${tarball}" 2>/dev/null | head -n 10 | sed 's/^/  - /' || true
+   set -o pipefail
 
     # 6) 최상위 디렉터리명 판별 (stderr 억제로 SIGPIPE 경고 숨김)
     local ROOT_DIR_NAME
-    ROOT_DIR_NAME="$(tar -tzf "${tarball}" 2>/dev/null | head -n1 | cut -d/ -f1)"
+   set +o pipefail
+   ROOT_DIR_NAME="$(tar -tzf "${tarball}" 2>/dev/null | head -n1 | cut -d/ -f1 || true)"
+   set -o pipefail
     log_debug "ROOT_DIR_NAME(raw)='${ROOT_DIR_NAME}'"
     if [[ -z "${ROOT_DIR_NAME}" ]]; then
         log_error "Could not determine top-level directory inside the archive."
