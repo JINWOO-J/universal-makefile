@@ -1,2 +1,2 @@
 NAME=universal-makefile
-VERSION = v1.0.19
+VERSION = v1.0.20
