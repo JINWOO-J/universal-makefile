@@ -360,6 +360,10 @@ scaffold_project_files() {
         cat > Makefile.universal << 'EOF'
 # === Created by setup.sh (scaffold) ===
 
+# System dir variables
+MAKEFILE_SYSTEM_DIR ?= .makefile-system
+MAKEFILE_DIR ?= $(MAKEFILE_SYSTEM_DIR)
+
 # 1. Project config
 -include project.mk
 -include .project.local.mk
@@ -370,13 +374,13 @@ ENV ?= development
 -include .project.local.mk
 
 # 3. Core system modules
-include $(MAKEFILE_SYSTEM_DIR)/makefiles/core.mk
-include $(MAKEFILE_SYSTEM_DIR)/makefiles/help.mk
-include $(MAKEFILE_SYSTEM_DIR)/makefiles/version.mk
-include $(MAKEFILE_SYSTEM_DIR)/makefiles/docker.mk
-include $(MAKEFILE_SYSTEM_DIR)/makefiles/compose.mk
-include $(MAKEFILE_SYSTEM_DIR)/makefiles/git-flow.mk
-include $(MAKEFILE_SYSTEM_DIR)/makefiles/cleanup.mk
+include $(MAKEFILE_DIR)/makefiles/core.mk
+include $(MAKEFILE_DIR)/makefiles/help.mk
+include $(MAKEFILE_DIR)/makefiles/version.mk
+include $(MAKEFILE_DIR)/makefiles/docker.mk
+include $(MAKEFILE_DIR)/makefiles/compose.mk
+include $(MAKEFILE_DIR)/makefiles/git-flow.mk
+include $(MAKEFILE_DIR)/makefiles/cleanup.mk
 EOF
         log_success "Makefile.universal scaffolded"
     fi
@@ -385,6 +389,7 @@ EOF
         cat > Makefile << 'EOF'
 # === Created by setup.sh (scaffold) ===
 MAKEFILE_SYSTEM_DIR := .makefile-system
+MAKEFILE_DIR := $(MAKEFILE_SYSTEM_DIR)
 include Makefile.universal
 EOF
         log_success "Makefile scaffolded"
