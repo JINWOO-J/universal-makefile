@@ -943,19 +943,18 @@ update_makefile_system() {
             temp_dir="$(mktemp -d "${UMF_TMP_DIR}/copy-update.XXXXXX")"
             log_info "Cloning latest version from $REPO_URL"
             git clone "$REPO_URL" "$temp_dir/universal-makefile"
+            cp -r "$temp_dir/universal-makefile/makefiles" .
+            cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true
+            cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true
+            [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .
+            log_success "Copied latest files from remote."
+            ;;
         release)
             log_info "Re-installing latest release archive..."
             # Preserve desired ref if specified via .ums-version, else latest
             install_release || {
                 log_error "Release update failed"; exit 1; }
             log_success "Release archive updated"
-            ;;
-
-            cp -r "$temp_dir/universal-makefile/makefiles" .
-            cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true
-            cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true
-            [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .
-            log_success "Copied latest files from remote."
             ;;
     esac
 }
