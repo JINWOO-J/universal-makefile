@@ -359,16 +359,47 @@ push-release-clean: push-release ## 🧹 Also delete remote release/* branch (op
 	fi
 
 
+# github-release:
+# 	@TAG=$$(cat .NEW_VERSION.tmp); \
+# 	set -e; \
+# 	if [ -n "$$GITHUB_TOKEN$$GH_TOKEN" ]; then \
+# 	  echo "$${GITHUB_TOKEN:-$$GH_TOKEN}" | gh auth login --with-token >/dev/null 2>&1 || true; \
+# 	  echo "Checking token scopes..."; \
+# 	  curl -sI -H "Authorization: token $${GITHUB_TOKEN:-$$GH_TOKEN}" https://api.github.com/user | grep -i 'x-oauth-scopes\|x-accepted-oauth-scopes' || true; \
+# 	fi; \
+# 	if ! gh release create "$$TAG" --title "Release $$TAG" --generate-notes 2>err.log; then \
+# 	  if grep -q "HTTP 403" err.log; then \
+# 	    echo "$(RED)403: Token lacks release permission.$(RESET)"; \
+# 	    echo "Needs: classic 'repo' or fine-grained 'Contents: write' (+ SSO if org)."; \
+# 	  fi; \
+# 	  cat err.log >&2; rm -f err.log; exit 1; \
+# 	fi; rm -f err.log; echo "$(GREEN)✅ Release $$TAG created$(RESET)"
+
+
+
 github-release:
 	@TAG=$$(cat .NEW_VERSION.tmp); \
-	set -e; \
+	echo "$(GREEN)🚀 Starting GitHub Release for $$TAG$(RESET)"; \
+	set -euo pipefail; \
+	TOKEN="$${GITHUB_TOKEN:-$$GH_TOKEN}"; \
+	if [ -n "$$TOKEN" ]; then \
+	  LEN=$$(printf %s "$$TOKEN" | wc -c); \
+	  if printf %s "$$TOKEN" | grep -q '^github_pat_'; then TYPE=fine-grained; else TYPE=classic; fi; \
+	  echo "🔑 Token: $$TYPE ($$LEN chars)"; \
+	  echo "$$TOKEN" | gh auth login --with-token >/dev/null 2>&1 || true; \
+	  echo "Scopes:"; \
+	  curl -sI -H "Authorization: token $$TOKEN" https://api.github.com/user \
+	    | grep -i 'x-oauth-scopes\|x-accepted-oauth-scopes' || true; \
+	fi; \
 	if ! gh release create "$$TAG" --title "Release $$TAG" --generate-notes 2>err.log; then \
-		if grep -q "HTTP 403" err.log; then \
-			echo "$(RED)403: Token lacks release permission.$(RESET)"; \
-			echo "Try: gh auth switch -h github.com -s keyring  # or export GH_TOKEN=<PAT with repo>"; \
-		fi; \
-		cat err.log >&2; rm -f err.log; exit 1; \
-	fi; rm -f err.log; echo "$(GREEN)✅ Release $$TAG created$(RESET)"
+	  if grep -q "HTTP 403" err.log; then \
+	    echo "$(RED)403: Token lacks release permission.$(RESET)"; \
+	    echo "Needs: classic 'repo' or fine-grained 'Contents: write' (+ SSO if org)."; \
+	  fi; \
+	  cat err.log >&2; rm -f err.log; exit 1; \
+	fi; \
+	rm -f err.log; \
+	echo "$(GREEN)✅ Release $$TAG created$(RESET)"
 
 
 # Auto release process
