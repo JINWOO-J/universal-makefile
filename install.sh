@@ -378,17 +378,17 @@ install_subtree() {
 install_release() {
     log_info "Installing via GitHub release tarball..."
 
-    # 원하는 버전 결정: .ums-version > 최신 릴리스 > 브랜치 스냅샷
+    # 1) 원하는 버전 결정
     local desired=""
-    if [[ -n "${DESIRED_REF}" ]]; then
+    if [[ -n "${DESIRED_REF:-}" ]]; then
         desired="${DESIRED_REF}"
         log_info "Using explicit ref: ${desired}"
-    elif [ -f ".ums-version" ]; then
+    elif [[ -f ".ums-version" ]]; then
         desired="$(cat .ums-version)"
         log_info "Pinned version found in .ums-version: ${desired}"
     else
         desired="$(fetch_latest_release_tag || true)"
-        if [ -z "${desired}" ]; then
+        if [[ -z "${desired}" ]]; then
             log_warn "Could not resolve latest release via API. Falling back to branch snapshot: ${MAIN_BRANCH}"
             desired="${MAIN_BRANCH}"
         else
@@ -396,22 +396,21 @@ install_release() {
         fi
     fi
 
-    local TMPDIR
-    TMPDIR="$(mktemp -d)" || { log_error "Failed to create temp directory"; exit 1; }
-    trap 'rm -rf "${TMPDIR}" >/dev/null 2>&1 || true' EXIT INT TERM
-    local TARBALL_PATH="${TMPDIR}/umf.tar.gz"
+    # 2) 작업 디렉토리 준비 (전역 UMF_TMP_DIR 하위 사용)
+    local workdir="${UMF_TMP_DIR}/release.$$"
+    mkdir -p "${workdir}"
+    local tarball="${workdir}/umf.tar.gz"
 
+    # 3) 다운로드 URL/헤더 준비
     local auth_args=()
     local primary_url="" mirror_url=""
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        # 토큰이 있으면 브랜치/태그 구분 없이 API tarball 사용 (프라이빗 지원)
+        log_info "Using authenticated API tarball download"
         primary_url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/tarball/${desired}"
         mirror_url="${primary_url}"
         auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Accept: application/vnd.github+json")
-        log_info "Using authenticated API tarball download"
     else
         if [[ "${desired}" = "${MAIN_BRANCH}" ]]; then
-            # 브랜치 스냅샷 (퍼블릭 전제)
             primary_url="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/heads/${MAIN_BRANCH}.tar.gz"
             mirror_url="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/heads/${MAIN_BRANCH}"
         else
@@ -420,89 +419,63 @@ install_release() {
         fi
     fi
 
+    # 4) 다운로드 (재시도 포함)
     local success=0
     for src in primary mirror; do
         local url="$([ "$src" = "primary" ] && echo "${primary_url}" || echo "${mirror_url}")"
         for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
             log_info "Downloading (${src} try ${attempt}/${CURL_RETRY_MAX}): ${url}"
             if command -v curl >/dev/null 2>&1; then
-                if curl -fSL --connect-timeout 10 --max-time 300 "${auth_args[@]}" -o "${TARBALL_PATH}" "${url}"; then
-                    [ -s "${TARBALL_PATH}" ] && success=1 && break
+                if curl -fSL --connect-timeout 10 --max-time 300 "${auth_args[@]}" -o "${tarball}" "${url}"; then
+                    [[ -s "${tarball}" ]] && success=1 && break
                 fi
             elif command -v wget >/dev/null 2>&1; then
                 local wget_hdr=()
                 [[ -n "${GITHUB_TOKEN:-}" ]] && wget_hdr=(--header="Authorization: Bearer ${GITHUB_TOKEN}")
-                if wget -q "${wget_hdr[@]}" -O "${TARBALL_PATH}" "${url}"; then
-                    [ -s "${TARBALL_PATH}" ] && success=1 && break
+                if wget -q "${wget_hdr[@]}" -O "${tarball}" "${url}"; then
+                    [[ -s "${tarball}" ]] && success=1 && break
                 fi
             fi
             sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
         done
-        [ "${success}" = "1" ] && break
+        [[ "${success}" = "1" ]] && break
     done
-    if [ "${success}" != "1" ]; then
+    if [[ "${success}" != "1" ]]; then
         log_error "Failed to download release tarball for ${desired}."
         [[ -n "${GITHUB_TOKEN:-}" ]] && log_warn "If private repo, ensure token has proper scopes and SSO authorization."
         exit 1
     fi
 
-    # 추가 검증: 다운로드 파일 존재/크기 확인
-    if [ ! -s "${TARBALL_PATH}" ]; then
-        log_error "Downloaded tarball not found or empty: ${TARBALL_PATH}"
-        exit 1
-    fi
-
-    # 추가 검증: tar.gz 유효성 확인 (MIME 및 압축 무결성)
-    if command -v file >/dev/null 2>&1; then
-        mime=$(file -b --mime-type "${TARBALL_PATH}" || true)
-        case "$mime" in
-            application/x-gzip|application/gzip|application/octet-stream)
-                : ;; # 허용
-            *)
-                log_warn "Unexpected MIME type for tarball: ${mime}. Will validate with tar."
-                ;;
-        esac
-    fi
-    if ! tar -tzf "${TARBALL_PATH}" >/dev/null 2>&1; then
+    # 5) 무결성 확인
+    if ! tar -tzf "${tarball}" >/dev/null 2>&1; then
         log_error "Downloaded file is not a valid tar.gz archive"
         exit 1
     fi
     log_success "Download verified: valid tar.gz archive."
 
-    # 체크섬 검증 (릴리스 태그일 때만)
-    if [[ "${desired}" != "${MAIN_BRANCH}" ]]; then
-        local EXPECTED_SHA256="${UMS_TARBALL_SHA256:-}"
-        if [ -z "${EXPECTED_SHA256}" ] && [ -f ".ums-version.sha256" ]; then
-            EXPECTED_SHA256="$(tr -d ' \n\r' < .ums-version.sha256)"
-        fi
-        if [ -n "${EXPECTED_SHA256}" ]; then
-            if verify_sha256 "${TARBALL_PATH}" "${EXPECTED_SHA256}"; then
-                log_success "SHA256 checksum verified."
-            else
-                log_error "SHA256 checksum mismatch or verification unavailable."
-                exit 1
-            fi
-        fi
-    fi
+    # 6) 해제 (stdout 사용 금지, tar 경고 억제)
+    local extract_dir="${workdir}/extract"
+    mkdir -p "${extract_dir}"
+    tar -xzf "${tarball}" -C "${extract_dir}"
 
-    # 전개
-    tar -xzf "${TARBALL_PATH}" -C "${TMPDIR}"
-    # 루트 디렉토리명은 가변적(특히 API tarball). 첫 엔트리 기준으로 판별
+    # 최상위 디렉터리 이름 판별 (stderr 억제로 SIGPIPE 경고 숨김)
     local ROOT_DIR_NAME
-    ROOT_DIR_NAME="$(tar -tzf "${TARBALL_PATH}" | head -1 | cut -d/ -f1)"
-    if [ -z "${ROOT_DIR_NAME}" ] || [ ! -d "${TMPDIR}/${ROOT_DIR_NAME}" ]; then
+    ROOT_DIR_NAME="$(tar -tzf "${tarball}" 2>/dev/null | head -n1 | cut -d/ -f1)"
+    if [[ -z "${ROOT_DIR_NAME}" || ! -d "${extract_dir}/${ROOT_DIR_NAME}" ]]; then
         log_error "Extracted directory not found."
         exit 1
     fi
 
-    # 기존 시스템 제거 후 교체
+    # 7) 설치 위치 갱신
     rm -rf "${MAKEFILE_DIR}"
-    mv "${TMPDIR}/${ROOT_DIR_NAME}" "${MAKEFILE_DIR}"
+    mv "${extract_dir}/${ROOT_DIR_NAME}" "${MAKEFILE_DIR}"
+
     if [[ "${desired}" != "${MAIN_BRANCH}" ]]; then
         echo "${desired}" > "${MAKEFILE_DIR}/.version"
     fi
     log_success "Makefile system installed at '${MAKEFILE_DIR}' (source: ${desired})."
 }
+
 
 # create_main_makefile 함수 전체를 이 코드로 교체합니다.
 # create_main_makefile() {
