@@ -69,7 +69,15 @@ fetch_latest_release_tag() {
     local auth_args=()
     [[ -n "${GITHUB_TOKEN:-}" ]] && auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
     local tag
-    tag=$(curl -fsSL "${auth_args[@]}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+    if command -v curl >/dev/null 2>&1; then
+        tag=$(curl -fsSL "${auth_args[@]}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+    elif command -v wget >/dev/null 2>&1; then
+        if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            tag=$(wget -qO- --header="Authorization: Bearer ${GITHUB_TOKEN}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+        else
+            tag=$(wget -qO- "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+        fi
+    fi
     if [ -n "$tag" ]; then
         echo "$tag"; return 0
     fi
@@ -364,7 +372,10 @@ install_release() {
 
     # 원하는 버전 결정: .ums-version > 최신 릴리스 > 브랜치 스냅샷
     local desired=""
-    if [ -f ".ums-version" ]; then
+    if [[ -n "${DESIRED_REF}" ]]; then
+        desired="${DESIRED_REF}"
+        log_info "Using explicit ref: ${desired}"
+    elif [ -f ".ums-version" ]; then
         desired="$(cat .ums-version)"
         log_info "Pinned version found in .ums-version: ${desired}"
     else
@@ -406,8 +417,16 @@ install_release() {
         local url="$([ "$src" = "primary" ] && echo "${primary_url}" || echo "${mirror_url}")"
         for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
             log_info "Downloading (${src} try ${attempt}/${CURL_RETRY_MAX}): ${url}"
-            if curl -fSL --connect-timeout 10 --max-time 300 "${auth_args[@]}" -o "${TARBALL_PATH}" "${url}"; then
-                if [ -s "${TARBALL_PATH}" ]; then success=1; break; fi
+            if command -v curl >/dev/null 2>&1; then
+                if curl -fSL --connect-timeout 10 --max-time 300 "${auth_args[@]}" -o "${TARBALL_PATH}" "${url}"; then
+                    [ -s "${TARBALL_PATH}" ] && success=1 && break
+                fi
+            elif command -v wget >/dev/null 2>&1; then
+                local wget_hdr=()
+                [[ -n "${GITHUB_TOKEN:-}" ]] && wget_hdr=(--header="Authorization: Bearer ${GITHUB_TOKEN}")
+                if wget -q "${wget_hdr[@]}" -O "${TARBALL_PATH}" "${url}"; then
+                    [ -s "${TARBALL_PATH}" ] && success=1 && break
+                fi
             fi
             sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
         done
@@ -621,13 +640,13 @@ EOF
 # This Makefile automatically initializes the submodule system on the first run.
 
 # Define the location of the Makefile system and the file to check for.
-MAKEFILE_SYSTEM_DIR := .makefile-system
+MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
 MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile
 
 # If the check file is missing (e.g., after a fresh git clone),
 # run 'git submodule update' automatically.
 ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
-\$(warning ⚠️  Makefile system not found in .makefile-system. Initializing submodule...)
+\$(warning ⚠️  Makefile system not found in \$(MAKEFILE_SYSTEM_DIR). Initializing submodule...)
 \$(shell git submodule update --init --recursive || exit 1)
 endif
 
@@ -645,10 +664,10 @@ EOF
 
 # --- Start of Universal Makefile System ---
 # Automatically initialize submodule if it's missing.
-MAKEFILE_SYSTEM_DIR := .makefile-system
+MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
 MAKEFILE_SYSTEM_CHECK_FILE := \$(MAKEFILE_SYSTEM_DIR)/Makefile
 ifeq (\$(wildcard \$(MAKEFILE_SYSTEM_CHECK_FILE)),)
-\$(warning ⚠️  Makefile system not found in .makefile-system. Initializing submodule...)
+\$(warning ⚠️  Makefile system not found in \$(MAKEFILE_SYSTEM_DIR). Initializing submodule...)
 \$(shell git submodule update --init --recursive || exit 1)
 endif
 include Makefile.universal
@@ -777,6 +796,11 @@ safe_rm() {
 
 uninstall() {
     echo "${BLUE}Uninstalling Universal Makefile System...${RESET}"
+
+    if [[ "$FORCE_INSTALL" != true && "$YES" != true && "$DRY_RUN" != true ]]; then
+        read -rp "Proceed with uninstall? This will remove generated files. [y/N]: " yn
+        [[ "$yn" =~ ^[Yy]$ ]] || { log_warn "Aborted by user."; exit 0; }
+    fi
 
     local backup_dir=""
     if [[ "$BACKUP" == true ]]; then
@@ -1083,7 +1107,12 @@ setup_app_example() {
             exit 1
         fi
         echo ""
-        read -rp "Select example to setup (1-${#apps[@]}) [q to quit]: " choice
+        if [[ "$YES" == true ]]; then
+            choice=1
+            log_info "--yes provided; selecting first example: ${apps[0]}"
+        else
+            read -rp "Select example to setup (1-${#apps[@]}) [q to quit]: " choice
+        fi
         [[ "$choice" == "q" || "$choice" == "Q" ]] && log_warn "Aborted by user." && exit 0
         [[ "$choice" =~ ^[0-9]+$ ]] || { log_error "Invalid input"; exit 1; }
         app_type="${apps[$((choice-1))]}"
@@ -1097,7 +1126,7 @@ setup_app_example() {
 
     for file in "$template_dir"/*; do
         fname=$(basename "$file")
-        if [[ -e "$fname" && "$FORCE_INSTALL" != true ]]; then
+        if [[ -e "$fname" && "$FORCE_INSTALL" != true && "$YES" != true ]]; then
             read -rp "File $fname already exists. Overwrite? [y/N]: " yn
             [[ "$yn" =~ ^[Yy]$ ]] || { log_warn "Skipped $fname"; continue; }
         fi
