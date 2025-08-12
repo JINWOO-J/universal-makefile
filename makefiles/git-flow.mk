@@ -29,7 +29,7 @@ endef
 # Git 상태 확인
 # ================================================================
 
-ensure-clean:
+ensure-clean: ## 🌿 Ensure clean working directory
 	@git update-index -q --refresh
 	@if ! git diff-index --quiet HEAD --; then \
 		echo "$(RED)Error: You have uncommitted changes. Commit or stash first.$(RESET)"; \
@@ -50,6 +50,13 @@ git-status: ## 🌿 Show comprehensive git status
 	@echo ""
 	@echo "$(BLUE)Branch Tracking:$(RESET)"
 	@git branch -vv | grep "^\*" || echo "  Not tracking any remote"
+	@UP=$$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "none"); echo "  Upstream: $$UP"
+	@if [ "$$UP" != "none" ]; then git rev-list --left-right --count $$UP...HEAD 2>/dev/null | awk '{printf "  Divergence: behind %s, ahead %s\n", $$1, $$2}'; else echo "  Divergence: n/a"; fi
+	@echo ""
+	@echo "$(BLUE)Remotes:$(RESET)"
+	@git remote -v | awk '$$3=="(fetch)"{printf "  %s -> %s\n", $$1, $$2}' || echo "  No remotes found"
+	@echo "  Default Remote (REMOTE): $(REMOTE)"
+	@echo "  $(REMOTE) URL: $$(git remote get-url $(REMOTE) 2>/dev/null || echo "not set")"
 
 git-branches: ## 🌿 Show all branches with status
 	@echo "$(BLUE)Local Branches:$(RESET)"
@@ -216,14 +223,14 @@ bump-major: ## 🔧 Bump major version
 
 
 # Git repository validation
-check-git-repo:
+check-git-repo: ## 🌿 Check if current directory is a git repository
 	@if ! git rev-parse --git-dir > /dev/null 2>&1; then \
 		echo "$(RED)Error: Not in a git repository. Please run 'git init' first.$(RESET)" >&2; \
 		exit 1; \
 	fi
 
 # Ensure develop branch exists
-ensure-develop-branch: check-git-repo
+ensure-develop-branch: check-git-repo ## 🌿 Ensure develop branch exists
 	@if ! git rev-parse --verify develop > /dev/null 2>&1; then \
 		echo "$(BLUE)Develop branch not found. Creating develop branch...$(RESET)"; \
 		if git rev-parse --verify main > /dev/null 2>&1; then \
@@ -238,7 +245,7 @@ ensure-develop-branch: check-git-repo
 	fi
 
 # Get release version
-get-release-version:
+get-release-version: ## 🌿 Get release version
 	$(eval RELEASE_VERSION := $(if $(NEW_VERSION),$(NEW_VERSION),$(shell cat .NEW_VERSION.tmp 2>/dev/null)))
 	@if [ -z "$(RELEASE_VERSION)" ]; then \
 		echo "$(RED)Error: NEW_VERSION is not set and .NEW_VERSION.tmp not found$(RESET)" >&2; \
@@ -435,13 +442,12 @@ auto-release: ## 🚀 Automated release process
 	echo "$(GREEN)🎉 Auto-release completed successfully!$(RESET)"
 
 
-
-update-and-release: ## 📝 Update version, then run auto-release
+update-and-release: ## 🚀 Update version, then run auto-release (alias: ur)
 	@echo "$(BLUE)📝 Updating version, then starting auto-release...$(RESET)"
 	$(MAKE) update-version
 	$(MAKE) auto-release
 
-ur: update-and-release
+ur: update-and-release ## 🚀 Alias for 'update-and-release'
 
 # Merge release branch
 merge-release: ensure-clean ## 🔄 Merge release branch to main branches

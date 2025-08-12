@@ -58,13 +58,13 @@ down: ## 🛑 Stop services for the current ENV
 	@$(COMPOSE_COMMAND) down --remove-orphans
 	@$(call success, "✅ Services stopped successfully.")
 
-restart: ## 🔄 Restart services for the current ENV
+restart: ## 🔧 Restart services for the current ENV
 	@$(call colorecho, "🔄 Restarting services...")
 	@$(MAKE) down
 	@$(MAKE) up
 
 
-rebuild:
+rebuild: ## 🔧 Rebuild services for the current ENV
 	@$(call colorecho, "🔨 Rebuilding services for [$(ENV)] environment with no-cache...")
 	@$(COMPOSE_COMMAND) build --no-cache
 	$(call colorecho, "🚀 Services started successfully with $(COMPOSE_COMMAND)")
