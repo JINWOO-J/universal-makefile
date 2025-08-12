@@ -165,7 +165,7 @@ search-targets: ## 🔧 Search targets by keyword (usage: make search-targets KE
 # 타겟별 상세 도움말
 # ================================================================
 
-help-md:
+help-md: ## 🔧 Generate help.md file
 	@NO_COLOR=1 HELP_WIDTH=28 \
 	$(MAKE) --no-print-directory help \
 	| sed 's/\x1b\[[0-9;]*m//g' > HELP.md
