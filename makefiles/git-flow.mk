@@ -50,6 +50,13 @@ git-status: ## 🌿 Show comprehensive git status
 	@echo ""
 	@echo "$(BLUE)Branch Tracking:$(RESET)"
 	@git branch -vv | grep "^\*" || echo "  Not tracking any remote"
+	@UP=$$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "none"); echo "  Upstream: $$UP"
+	@if [ "$$UP" != "none" ]; then git rev-list --left-right --count $$UP...HEAD 2>/dev/null | awk '{printf "  Divergence: behind %s, ahead %s\n", $$1, $$2}'; else echo "  Divergence: n/a"; fi
+	@echo ""
+	@echo "$(BLUE)Remotes:$(RESET)"
+	@git remote -v | awk '$$3=="(fetch)"{printf "  %s -> %s\n", $$1, $$2}' || echo "  No remotes found"
+	@echo "  Default Remote (REMOTE): $(REMOTE)"
+	@echo "  $(REMOTE) URL: $$(git remote get-url $(REMOTE) 2>/dev/null || echo "not set")"
 
 git-branches: ## 🌿 Show all branches with status
 	@echo "$(BLUE)Local Branches:$(RESET)"
