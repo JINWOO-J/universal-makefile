@@ -1,6 +1,11 @@
 # ================================================================
 # Help System and Documentation
 # ================================================================
+CAT_MAIN   := 🎯
+CAT_RELEASE:= 🚀
+CAT_GIT    := 🌿
+CAT_DEV    := 🔧
+CAT_CLEAN  := 🧹
 
 .PHONY: help list-targets help-docker help-git help-compose help-cleanup help-version help-env help-system
 
@@ -15,6 +20,7 @@ help: ## 🏠 Show this help message
 	@echo "$(BLUE)Repository: $(REPO_HUB)/$(NAME)$(RESET)"
 	@echo "$(BLUE)Current Branch: $(CURRENT_BRANCH)$(RESET)"
 	@echo "$(BLUE)Environment: $(ENV)$(RESET)"
+	@echo "$(BLUE)Show Source: $(MAKEFILE_LIST)$(RESET)"
 	@echo ""
 	@echo "$(YELLOW)🎯 Main Build Targets:$(RESET)"
 	@$(MAKE) --no-print-directory _show-category CATEGORY="🎯"
@@ -47,206 +53,95 @@ help: ## 🏠 Show this help message
 	@echo "  make help-docker"
 
 # 내부 함수: 카테고리별 타겟 표시
+# _show-category:
+# 	@grep -h -E '^[a-zA-Z0-9_.-]+:.*?## $(CATEGORY).*$$' $(MAKEFILE_LIST) | \
+# 		sort | \
+# 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, substr($$2, 3)}'
+
+
 _show-category:
-	@grep -h -E '^[a-zA-Z0-9_.-]+:.*?## $(CATEGORY).*$$' $(MAKEFILE_LIST) | \
-		sort | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, substr($$2, 3)}'
+	@awk -v cat="$(CATEGORY)" 'function base(p,a,n){n=split(p,a,"/");return a[n]} /^[A-Za-z0-9_.-]+:[[:space:]].*##[[:space:]]/ { line=$$0; pos=index(line,"## "); if(!pos) next; comment=substr(line,pos+3); if(index(comment,cat)==0) next; split(line,parts,":"); t=parts[1]; if(index(comment,cat)==1){ desc=substr(comment,length(cat)+1); sub(/^[[:space:]]+/,"",desc) } else { desc=comment } printf("  \033[0;32m%-20s\033[0m %s  \033[90m[%s]\033[0m\n", t, desc, base(FILENAME)) }' $(MAKEFILE_LIST)
+
+
+# Start of Selection
+# One-liner version without awk
+# End of Selection
+# _show-files-grouped:
+# 	@awk -v list="$(FILES)" -v groups="$(GROUPS)" -v green="$(GREEN)" -v yellow="$(YELLOW)" -v reset="$(RESET)" -v show="$(SHOW_SOURCE)" 'function base(p,a,n){n=split(p,a,"/");return a[n]} function trim(s){sub(/^[[:space:]]+/,"",s);sub(/[[:space:]]+$$/,"",s);return s} BEGIN{ng=split(groups,G,"|");for(i=1;i<=ng;i++){split(G[i],kv,":");ord[i]=kv[1];lab[kv[1]]=kv[2]} m=split(list,L,",");for(i=1;i<=m;i++){x=L[i];sub(/^[[:space:]]+/,"",x);sub(/[[:space:]]+$$/,"",x);allow[x]=1}} /^[A-Za-z0-9_.-]+:[[:space:]].*##[[:space:]]/ {line=$$0;pos=index(line,"## ");if(!pos)next;c=substr(line,pos+3);split(line,p,":");t=p[1];f=base(FILENAME);if(!(f in allow))next; d=(f=="docker.mk")?"docker":(f=="compose.mk")?"compose":(f=="git-flow.mk")?"git":(f=="version.mk"||f=="version-check.mk")?"version":(f=="cleanup.mk")?"cleanup":(f=="core.mk")?"core":"other"; g="";for(i=1;i<=ng;i++){tag="[" ord[i] "]";if(index(c,tag)>0){g=ord[i];break}} if(g==""){ if(d=="docker"){ if(t=="build"||index(t,"build-")==1||t=="push"||t=="tag-latest")g="build"; else if(t=="bash"||t=="run"||t=="exec"||t=="docker-logs")g="dev"; else if(index(t,"docker-")==1||index(t,"image-")==1||t=="security-scan"||t=="clear-build-cache")g="mgmt"; else g="other"; } else if(d=="compose"){ if(t=="up"||t=="down"||t=="restart"||t=="rebuild"||t=="dev-up"||t=="dev-down"||t=="dev-restart")g="ops"; else if(t=="logs"||t=="logs-tail"||t=="dev-logs"||t=="status"||t=="dev-status"||t=="health-check")g="monitor"; else if(t=="exec-service"||t=="restart-service"||t=="logs-service"||t=="scale")g="service"; else if(t=="compose-config"||t=="compose-images")g="inspect"; else if(t=="compose-clean"||t=="compose-test"||t=="backup-volumes")g="maint"; else g="other"; } else if(d=="git"){ if(index(t,"start-release")==1||index(t,"finish-release")==1||index(t,"merge-release")==1||index(t,"push-release")==1||t=="create-release-branch"||t=="push-release-branch"||t=="github-release"||t=="auto-release"||t=="update-and-release"||t=="ur")g="release"; else if(index(t,"start-hotfix")==1||index(t,"finish-hotfix")==1)g="hotfix"; else if(index(t,"git-")==1||t=="sync-develop"||t=="git-status"||t=="git-branches")g="branch"; else g="other"; } else if(d=="version"){ if(t=="version"||t=="update-version"||t=="update-version-file"||t=="version-next")g="show"; else if(t=="version-tag"||t=="push-tags"||t=="delete-tag")g="tagging"; else if(t=="version-changelog"||t=="version-release-notes")g="notes"; else if(t=="version-patch"||t=="version-minor"||t=="version-major")g="semver"; else if(t=="validate-version"||t=="check-version-consistency"||t=="export-version-info")g="validate"; else g="other"; } else if(d=="cleanup"){ if(t=="clean"||t=="clean-temp"||t=="clean-logs"||t=="clean-cache"||t=="clean-build"||t=="env-clean")g="project"; else if(t=="clean-node"||t=="clean-python"||t=="clean-java")g="lang"; else if(t=="clean-ide"||t=="clean-test"||t=="clean-recursively"||t=="clean-secrets")g="ide"; else if(index(t,"docker-")==1)g="docker"; else g="other"; } else if(d=="core"){ if(index(t,"env-")==1){ if(t=="env-keys"||t=="env-get"||t=="env-show")g="query"; else if(t=="env-pretty"||t=="env-github")g="format"; else if(t=="env-file")g="file"; else g="other"; } else if(index(t,"self-")==1){ if(t=="self-app")g="app"; else g="installer"; } else g="other"; } else { g="other"; } } for(i=1;i<=ng;i++){tag="[" ord[i] "]";while((s=index(c,tag))>0){c=substr(c,1,s-1) substr(c,s+length(tag))}} desc=trim(c); n[g]++;T[g,n[g]]=t;D[g,n[g]]=desc;F[g,n[g]]=f;if(length(t)>W[g])W[g]=length(t) } END{for(ii=1;ii<=ng;ii++){k=ord[ii];if(n[k]>0){printf("%s%s:%s\n",yellow,lab[k],reset);for(i=1;i<=n[k];i++){if(show=="true"||show=="1")printf("  %s%-*s%s %s  [%s]\n",green,W[k]+2,T[k,i],reset,D[k,i],F[k,i]);else printf("  %s%-*s%s %s\n",green,W[k]+2,T[k,i],reset,D[k,i])}printf("\n")}} }' $(MAKEFILE_LIST)
+
+# include makefiles/show_grouped.awk
+_show-files-grouped:
+	@awk \
+	  -v list="$(FILES)" \
+	  -v groups="$(GROUPS)" \
+	  -v show="$(SHOW_SOURCE)" \
+	  -v green="$(GREEN)" -v yellow="$(YELLOW)" -v reset="$(RESET)" \
+	  -f makefiles/show_grouped.awk \
+	  $(MAKEFILE_LIST)
 
 # ================================================================
 # 상세 Help 시스템들
 # ================================================================
 
-help-docker: ## 🔧 Show Docker-related commands help
+help-docker:
 	@echo ""
 	@echo "$(BLUE)🐳 Docker Commands Help$(RESET)"
 	@echo ""
-	@echo "$(YELLOW)Build & Registry:$(RESET)"
-	@echo "  $(GREEN)build$(RESET)               Build Docker image"
-	@echo "  $(GREEN)build-multi$(RESET)         Build multi-platform image (amd64, arm64)"
-	@echo "  $(GREEN)build-no-cache$(RESET)      Build without using cache"
-	@echo "  $(GREEN)push$(RESET)                Push image to registry"
-	@echo "  $(GREEN)tag-latest$(RESET)          Tag as 'latest' and push"
-	@echo ""
-	@echo "$(YELLOW)Development:$(RESET)"
-	@echo "  $(GREEN)bash$(RESET)                Run bash in container"
-	@echo "  $(GREEN)run$(RESET)                 Run container interactively"
-	@echo "  $(GREEN)exec$(RESET)                Execute command in running container"
-	@echo "  $(GREEN)docker-logs$(RESET)         Show Docker container logs"
-	@echo ""
-	@echo "$(YELLOW)Management:$(RESET)"
-	@echo "  $(GREEN)docker-info$(RESET)         Show Docker and image information"
-	@echo "  $(GREEN)docker-clean$(RESET)        Clean project Docker resources"
-	@echo "  $(GREEN)docker-deep-clean$(RESET)   Deep clean all Docker resources (DANGEROUS)"
-	@echo "  $(GREEN)security-scan$(RESET)       Run security scan on image"
-	@echo "  $(GREEN)image-size$(RESET)          Show image size analysis"
-	@echo "  $(GREEN)image-history$(RESET)       Show image build history"
-	@echo "  $(GREEN)clear-build-cache$(RESET)   Clear Docker build cache"
-	@echo ""
+	@$(MAKE) --no-print-directory _show-files-grouped \
+		FILES="docker.mk,compose.mk" \
+		GROUPS="build:Build & Registry|dev:Development|mgmt:Management|other:Other"
 	@echo "$(BLUE)💡 Examples:$(RESET)"
 	@echo "  make build DEBUG=true FORCE_REBUILD=true"
 	@echo "  make build-multi     # Build for multiple architectures"
 	@echo "  make bash           # Interactive shell in container"
 
-help-git: ## 🔧 Show Git workflow commands help
+help-git: ## 🔧 Git workflow commands help (auto, grouped)
 	@echo ""
 	@echo "$(BLUE)🌿 Git Workflow Commands Help$(RESET)"
 	@echo ""
-	@echo "$(YELLOW)Branch Management:$(RESET)"
-	@echo "  $(GREEN)git-status$(RESET)          Show comprehensive git status"
-	@echo "  $(GREEN)git-branches$(RESET)        Show all branches with status"
-	@echo "  $(GREEN)sync-develop$(RESET)        Sync current branch to develop"
-	@echo "  $(GREEN)start-release$(RESET)       Start release branch from develop"
-	@echo ""
-	@echo "$(YELLOW)Version Management:$(RESET)"
-	@echo "  $(GREEN)bump-version$(RESET)        Calculate next patch version"
-	@echo "  $(GREEN)bump-minor$(RESET)          Bump minor version"
-	@echo "  $(GREEN)bump-major$(RESET)          Bump major version"
-	@echo ""
-	@echo "$(YELLOW)Release Process:$(RESET)"
-	@echo "  $(GREEN)create-release-branch$(RESET) Create release branch with auto-versioning"
-	@echo "  $(GREEN)push-release-branch$(RESET)   Push release branch to origin"
-	@echo "  $(GREEN)finish-release$(RESET)        Complete release (merge, tag, GitHub release)"
-	@echo "  $(GREEN)merge-release$(RESET)         Merge current release/* into main & develop"
-	@echo "  $(GREEN)push-release$(RESET)          Push main, develop, and tags to remote"
-	@echo "  $(GREEN)push-release-clean$(RESET)    Also delete remote release/* branch (optional)"
-	@echo "  $(GREEN)github-release$(RESET)        Create GitHub Release for current tag"
-	@echo "  $(GREEN)auto-release$(RESET)          Full automated release process"
-	@echo "  $(GREEN)update-and-release$(RESET)    Update version, then run auto-release (alias: ur)"
-	@echo ""
-	@echo "$(YELLOW)Hotfix Support:$(RESET)"
-	@echo "  $(GREEN)start-hotfix$(RESET)         Start hotfix branch from main"
-	@echo "  $(GREEN)finish-hotfix$(RESET)        Complete hotfix process"
-	@echo ""
-	@echo "$(BLUE)💡 Examples:$(RESET)"
-	@echo "  make auto-release                    # Full automated release"
-	@echo "  make update-and-release              # Version update + auto-release"
-	@echo "  make start-hotfix HOTFIX_NAME=fix-bug # Start hotfix branch"
-	@echo "  make bump-minor                      # Bump minor version"
+	@$(MAKE) --no-print-directory _show-files-grouped \
+		FILES="git-flow.mk" \
+		GROUPS="branch:Branch Management|release:Release Process|hotfix:Hotfix Support|other:Other"
 
-help-compose: ## 🔧 Show Docker Compose commands help
+help-compose: ## 🔧 Docker Compose commands help (auto, grouped)
 	@echo ""
 	@echo "$(BLUE)🐙 Docker Compose Commands Help$(RESET)"
 	@echo ""
-	@echo "$(YELLOW)Environment Management:$(RESET)"
-	@echo "  $(GREEN)up$(RESET)                  Start services for the current ENV"
-	@echo "  $(GREEN)down$(RESET)                Stop services for the current ENV"
-	@echo "  $(GREEN)restart$(RESET)             Restart services for the current ENV"
-	@echo "  $(GREEN)dev-up$(RESET)              Start development environment"
-	@echo "  $(GREEN)dev-down$(RESET)            Stop development environment"
-	@echo "  $(GREEN)dev-restart$(RESET)         Restart development environment"
-	@echo ""
-	@echo "$(YELLOW)Monitoring:$(RESET)"
-	@echo "  $(GREEN)logs$(RESET)                Show service logs"
-	@echo "  $(GREEN)logs-tail$(RESET)           Show last 100 lines of logs"
-	@echo "  $(GREEN)dev-logs$(RESET)            Show development logs"
-	@echo "  $(GREEN)status$(RESET)              Show services status"
-	@echo "  $(GREEN)dev-status$(RESET)          Show development services status"
-	@echo ""
-	@echo "$(YELLOW)Operations:$(RESET)"
-	@echo "  $(GREEN)exec-service$(RESET)        Execute command in a service (SERVICE/COMMAND)"
-	@echo "  $(GREEN)restart-service$(RESET)     Restart specific service"
-	@echo "  $(GREEN)logs-service$(RESET)        Show specific service logs"
-	@echo "  $(GREEN)scale$(RESET)               Scale a service (SERVICE/REPLICAS)"
-	@echo "  $(GREEN)compose-clean$(RESET)       Clean Docker Compose resources"
-	@echo "  $(GREEN)compose-test$(RESET)        Run compose-based tests"
-	@echo "  $(GREEN)backup-volumes$(RESET)      Backup Docker volumes"
-	@echo "  $(GREEN)compose-config$(RESET)      Show resolved compose configuration"
-	@echo "  $(GREEN)compose-images$(RESET)      Show images used by compose"
-	@echo ""
-	@echo "$(BLUE)💡 Examples:$(RESET)"
-	@echo "  make up ENV=production    # Start production environment"
-	@echo "  make dev-up              # Start development environment"
-	@echo "  make logs                # Follow service logs"
+	@$(MAKE) --no-print-directory _show-files-grouped \
+		FILES="compose.mk" \
+		GROUPS="ops:Environment Management|monitor:Monitoring|service:Operations|inspect:Introspection|maint:Maintenance|other:Other"
 
-help-cleanup: ## 🔧 Show cleanup commands help
+help-cleanup: ## 🔧 Cleanup commands help (auto, grouped)
 	@echo ""
 	@echo "$(BLUE)🧹 Cleanup Commands Help$(RESET)"
 	@echo ""
-	@echo "$(YELLOW)Project Cleanup:$(RESET)"
-	@echo "  $(GREEN)clean$(RESET)               Clean temporary files and containers"
-	@echo "  $(GREEN)clean-temp$(RESET)          Clean temporary files"
-	@echo "  $(GREEN)clean-logs$(RESET)          Clean log files"
-	@echo "  $(GREEN)clean-cache$(RESET)         Clean cache directories"
-	@echo "  $(GREEN)clean-build$(RESET)         Clean build artifacts"
-	@echo "  $(GREEN)env-clean$(RESET)           Clean .env files"
-	@echo ""
-	@echo "$(YELLOW)Language-specific:$(RESET)"
-	@echo "  $(GREEN)clean-node$(RESET)          Clean Node.js files"
-	@echo "  $(GREEN)clean-python$(RESET)        Clean Python files"
-	@echo "  $(GREEN)clean-java$(RESET)          Clean Java files"
-	@echo ""
-	@echo "$(YELLOW)IDE/Test/Recursive:$(RESET)"
-	@echo "  $(GREEN)clean-ide$(RESET)           Clean IDE/editor files"
-	@echo "  $(GREEN)clean-test$(RESET)          Clean test artifacts"
-	@echo "  $(GREEN)clean-recursively$(RESET)   Clean recursively in subdirectories"
-	@echo "  $(GREEN)clean-secrets$(RESET)       Clean potential secret files (DANGEROUS)"
-	@echo ""
-	@echo "$(YELLOW)Docker Cleanup:$(RESET)"
-	@echo "  $(GREEN)docker-clean$(RESET)        Clean project Docker resources"
-	@echo "  $(GREEN)docker-deep-clean$(RESET)   Deep clean Docker resources (DANGEROUS)"
-	@echo ""
-	@echo "$(BLUE)💡 Examples:$(RESET)"
-	@echo "  make clean                    # Safe cleanup"
-	@echo "  make clean-old-branches       # Clean merged branches"
-	@echo "  make docker-clean            # Clean Docker resources"
+	@$(MAKE) --no-print-directory _show-files-grouped \
+		FILES="cleanup.mk" \
+		GROUPS="project:Project Cleanup|lang:Language-specific|ide:IDE/Test/Recursive|docker:Docker Cleanup|other:Other"
 
-# 새로 추가: 버전 관리 도움말 
-help-version: ## 🔧 Show version management commands help
+help-version: ## 🔧 Version management commands help (auto, grouped)
 	@echo ""
 	@echo "$(BLUE)🏷  Version Management Commands Help$(RESET)"
 	@echo ""
-	@echo "$(YELLOW)Show/Update:$(RESET)"
-	@echo "  $(GREEN)version$(RESET)              Show current version"
-	@echo "  $(GREEN)update-version$(RESET)       Update version using tool"
-	@echo "  $(GREEN)update-version-file$(RESET)  Update version in specific file"
-	@echo "  $(GREEN)version-next$(RESET)         Show next version (dry-run)"
-	@echo ""
-	@echo "$(YELLOW)Tagging:$(RESET)"
-	@echo "  $(GREEN)version-tag$(RESET)          Create version tag without release"
-	@echo "  $(GREEN)push-tags$(RESET)            Push all tags to remote"
-	@echo "  $(GREEN)delete-tag$(RESET)           Delete specific tag (TAG=...)"
-	@echo ""
-	@echo "$(YELLOW)Changelog/Notes:$(RESET)"
-	@echo "  $(GREEN)version-changelog$(RESET)    Generate changelog since last version"
-	@echo "  $(GREEN)version-release-notes$(RESET) Generate release notes for current version"
-	@echo ""
-	@echo "$(YELLOW)Semver bump:$(RESET)"
-	@echo "  $(GREEN)version-patch$(RESET)        Bump patch, create tag"
-	@echo "  $(GREEN)version-minor$(RESET)        Bump minor, create tag"
-	@echo "  $(GREEN)version-major$(RESET)        Bump major, create tag"
-	@echo ""
-	@echo "$(YELLOW)Validation:$(RESET)"
-	@echo "  $(GREEN)validate-version$(RESET)     Validate version format"
-	@echo "  $(GREEN)check-version-consistency$(RESET) Check version across files"
-	@echo "  $(GREEN)export-version-info$(RESET)  Export version info to file"
+	@$(MAKE) --no-print-directory _show-files-grouped \
+		FILES="version.mk,version-check.mk" \
+		GROUPS="show:Show/Update|tagging:Tagging|notes:Changelog/Notes|semver:Semver bump|validate:Validation|other:Other"
 
-# 새로 추가: 환경 변수/출력 도움말 
-help-env: ## 🔧 Show environment variable helper commands help
+help-env: ## 🔧 Environment variable helpers help (auto, grouped)
 	@echo ""
 	@echo "$(BLUE)🌐 Environment Helpers$(RESET)"
 	@echo ""
-	@echo "  $(GREEN)env-keys$(RESET)             Show base/all env keys"
-	@echo "  $(GREEN)env-get$(RESET)              Print variable value (VAR=NAME)"
-	@echo "  $(GREEN)env-show$(RESET)             Print variables (FORMAT/VARS/ALL/...)"
-	@echo "  $(GREEN)env-file$(RESET)             Save variables to .env (alias: env)"
-	@echo "  $(GREEN)env-pretty$(RESET)           Pretty table output"
-	@echo "  $(GREEN)env-github$(RESET)           GitHub Actions format output"
-	@echo ""
-	@echo "$(BLUE)💡 Examples:$(RESET)"
-	@echo "  make env-show VARS=NAME,VERSION FORMAT=dotenv"
-	@echo "  make env-get VAR=VERSION"
+	@$(MAKE) --no-print-directory _show-files-grouped \
+		FILES="core.mk" \
+		GROUPS="query:Query/Show|format:Formatting|file:Files|other:Other"
 
-# 새로 추가: 설치/시스템 명령 도움말 
-help-system: ## 🔧 Show installer/system commands help
+help-system: ## 🔧 Installer/system commands help (auto, grouped)
 	@echo ""
 	@echo "$(BLUE)🧩 System/Installer Commands$(RESET)"
 	@echo ""
-	@echo "  $(GREEN)self-install$(RESET)         Run install from install.sh"
-	@echo "  $(GREEN)self-update$(RESET)          Run update from install.sh"
-	@echo "  $(GREEN)self-check$(RESET)           Run check from install.sh"
-	@echo "  $(GREEN)self-help$(RESET)            Run help from install.sh"
-	@echo "  $(GREEN)self-uninstall$(RESET)       Run uninstall from install.sh"
-	@echo "  $(GREEN)self-app$(RESET)             Run app from install.sh"
+	@$(MAKE) --no-print-directory _show-files-grouped \
+		FILES="core.mk" \
+		GROUPS="installer:Installer|app:App|other:Other"
 
 # ================================================================
 # 타겟 검색 및 나열
@@ -269,6 +164,12 @@ search-targets: ## 🔧 Search targets by keyword (usage: make search-targets KE
 # ================================================================
 # 타겟별 상세 도움말
 # ================================================================
+
+help-md:
+	@NO_COLOR=1 HELP_WIDTH=28 \
+	$(MAKE) --no-print-directory help \
+	| sed 's/\x1b\[[0-9;]*m//g' > HELP.md
+	@echo "Wrote HELP.md"
 
 help-%: ## 🔧 Show detailed help for specific target (usage: make help-build)
 	@TARGET=$(subst help-,,$@); \
@@ -304,6 +205,17 @@ version-info: ## 🔧 Show version information
 # ================================================================
 # 사용법 가이드
 # ================================================================
+
+readme-embed-help: help-md
+	@awk -v inc="HELP.md" '\
+	  BEGIN { while ((getline l < inc) > 0) buf = buf l ORS; close(inc) } \
+	  { \
+	    if ($$0 ~ /<!-- BEGIN: HELP -->/) { print; print buf; skip=1; next } \
+	    if ($$0 ~ /<!-- END: HELP -->/)   { print; skip=0; next } \
+	    if (!skip) print \
+	  }' README.md > README.md.tmp && mv README.md.tmp README.md
+	@echo "README.md updated with docs/HELP.md ✅"
+
 
 getting-started: ## 🔧 Show getting started guide
 	@echo ""

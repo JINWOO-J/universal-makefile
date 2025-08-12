@@ -1,0 +1,92 @@
+---
+alwaysApply: true
+description: >-
+  Make help stability guide for GNU Make 3.81/macOS. Enforce one-line recipes,
+  POSIX awk, filename badges without pipes, portable colors via printf,
+  relaxed category emoji matching, and a pre-PR checklist. Includes one-line
+  awk templates for category listing and target location.
+globs: Makefile,makefiles/*.mk
+---
+
+# CursorRules — Make Help 안정 가이드
+
+이 규칙은 `make help`/헬프 시스템이 macOS/BSD awk, GNU Make 3.81 환경에서도 안정적으로 동작하도록 보장합니다. 관련 구현은 주로 [makefiles/help.mk](mdc:makefiles/help.mk)와 연관됩니다.
+
+## 1) 셸/레시피 규칙
+- 한 레시피 줄 = 셸 한 번. 여러 줄 명령이나 heredoc 금지 (GNU Make 3.81엔 `.ONESHELL` 없음)
+- 여러 줄이 꼭 필요하면 외부 스크립트 파일로 분리하고 한 줄로 호출
+
+## 2) awk 임베드 규칙
+- 레시피 안에서 awk 코드는 무조건 한 줄로 작성
+- awk 소스 내 모든 `$`는 `$$`로 이스케이프 (`$0` → `$$0`)
+- 긴 따옴표 블록, 줄바꿈, 백슬래시 연속 사용 금지 (따옴표 균형·개행 로스 위험)
+
+## 3) 파일명 배지 규칙
+- 파일명을 출력하려면 파이프 금지. `awk $(MAKEFILE_LIST)`로 직접 파일을 읽어야 `FILENAME` 사용 가능
+- `grep | awk`처럼 파이프를 쓰면 `FILENAME`이 사라져 `[file.mk]` 배지를 붙일 수 없음
+
+## 4) 색상 출력 규칙
+- `echo '\033...'` 사용 금지 (플랫폼마다 다름)
+- 일반 쉘 출력은 `printf` 사용을 권장
+- 레시피 내 awk에서는 색상 이스케이프를 하드코딩하지 말고, 기존 색 변수(`$(GREEN)`, `$(RESET)` 등)를 `-v`로 주입해 사용
+
+## 5) 카테고리 매칭 규칙
+- 인라인 코멘트(`## ...`) 안의 이모지는 위치 불문 허용: `index(comment, cat) > 0`
+- “맨 앞이어야 한다(==1)” 같은 과도한 제약 금지
+- 필요 시 주석 헤더(`# ...`)의 이모지도 현재 카테고리로 기억해 사용
+
+## 6) BSD/mac 환경 호환
+- mac 기본 awk 기준 POSIX awk만 사용 (gawk 전용 `gensub`, `asort` 금지)
+- 정렬이 필요하면 간단한 배열 정렬(수동) 또는 정렬 생략. 파이프 `sort`는 금지(배지 유지를 위해)
+
+## 7) 디버깅 루틴
+- 실제 실행 확인: `make -n help`
+- 트레이스 필요 시: `make SHELL="/bin/bash -x" help`
+- 문제 레시피는 한 줄로 축약하여 재현 → 따옴표/이스케이프 우선 점검
+
+## 8) 안전한 템플릿 (복붙용)
+
+### A) 카테고리별 출력(파일 배지 포함) — 한 줄 awk
+```makefile
+_show-category:
+	@awk -v cat="$(CATEGORY)" -v GREEN="$(GREEN)" -v RESET="$(RESET)" 'function base(p,a,n){n=split(p,a,"/");return a[n]} /^[A-Za-z0-9_.-]+:[[:space:]].*##[[:space:]]/ { line=$$0; pos=index(line,"## "); if(!pos) next; comment=substr(line,pos+3); if(index(comment,cat)==0) next; split(line,parts,":"); t=parts[1]; desc=comment; printf("  %s%-20s%s %s  [%s]\n", GREEN, t, RESET, desc, base(FILENAME)) }' $(MAKEFILE_LIST)
+```
+
+## 핵심 원칙
+- 한 레시피 줄 = 셸 한 번 (GNU Make 3.81은 `.ONESHELL` 없음)
+- awk는 한 줄로, awk 내부의 `$`는 반드시 `$$`로 이스케이프 (예: `$0` → `$$0`)
+- 파이프 금지: `grep | awk` 대신 `awk $(MAKEFILE_LIST)`로 파일을 직접 읽어 `FILENAME` 보존
+- 색상은 가독성을 위해 awk에 `$(GREEN)`, `$(RESET)` 등을 `-v`로 주입해 사용 (하드코딩된 ANSI 리터럴 지양)
+- 카테고리 매칭은 포함(contains): 인라인 코멘트의 이모지가 어디에 있어도 `index(comment, cat) > 0`이면 매칭
+
+### B) 특정 타깃이 어느 파일에 있는지
+```makefile
+where:
+	@awk -v tgt="$(TARGET)" 'function base(p,a,n){n=split(p,a,"/");return a[n]} /^[A-Za-z0-9_.-]+:[[:space:]]/ { split($$0,p,":"); if(p[1]==tgt) print "• " tgt "  ->  " base(FILENAME) }' $(MAKEFILE_LIST)
+```
+
+### C) 헤더/색상 출력 예시 (printf만 사용)
+```makefile
+help:
+	@printf '\033[0;34m%s\033[0m\n' "📋 Universal Makefile System"
+	@printf '\033[0;33m%s\033[0m\n' "🎯 Main Build Targets:"
+	@$(MAKE) --no-print-directory _show-category CATEGORY="🎯"
+```
+
+## 9) 외부 스크립트가 필요할 때(차선책)
+- 복잡한 awk가 꼭 필요하면 정적 파일로 두고 `-f` 옵션으로 한 줄 호출
+- 예: `makefiles/help.awk` → `awk -f makefiles/help.awk ...`
+- “동적 생성”이나 heredoc은 GNU Make 3.81에서는 피함
+
+## 10) PR 전 체크리스트
+- `_show-category`/`where` 레시피는 한 줄인가?
+- awk 내부 `$`가 모두 `$$`로 이스케이프돼 있는가?
+- `$(MAKEFILE_LIST)`를 직접 읽고 있는가? (파이프 없음)
+- 헤더/색상은 `printf`로 출력하는가?
+- `make -n help` 결과에 따옴표 끊김 등 이상이 없는가?
+- mac에서 실제 `make help`로 색·카테고리·배지 확인했는가?
+
+## 참고 파일
+- [makefiles/help.mk](mdc:makefiles/help.mk)
+- [makefiles/git-flow.mk](mdc:makefiles/git-flow.mk)
+
