@@ -81,6 +81,21 @@ else
 	@$(call success, "Successfully merged '$(CURRENT_BRANCH)' into '$(DEVELOP_BRANCH)'")
 endif
 
+# 모든 로컬 브랜치를 원격으로 푸시
+push-all-branches: ## 🌿 Push all local branches to remote ($(REMOTE))
+	@echo "$(BLUE)📤 Pushing all local branches to $(REMOTE)...$(RESET)"; \
+	branches=$$(git for-each-ref --format='%(refname:short)' refs/heads); \
+	if [ -z "$$branches" ]; then \
+		echo "$(YELLOW)No local branches found$(RESET)"; \
+		exit 0; \
+	fi; \
+	if ! git remote get-url $(REMOTE) >/dev/null 2>&1; then \
+		echo "$(RED)Error: remote '$(REMOTE)' not found$(RESET)"; \
+		exit 1; \
+	fi; \
+	for b in $$branches; do echo "  → $$b"; git push $(REMOTE) "$$b"; done; \
+	echo "$(GREEN)✅ All local branches pushed to $(REMOTE)$(RESET)"
+
 start-release: ## 🌿 Start new release branch from develop
 ifneq ($(CURRENT_BRANCH),$(DEVELOP_BRANCH))
 	@$(call error, "You must be on the '$(DEVELOP_BRANCH)' branch to start a release")
