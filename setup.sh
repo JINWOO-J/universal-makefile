@@ -66,6 +66,19 @@ parse_cli_args() {
     done
 }
 
+makefile_includes_universal() { # helper to detect whether user's Makefile includes system
+    if [ ! -f "Makefile" ]; then
+        return 1
+    fi
+    if grep -Eq '^[[:space:]]*include[[:space:]]+Makefile\.universal' Makefile; then
+        return 0
+    fi
+    if grep -Eq '^[[:space:]]*include[[:space:]]+\$\(MAKEFILE_DIR\)/makefiles/core\.mk' Makefile; then
+        return 0
+    fi
+    return 1
+}
+
 verify_sha256() {
     local file_path="$1"
     local expected="$2"
@@ -430,79 +443,18 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             log_info "Version status: current=${CURRENT_VERSION:-none}, desired=${DESIRED_VERSION}"
         fi
         if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]]; then
-            if ! is_true "${FORCE_UPDATE}"; then
-                if ! prompt_confirm "New version available (${CURRENT_VERSION:-none} → ${DESIRED_VERSION}). Update now?"; then
-                    log_info "Skipped update by user choice."
-                    DESIRED_VERSION="${CURRENT_VERSION:-${DESIRED_VERSION}}"
-                fi
-            fi
-            log_warn "Installing version ${DESIRED_VERSION}..."
-            # 준비: 임시 작업 디렉토리
-            TMPDIR="$(mktemp -d)" || {
-                log_warn "Failed to create temp directory"; exit 1;
-            }
-            cleanup_tmp() { rm -rf "${TMPDIR}" >/dev/null 2>&1 || true; }
-            trap cleanup_tmp EXIT INT TERM
-
-            PRIMARY_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/tags/${DESIRED_VERSION}.tar.gz"
-            MIRROR_URL="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/tags/${DESIRED_VERSION}"
-            TARBALL_PATH="${TMPDIR}/umf.tar.gz"
-
-            # 재시도 포함 다운로드 (기본 URL → 미러 URL)
-            success=0
-            for src in primary mirror; do
-                url="$([ "$src" = "primary" ] && echo "${PRIMARY_URL}" || echo "${MIRROR_URL}")"
-                for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
-                    log_info "Downloading (${src} try ${attempt}/${CURL_RETRY_MAX}): ${url}"
-                    if curl -fSL --connect-timeout 10 --max-time 300 -o "${TARBALL_PATH}" "${url}"; then
-                        if [ -s "${TARBALL_PATH}" ]; then
-                            success=1
-                            break
-                        fi
-                    fi
-                    sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
-                done
-                [ "$success" = "1" ] && break
-            done
-
-            if [ "$success" != "1" ]; then
-                log_warn "Failed to download release tarball for ${DESIRED_VERSION}."
-                exit 1
-            fi
-
-            # 선택적 SHA256 검증: 환경변수 또는 .ums-version.sha256 사용
-            EXPECTED_SHA256="${UMS_TARBALL_SHA256:-}"
-            if [ -z "${EXPECTED_SHA256}" ] && [ -f ".ums-version.sha256" ]; then
-                EXPECTED_SHA256="$(cat .ums-version.sha256 | tr -d ' \n\r')"
-            fi
-            if [ -n "${EXPECTED_SHA256}" ]; then
-                if verify_sha256 "${TARBALL_PATH}" "${EXPECTED_SHA256}"; then
-                    log_success "SHA256 checksum verified."
-                else
-                    log_warn "SHA256 checksum mismatch or verification unavailable. Aborting."
-                    exit 1
-                fi
+            if [ -z "${CURRENT_VERSION}" ]; then
+                log_warn "Makefile system is missing. Installing version ${DESIRED_VERSION}..."
+                install_from_release "${DESIRED_VERSION}"
             else
-                log_warn "No SHA256 provided (.ums-version.sha256 or UMS_TARBALL_SHA256). Skipping integrity verification."
-            fi
-
-            # 기존 디렉토리 제거 후 전개
-            rm -rf "${MAKEFILE_SYSTEM_DIR}"
-            tar -xzf "${TARBALL_PATH}" -C "${TMPDIR}"
-            VERSION_DIR_NAME="${GITHUB_REPO}-${DESIRED_VERSION#v}"
-            if [ ! -d "${TMPDIR}/${VERSION_DIR_NAME}" ]; then
-                # 혹시 다른 아카이브 구조 대비: 첫 번째 디렉토리를 추정
-                VERSION_DIR_NAME_FALLBACK="$(tar -tzf "${TARBALL_PATH}" | head -1 | cut -d/ -f1)"
-                if [ -n "${VERSION_DIR_NAME_FALLBACK}" ] && [ -d "${TMPDIR}/${VERSION_DIR_NAME_FALLBACK}" ]; then
-                    VERSION_DIR_NAME="${VERSION_DIR_NAME_FALLBACK}"
-                else
-                    log_warn "Extracted directory not found. Aborting."
-                    exit 1
+                if ! is_true "${FORCE_UPDATE}"; then
+                    if ! prompt_confirm "New version available (${CURRENT_VERSION} → ${DESIRED_VERSION}). Update now?"; then
+                        log_info "Skipped update by user choice."
+                        DESIRED_VERSION="${CURRENT_VERSION}"
+                    fi
                 fi
+                install_from_release "${DESIRED_VERSION}"
             fi
-            mv "${TMPDIR}/${VERSION_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
-            echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"
-            log_success "Makefile system version ${DESIRED_VERSION} is now ready."
         else
             if [ -n "${LATEST_TAG:-}" ] && [ "${DESIRED_VERSION}" = "${LATEST_TAG}" ]; then
                 log_success "Up to date (latest: ${LATEST_TAG})."
@@ -540,13 +492,18 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             fi
             log_info "Version status: current=${CURRENT_VERSION:-none}, latest=${DESIRED_VERSION}"
             if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]]; then
-                if ! is_true "${FORCE_UPDATE}"; then
-                    if ! prompt_confirm "New release found (${CURRENT_VERSION:-none} → ${DESIRED_VERSION}). Update now?"; then
-                        log_info "Skipped update by user choice."
-                        DESIRED_VERSION="${CURRENT_VERSION:-${DESIRED_VERSION}}"
+                if [ -z "${CURRENT_VERSION}" ]; then
+                    log_warn "Makefile system not found. Installing ${DESIRED_VERSION}..."
+                    install_from_release "${DESIRED_VERSION}"
+                else
+                    if ! is_true "${FORCE_UPDATE}"; then
+                        if ! prompt_confirm "New release found (${CURRENT_VERSION} → ${DESIRED_VERSION}). Update now?"; then
+                            log_info "Skipped update by user choice."
+                            DESIRED_VERSION="${CURRENT_VERSION}"
+                        fi
                     fi
+                    install_from_release "${DESIRED_VERSION}"
                 fi
-                install_from_release "${DESIRED_VERSION}"
             else
                 log_success "Already up to date (latest: ${DESIRED_VERSION})."
             fi
@@ -558,6 +515,18 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # 최소 스캐폴드 생성 (없을 때만)
     if [ ! -f "project.mk" ] || [ ! -f "Makefile" ]; then
         scaffold_project_files
+    fi
+
+    # If user already has a Makefile but it doesn't include the system, print guidance and exit gracefully
+    if [ -f "Makefile" ] && ! makefile_includes_universal; then
+        log_warn "Existing 'Makefile' detected but it does not include 'Makefile.universal'."
+        echo ""
+        echo "Add the following line to your Makefile and re-run ./setup.sh:"
+        echo ""
+        echo "  include Makefile.universal"
+        echo ""
+        echo "Alternatively, ensure it includes '\$(MAKEFILE_DIR)/makefiles/*.mk' via 'Makefile.universal'."
+        exit 0
     fi
 
     # make 인자 정규화: '--' 제거, 비어있으면 'help'
