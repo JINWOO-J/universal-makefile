@@ -39,6 +39,7 @@ define RESET_TO_REMOTE
     else \
         git checkout "$$branch"; \
     fi; \
+    echo "$(BLUE)🔄 Resetting $$branch to origin/$$branch...$(RESET)"; \
     git fetch origin "$$branch"; \
     git reset --hard "origin/$$branch"
 endef
@@ -358,13 +359,14 @@ finish-release: ## 🚀 Complete release process (merge to main and develop, cre
 		CHANGELOG=$$(git log --pretty=format:"- %s (%h)" $$PREVIOUS_TAG..$$RELEASE_BRANCH); \
 	fi; \
 	$(call colorecho, "Merging $$RELEASE_BRANCH into $(MAIN_BRANCH)..."); \
+	$(call colorecho, "Resetting $(MAIN_BRANCH) to origin/$(MAIN_BRANCH) ..."); \
     $(call RESET_TO_REMOTE,$(MAIN_BRANCH)); \
 	git merge --no-ff -m "Merge $$RELEASE_BRANCH into $(MAIN_BRANCH)" $$RELEASE_BRANCH; \
 	$(call colorecho, "Tagging release: $$RELEASE_VERSION"); \
 	git tag -a $$RELEASE_VERSION -m "Release $$RELEASE_VERSION"; \
 	$(call colorecho, "Merging back into $(DEVELOP_BRANCH)..."); \
-	git checkout $(DEVELOP_BRANCH); \
-	git pull origin $(DEVELOP_BRANCH); \
+	$(call colorecho, "Resetting $(DEVELOP_BRANCH) to origin/$(DEVELOP_BRANCH) ..."); \
+	$(call RESET_TO_REMOTE,$(DEVELOP_BRANCH)); \
 	git merge --no-ff -m "Merge $$RELEASE_BRANCH into $(DEVELOP_BRANCH)" $$RELEASE_BRANCH; \
 	$(call colorecho, "Pushing $(MAIN_BRANCH), $(DEVELOP_BRANCH), and tags..."); \
 	git push origin $(MAIN_BRANCH); \
