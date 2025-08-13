@@ -15,20 +15,27 @@ type log_info >/dev/null 2>&1 || log_info() { echo "$*"; }
 type log_success >/dev/null 2>&1 || log_success() { echo "$*"; }
 type log_warn >/dev/null 2>&1 || log_warn() { echo "$*"; }
 
+# debug helper (enabled when DEBUG_MODE=true)
+umc_debug() { if [[ "${DEBUG_MODE:-false}" == "true" ]]; then log_info "[scaffold][debug] $*"; fi }
+
 umc_scaffold_project_files() {
+  umc_debug "begin: MAKEFILE_DIR=${MAKEFILE_DIR:-n/a} PWD=$(pwd)"
   umc_create_main_makefile "$@"
   umc_create_project_config "$@"
   umc_update_gitignore "$@"
   umc_create_environments "$@"
+  umc_debug "end"
 }
 
 umc_create_main_makefile() {
   local makefile_dir_var
   makefile_dir_var="${MAKEFILE_DIR:-.makefile-system}"
+  umc_debug "umc_create_main_makefile: makefile_dir_var=${makefile_dir_var}"
 
   local universal_makefile="Makefile.universal"
   if [[ ! -f "$universal_makefile" ]]; then
     log_info "Creating ${universal_makefile}..."
+    umc_debug "writing ${universal_makefile}"
     cat > "$universal_makefile" << 'EOF'
 # === Created by Universal Makefile System Installer ===
 # This file is the entry point for the universal makefile system.
@@ -63,6 +70,7 @@ EOF
   local main_makefile="Makefile"
   if [[ ! -f ${main_makefile} ]]; then
     log_info "Creating ${main_makefile}..."
+    umc_debug "writing ${main_makefile} (MAKEFILE_SYSTEM_DIR=${makefile_dir_var})"
     cat > "${main_makefile}" << EOF
 # === Created by Universal Makefile System Installer ===
 MAKEFILE_SYSTEM_DIR := ${makefile_dir_var}
@@ -82,6 +90,7 @@ umc_create_project_config() {
     local url; url=$(git remote get-url origin)
     [[ "$url" =~ github.com[:/]([^/]+) ]] && default_repo_hub="${BASH_REMATCH[1]}"
   fi
+  umc_debug "umc_create_project_config: NAME=${default_name} REPO_HUB=${default_repo_hub} MAKEFILE_DIR=${MAKEFILE_DIR:-.makefile-system}"
   cat > "project.mk" << EOF
 # === Created by Universal Makefile System Installer ===
 REPO_HUB = ${default_repo_hub}
@@ -104,6 +113,7 @@ EOF
 
 umc_update_gitignore() {
   log_info "Updating .gitignore..."
+  umc_debug "ensuring common entries in .gitignore"
   local entries=(
     "# Universal Makefile System"
     ".project.local.mk"
@@ -123,6 +133,7 @@ umc_create_environments() {
   [[ -d "environments" ]] || mkdir -p environments
   if [[ ! -f environments/development.mk ]]; then
     log_info "Creating environments/development.mk..."
+    umc_debug "writing environments/development.mk"
     cat > environments/development.mk << 'EOF'
 # === Created by Universal Makefile System Installer ===
 DEBUG = true
@@ -132,6 +143,7 @@ EOF
   fi
   if [[ ! -f environments/production.mk ]]; then
     log_info "Creating environments/production.mk..."
+    umc_debug "writing environments/production.mk"
     cat > environments/production.mk << 'EOF'
 # === Created by Universal Makefile System Installer ===
 DEBUG = false
@@ -145,6 +157,7 @@ EOF
 umc_create_sample_compose() {
   if [[ -f "docker-compose.dev.yml" ]]; then return 0; fi
   log_info "Creating docker-compose.dev.yml..."
+  umc_debug "writing docker-compose.dev.yml"
   cat > docker-compose.dev.yml << 'EOF'
 # === Created by Universal Makefile System Installer ===
 #version: '3.8'
@@ -170,12 +183,17 @@ if ! declare -F log_info >/dev/null 2>&1; then log_info() { echo "$*"; }; fi
 if ! declare -F log_success >/dev/null 2>&1; then log_success() { echo "$*"; }; fi
 if ! declare -F log_warn >/dev/null 2>&1; then log_warn() { echo "$*"; }; fi
 
+# debug helper (enabled when DEBUG_MODE=true)
+if ! declare -F umc_debug >/dev/null 2>&1; then umc_debug() { if [[ "${DEBUG_MODE:-false}" == "true" ]]; then log_info "[scaffold][debug] $*"; fi }; fi
+
 # ----- Scaffold project files minimal set -----
 umc_scaffold_project_files() {
   # usage: umc_scaffold_project_files MAKEFILE_SYSTEM_DIR
   local mf_dir="${1:-.makefile-system}"
+  umc_debug "begin: mf_dir=${mf_dir} PWD=$(pwd)"
 
   if [ ! -f "Makefile.universal" ]; then
+    umc_debug "writing Makefile.universal"
     cat > Makefile.universal << 'EOF'
 # === Created by Universal Makefile System (scaffold) ===
 MAKEFILE_SYSTEM_DIR ?= .makefile-system
@@ -197,6 +215,7 @@ EOF
   fi
 
   if [ ! -f "Makefile" ]; then
+    umc_debug "writing Makefile"
     cat > Makefile << 'EOF'
 # === Created by Universal Makefile System (scaffold) ===
 MAKEFILE_SYSTEM_DIR := .makefile-system
@@ -208,9 +227,11 @@ EOF
 
   if [ ! -f "project.mk" ]; then
     if [ -f "${mf_dir}/templates/project.mk.template" ]; then
+      umc_debug "copying template project.mk from ${mf_dir}/templates/project.mk.template"
       cp "${mf_dir}/templates/project.mk.template" project.mk
       log_success "project.mk created from template"
     else
+      umc_debug "writing minimal project.mk"
       cat > project.mk << 'EOF'
 # === Created by Universal Makefile System (scaffold) ===
 NAME = $(notdir $(CURDIR))
@@ -219,14 +240,17 @@ EOF
       log_success "project.mk scaffolded (minimal)"
     fi
   fi
+  umc_debug "end"
 }
 
 # ----- Create main Makefile set (Universal) -----
 umc_create_main_makefile() {
   # usage: umc_create_main_makefile MAKEFILE_DIR
   local mf_dir="$1"
+  umc_debug "umc_create_main_makefile: mf_dir=${mf_dir}"
   local universal_makefile="Makefile.universal"
   log_info "Creating ${universal_makefile}..."
+  umc_debug "writing ${universal_makefile}"
   cat > "$universal_makefile" << 'EOF'
 # === Created by Universal Makefile System Installer ===
 # Entry point for the universal makefile system. Include in main Makefile.
@@ -255,6 +279,7 @@ EOF
   local main_makefile="Makefile"
   if [[ ! -f ${main_makefile} ]]; then
     log_info "Creating main ${main_makefile}..."
+    umc_debug "writing ${main_makefile} (MAKEFILE_SYSTEM_DIR=${mf_dir})"
     cat > "${main_makefile}" << EOF
 # === Created by Universal Makefile System Installer ===
 MAKEFILE_SYSTEM_DIR := ${mf_dir}
@@ -277,6 +302,7 @@ umc_create_project_config() {
     local url=$(git remote get-url origin)
     [[ "$url" =~ github.com[:/]([^/]+) ]] && default_repo_hub="${BASH_REMATCH[1]}"
   fi
+  umc_debug "umc_create_project_config: NAME=${default_name} REPO_HUB=${default_repo_hub} MAKEFILE_DIR=${mf_dir}"
   cat > "project.mk" << EOF
 # === Created by Universal Makefile System Installer ===
 REPO_HUB = $default_repo_hub
@@ -300,6 +326,7 @@ EOF
 # ----- Update .gitignore with common entries -----
 umc_update_gitignore() {
   log_info "Updating .gitignore..."
+  umc_debug "ensuring common entries in .gitignore"
   local entries=(
     "# Universal Makefile System"
     ".project.local.mk"
@@ -318,6 +345,7 @@ umc_create_environments() {
   local force_flag="${1:-false}"
   [[ -d "environments" && "${force_flag}" != true ]] && return 0
   log_info "Creating environments/..."
+  umc_debug "writing environments/development.mk and environments/production.mk"
   mkdir -p environments
   cat > environments/development.mk << 'EOF'
 # === Created by Universal Makefile System Installer ===
@@ -340,6 +368,7 @@ umc_create_sample_compose() {
   local force_flag="${1:-false}"
   [[ -f "docker-compose.dev.yml" && "${force_flag}" != true ]] && return 0
   log_info "Creating docker-compose.dev.yml..."
+  umc_debug "writing docker-compose.dev.yml"
   cat > docker-compose.dev.yml << 'EOF'
 # === Created by Universal Makefile System Installer ===
 #version: '3.8'

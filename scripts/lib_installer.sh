@@ -211,7 +211,7 @@ Common options:
     --force             Force installation/uninstall/update actions
     --dry-run           Show actions without performing them
     --backup            Backup files before removing (uninstall only)
-    -d, --debug         Show detailed debug info on failure
+    -d, --debug         Show detailed debug info and context logs
     -y, --yes           Non-interactive mode; auto-approve prompts
 
 Install options:
@@ -223,6 +223,7 @@ Install options:
     --version TAG       Pin to a specific release tag (e.g., v1.2.3)
     --ref REF           Pin to a git ref (branch/tag/commit)
     --existing-project  Setup in existing project (preserve existing files)
+    --scaffold-only     Skip downloading/updating code; scaffold project files only
 
 Examples:
     install.sh install --release
@@ -252,6 +253,21 @@ parse_common_args_installer() {
   BACKUP=$(resolve_flag "BACKUP" "--backup" "" "$@")
   DEBUG_MODE=$(resolve_flag "DEBUG" "--debug" "-d" "$@")
   YES=$(resolve_flag "YES" "--yes" "-y" "$@")
+  if [[ "${DEBUG_MODE}" == "true" ]]; then
+    log_info "[debug] flags: FORCE_INSTALL=${FORCE_INSTALL} DRY_RUN=${DRY_RUN} BACKUP=${BACKUP} YES=${YES}"
+  fi
+}
+
+print_debug_context() {
+  [[ "${DEBUG_MODE}" == "true" ]] || return 0
+  log_info "[debug] context: PWD=$(pwd) USER=$(id -un 2>/dev/null || whoami) SHELL=${SHELL:-n/a}"
+  log_info "[debug] repo: GITHUB_OWNER=${GITHUB_OWNER} GITHUB_REPO=${GITHUB_REPO} REPO_URL=${REPO_URL}"
+  log_info "[debug] paths: MAKEFILE_DIR=${MAKEFILE_DIR} SCRIPT_DIR=${SCRIPT_DIR} TMPDIR=${TMPDIR}"
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    log_info "[debug] git: repo-root=$(git rev-parse --show-toplevel 2>/dev/null) branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+  else
+    log_info "[debug] git: not a repo"
+  fi
 }
 
 SCAFFOLD_ONLY=false
@@ -296,6 +312,16 @@ check_requirements_installer() {
   fi
   command -v make >/dev/null 2>&1 || { log_error "Make is required"; exit 1; }
   log_success "Requirements check passed"
+  if [[ "${DEBUG_MODE}" == "true" ]]; then
+    log_info "[debug] binaries:"
+    command -v bash >/dev/null 2>&1 && log_info "  bash=$(bash --version | head -n1)"
+    command -v make >/dev/null 2>&1 && log_info "  make=$(make --version 2>/dev/null | head -n1)"
+    command -v git  >/dev/null 2>&1 && log_info "  git=$(git --version 2>/dev/null)"
+    command -v tar  >/dev/null 2>&1 && log_info "  tar=$(tar --version 2>/dev/null | head -n1)"
+    if command -v curl >/dev/null 2>&1; then log_info "  curl=$(curl --version | head -n1)"; fi
+    if command -v wget >/dev/null 2>&1; then log_info "  wget=$(wget --version 2>/dev/null | head -n1)"; fi
+    log_info "[debug] env: GITHUB_TOKEN=${GITHUB_TOKEN:+<set>}"
+  fi
 }
 
 install_submodule() {
@@ -532,6 +558,10 @@ self_update_script_installer() {
 
 umf_install_main() {
   local cmd=${1:-install}; shift || true
+  if [[ "${DEBUG_MODE}" == "true" ]]; then
+    log_info "[debug] entry: cmd=${cmd} args='$*'"
+    print_debug_context
+  fi
   case "$cmd" in
     install)
       CURRENT_CMD="install"; parse_install_args_installer "$@"; check_requirements_installer
@@ -548,6 +578,9 @@ umf_install_main() {
         log_warn "[install] --scaffold-only specified: skipping code download/update"
       fi
       _umc_try_source || true
+      if [[ "${DEBUG_MODE}" == "true" ]]; then
+        if type umc_scaffold_project_files >/dev/null 2>&1; then log_info "[debug] umc_scaffold_project_files available"; else log_warn "[debug] umc_scaffold_project_files NOT found"; fi
+      fi
       log_info "[install] invoking umc_scaffold_project_files..."
       umc_scaffold_project_files "${MAKEFILE_DIR}" \
       && umc_update_gitignore \
