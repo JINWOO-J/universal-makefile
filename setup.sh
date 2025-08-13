@@ -324,19 +324,30 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       fi
       log_info "Version status: current=${CURRENT_VERSION:-none}, latest=${DESIRED_VERSION}"
       if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]]; then
-        TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
-        TARBALL_PATH="${TMPDIR_UMR}/umf.tar.gz"
-        if ! umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}"; then
-          log_warn "Failed to download release tarball for ${DESIRED_VERSION}."; exit 1
+        DO_UPDATE=1
+        if [ -n "${CURRENT_VERSION}" ] && ! umr_is_true "${FORCE_UPDATE}"; then
+          if ! umr_prompt_confirm "New release available (${CURRENT_VERSION} → ${DESIRED_VERSION}). Update now?"; then
+            log_info "Skipped update by user choice."
+            DO_UPDATE=0
+          fi
         fi
-        rm -rf "${MAKEFILE_SYSTEM_DIR}" || true
-        EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"
-        umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed."; exit 1; }
-        ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"
-        [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
-        mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
-        echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"
-        log_success "Already up to date (latest: ${DESIRED_VERSION})."
+        if [ "${DO_UPDATE}" -eq 1 ]; then
+          TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
+          TARBALL_PATH="${TMPDIR_UMR}/umf.tar.gz"
+          if ! umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}"; then
+            log_warn "Failed to download release tarball for ${DESIRED_VERSION}."; exit 1
+          fi
+          rm -rf "${MAKEFILE_SYSTEM_DIR}" || true
+          EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"
+          umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed."; exit 1; }
+          ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"
+          [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
+          mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
+          echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"
+          log_success "Updated Makefile system to latest: ${DESIRED_VERSION}."
+        else
+          log_success "Staying on current version (current: ${CURRENT_VERSION}, latest: ${DESIRED_VERSION})."
+        fi
       else
         log_success "Already up to date (latest: ${DESIRED_VERSION})."
       fi
