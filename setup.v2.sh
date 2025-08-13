@@ -343,19 +343,9 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
   fi
 
-  # Use shared scaffolding
-  if [ ! -f "project.mk" ] || [ ! -f "Makefile" ]; then
-    umc_scaffold_project_files "${MAKEFILE_SYSTEM_DIR}"
-  fi
-  if [ -f "Makefile" ] && ! makefile_includes_universal; then
-    log_warn "Existing 'Makefile' detected but it does not include 'Makefile.universal'."
-    echo ""; echo "Add the following line to your Makefile and re-run ./setup.v2.sh:"; echo ""; echo "  include Makefile.universal"; echo ""; echo "Alternatively, ensure it includes '\$(MAKEFILE_DIR)/makefiles/*.mk' via 'Makefile.universal'."; exit 0
-  fi
-
-  make_args=()
-  for arg in "$@"; do [ "$arg" = "--" ] && continue; make_args+=("$arg"); done
-  if [ "${#make_args[@]}" -eq 0 ]; then make_args=(help); fi
-  log_info "Handing over to make: make ${make_args[*]}"; echo "------------------------------------------------------------"; exec make "${make_args[@]}"
+  # v2: 로컬 모드에서는 프로젝트 스캐폴딩/생성 작업을 하지 않음
+  log_info "Local mode complete. To initialize project files, run './install.sh install'."
+  exit 0
 
 else
   # Bootstrap mode (no git repo)
@@ -395,11 +385,12 @@ else
   mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"; echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-release-version" || true; [ -f "${GITHUB_REPO}/.ums-version" ] || echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-version" || true; log_success "Project downloaded to '${GITHUB_REPO}' from release ${DESIRED_VERSION}."
 
   (
-    cd "${GITHUB_REPO}" && log_info "Installing Makefile system via release ${DESIRED_VERSION}..."; TMPDIR_INNER="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_INNER}" >/dev/null 2>&1 || true' EXIT INT TERM
-    TARBALL_INNER="${TMPDIR_INNER}/umf.tar.gz"; umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_INNER}" || exit 0
-    EXTRACT_INNER="${TMPDIR_INNER}/extract"; mkdir -p "${EXTRACT_INNER}"; umr_extract_tarball "${TARBALL_INNER}" "${EXTRACT_INNER}" || exit 0
-    ROOT_INNER="$(umr_tar_first_dir "${TARBALL_INNER}" || true)"; [ -z "${ROOT_INNER}" ] && exit 0
-    rm -rf "${MAKEFILE_SYSTEM_DIR}" || true; mv "${EXTRACT_INNER}/${ROOT_INNER}" "${MAKEFILE_SYSTEM_DIR}"; echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"; umc_scaffold_project_files "${MAKEFILE_SYSTEM_DIR}"
+    cd "${GITHUB_REPO}" && log_info "Running installer (install.sh install)..."
+    if [ -x ./install.sh ]; then
+      ./install.sh install || { log_warn "install.sh install failed."; exit 0; }
+    else
+      log_warn "install.sh not found or not executable. Skipping initialization."
+    fi
   )
 
   echo ""; log_info "Next steps:"; echo "1. cd ${GITHUB_REPO}"; echo "2. make help"
