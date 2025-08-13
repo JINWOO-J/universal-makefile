@@ -594,7 +594,7 @@ umf_install_main() {
       [[ -d environments ]] && log_info "[verify] environments/ exists" || log_warn "[verify] environments/ missing"
       ;;
     init)
-      shift || true; parse_common_args_installer "$@"; _umc_try_source || true; log_info "[init] scaffolding only (MAKEFILE_DIR=${MAKEFILE_DIR})"; umc_scaffold_project_files "${MAKEFILE_DIR}" ;;
+      parse_common_args_installer "$@"; _umc_try_source || true; log_info "[init] scaffolding only (MAKEFILE_DIR=${MAKEFILE_DIR})"; if [[ "${DEBUG_MODE}" == "true" ]]; then print_debug_context; fi; umc_scaffold_project_files "${MAKEFILE_DIR}" ;;
     app|setup-app)
       local app_type="${1:-}"; shift || true; parse_common_args_installer "$@"; check_requirements_installer; setup_app_example "$app_type" ;;
     status)
