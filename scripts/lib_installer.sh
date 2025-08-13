@@ -406,7 +406,11 @@ install_release() {
   log_success "Makefile system installed at '${MAKEFILE_DIR}' (source: ${desired})."
 
   local must_have=("makefiles/core.mk" "makefiles/help.mk" "makefiles/version.mk"); local missing=0; local rel
-  for rel in "${must_have[@]}"; do [[ -f "${MAKEFILE_DIR}/${rel}" ]] || { log_warn "Missing expected file: ${MAKEFILE_DIR}/${rel}"; missing=1; }; done; [[ "${missing}" -eq 1 ]] && log_warn "Some expected files are missing. Archive layout may have changed."
+  for rel in "${must_have[@]}"; do [[ -f "${MAKEFILE_DIR}/${rel}" ]] || { log_warn "Missing expected file: ${MAKEFILE_DIR}/${rel}"; missing=1; }; done
+  if [[ "${missing}" -eq 1 ]]; then
+    log_warn "Some expected files are missing. Archive layout may have changed."
+  fi
+  return 0
 }
 
 install_github_workflow() {
@@ -581,13 +585,17 @@ umf_install_main() {
       if [[ "${DEBUG_MODE}" == "true" ]]; then
         if type umc_scaffold_project_files >/dev/null 2>&1; then log_info "[debug] umc_scaffold_project_files available"; else log_warn "[debug] umc_scaffold_project_files NOT found"; fi
       fi
-      log_info "[install] invoking umc_scaffold_project_files..."
-      umc_scaffold_project_files "${MAKEFILE_DIR}" \
-      && umc_update_gitignore \
-      && umc_create_environments "${FORCE_INSTALL}" \
-      && [[ "$EXISTING_PROJECT" == false ]] && umc_create_sample_compose "${FORCE_INSTALL}" \
-      && install_github_workflow \
-      && log_success "🎉 Universal Makefile System installation completed!"
+      if type umc_scaffold_project_files >/dev/null 2>&1; then
+        log_info "[install] invoking umc_scaffold_project_files..."
+        umc_scaffold_project_files "${MAKEFILE_DIR}" \
+        && umc_update_gitignore \
+        && umc_create_environments "${FORCE_INSTALL}" \
+        && [[ "$EXISTING_PROJECT" == false ]] && umc_create_sample_compose "${FORCE_INSTALL}" \
+        && install_github_workflow \
+        && log_success "🎉 Universal Makefile System installation completed!"
+      else
+        log_warn "[install] scaffold library not available; skipping project scaffolding"
+      fi
       [[ -f Makefile ]] && log_info "[verify] Makefile exists" || log_warn "[verify] Makefile missing"
       [[ -f Makefile.universal ]] && log_info "[verify] Makefile.universal exists" || log_warn "[verify] Makefile.universal missing"
       [[ -f project.mk ]] && log_info "[verify] project.mk exists" || log_warn "[verify] project.mk missing"
