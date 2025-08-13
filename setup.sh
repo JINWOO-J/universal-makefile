@@ -377,15 +377,34 @@ else
   if [ -e "${GITHUB_REPO}" ]; then
     current_bootstrap=""; if [ -f "${GITHUB_REPO}/.ums-release-version" ]; then current_bootstrap="$(cat "${GITHUB_REPO}/.ums-release-version")"; elif [ -f "${GITHUB_REPO}/VERSION" ]; then current_bootstrap="$(tr -d '\n\r' < "${GITHUB_REPO}/VERSION")"; fi
     log_warn "Target directory '${GITHUB_REPO}' already exists."; [ -n "${current_bootstrap}" ] && log_info "Current installed release: ${current_bootstrap}"; log_info "Desired release: ${DESIRED_VERSION}"
+
+    # If already up to date, exit quietly
+    if [ -n "${current_bootstrap}" ] && [ "${current_bootstrap}" = "${DESIRED_VERSION}" ]; then
+      log_success "Already up to date (installed: ${current_bootstrap})."; exit 0
+    fi
+
+    # Prompt for update when FORCE_UPDATE is not set
+    DO_UPDATE=false
     if umr_is_true "${FORCE_UPDATE}"; then
+      DO_UPDATE=true
       log_info "--force specified: updating in place..."
+    else
+      if umr_prompt_confirm "New release available (${current_bootstrap:-none} → ${DESIRED_VERSION}). Update now?"; then
+        DO_UPDATE=true
+      else
+        log_info "Skipped update by user choice."; exit 1
+      fi
+    fi
+
+    if umr_is_true "${DO_UPDATE}"; then
       TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
       TARBALL_PATH="${TMPDIR_UMR}/repo.tar.gz"; umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}" || { log_warn "Download failed"; exit 1; }
       EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"; umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed"; exit 1; }
       ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"; [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
-      rm -rf "${GITHUB_REPO}" && mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"; echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-release-version" || true; [ -f "${GITHUB_REPO}/.ums-version" ] || echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-version" || true; log_success "Project updated to '${DESIRED_VERSION}'."; exit 0
-    else
-      log_warn "Run with --force to overwrite/update the existing directory."; exit 1
+      rm -rf "${GITHUB_REPO}" && mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}";
+      echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-release-version" || true;
+      [ -f "${GITHUB_REPO}/.ums-version" ] || echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-version" || true;
+      log_success "Project updated to '${DESIRED_VERSION}'."; exit 0
     fi
   fi
 

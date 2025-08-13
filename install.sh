@@ -27,7 +27,7 @@ MAKEFILE_DIR=".makefile-system"
 GITHUB_OWNER="jinwoo-j"
 GITHUB_REPO="universal-makefile"
 GITHUB_REPO_SLUG="${GITHUB_OWNER}/${GITHUB_REPO}"
-MAIN_BRANCH="master"
+MAIN_BRANCH="main"
 
 REPO_URL="https://github.com/${GITHUB_REPO_SLUG}"
 INSTALLER_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO_SLUG}/${MAIN_BRANCH}/install.sh"
@@ -380,7 +380,6 @@ parse_common_args() {
 }
 
 parse_install_args() {
-  INSTALLATION_TYPE="subtree"; EXISTING_PROJECT=false
   local remaining_args=()
   while [[ $# -gt 0 ]]; do
     case $1 in
