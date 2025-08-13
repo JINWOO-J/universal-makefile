@@ -175,10 +175,43 @@ type umc_create_sample_compose >/dev/null 2>&1 || umc_create_sample_compose() { 
 
 usage_installer() {
   cat <<EOF
-Universal Makefile System Installer (lib)
+Universal Makefile System Installer
 
 Usage: install.sh <command> [options]
-Commands: install | update | uninstall | status | app | help
+
+Commands:
+    install             Install the Universal Makefile System (default)
+    update | pull       Update the Universal Makefile System to the latest version
+    uninstall           Remove files created by this installer
+    self-update         Update this installer script itself
+    app | setup-app     Setup example app
+    diff                Show differences between local and remote files
+    status              Show installation status
+    check               Validate installation
+    help                Show this help message
+
+Common options:
+    --force             Force installation/uninstall/update actions
+    --dry-run           Show actions without performing them
+    --backup            Backup files before removing (uninstall only)
+    -d, --debug         Show detailed debug info on failure
+    -y, --yes           Non-interactive mode; auto-approve prompts
+
+Install options:
+    --copy              Install by copying files instead of submodule
+    --subtree           Install using git subtree
+    --submodule         Install using git submodule
+    --release           Install using GitHub release tarball (token-aware)
+    --prefix DIR        Install universal system under DIR (default: ${GITHUB_REPO})
+    --version TAG       Pin to a specific release tag (e.g., v1.2.3)
+    --ref REF           Pin to a git ref (branch/tag/commit)
+    --existing-project  Setup in existing project (preserve existing files)
+
+Examples:
+    install.sh install --release
+    install.sh install --subtree --prefix vendor/umf
+    install.sh uninstall --dry-run --backup
+    install.sh status
 EOF
 }
 
@@ -223,6 +256,9 @@ parse_install_args_installer() {
   done
   parse_common_args_installer "${remaining_args[@]:-}"
 }
+
+parse_uninstall_args_installer() { parse_common_args_installer "$@"; }
+parse_update_args_installer() { parse_common_args_installer "$@"; }
 
 # The following functions are adapted from install.sh
 has_universal_id() { local file=$1; [[ -f "$file" ]] && grep -q "Universal Makefile System" "$file"; }
@@ -354,6 +390,127 @@ show_status_installer() {
   echo ""
 }
 
+# ---- Example app setup ----
+setup_app_example() {
+  local app_type="${1:-}"
+  local examples_dir="$MAKEFILE_DIR/examples"
+  [[ ! -d "$examples_dir" ]] && log_error "examples directory not found!" && exit 1
+  if [[ -z "$app_type" ]]; then
+    echo ""; log_info "Available example apps:"; local apps=(); local i=1
+    for dir in "$examples_dir"/*/; do local app_name; app_name=$(basename "$dir"); [[ "$app_name" == "environments" ]] && continue; apps+=("$app_name"); echo "  $i) $app_name"; ((i++)); done
+    [[ ${#apps[@]} -eq 0 ]] && log_warn "No app examples found!" && exit 1
+    echo ""; if [[ "$YES" == true ]]; then choice=1; log_info "--yes provided; selecting first example: ${apps[0]}"; else read -rp "Select example to setup (1-${#apps[@]}) [q to quit]: " choice; fi
+    [[ "$choice" == "q" || "$choice" == "Q" ]] && log_warn "Aborted by user." && exit 0
+    [[ "$choice" =~ ^[0-9]+$ ]] || { log_error "Invalid input"; exit 1; }
+    app_type="${apps[$((choice-1))]}"; [[ -z "$app_type" ]] && log_error "Invalid selection" && exit 1
+  fi
+  local template_dir="$examples_dir/$app_type"; [[ ! -d "$template_dir" ]] && log_error "No template directory for '$app_type'" && exit 1
+  log_info "Setting up example for '$app_type'..."
+  local file fname yn
+  for file in "$template_dir"/*; do
+    fname=$(basename "$file")
+    if [[ -e "$fname" && "$FORCE_INSTALL" != true && "$YES" != true ]]; then
+      read -rp "File $fname already exists. Overwrite? [y/N]: " yn; [[ "$yn" =~ ^[Yy]$ ]] || { log_warn "Skipped $fname"; continue; }
+    fi
+    cp -rf "$file" .; log_success "Installed $fname"
+  done
+  log_success "$app_type example setup complete!"; echo "Try: make help"
+}
+
+# ---- Diff helper ----
+show_diff_installer() {
+  echo ""; log_info "Debug mode enabled. Showing local changes that are blocking the update:"; git --no-pager -C "$MAKEFILE_DIR" diff --color=always; echo ""
+}
+
+# ---- Update logic (submodule/subtree/copy/release) ----
+update_makefile_system_installer() {
+  log_info "Updating Universal Makefile System..."; log_info "Detecting installation type..."
+  local installed_type=""
+  if grep -q "path = ${MAKEFILE_DIR}" .gitmodules 2>/dev/null; then installed_type="submodule"
+  elif git log --grep="git-subtree-dir: ${MAKEFILE_DIR}" --oneline | grep -q .; then installed_type="subtree"
+  elif [[ -d "makefiles" ]]; then installed_type="copy"
+  elif [[ -f "${MAKEFILE_DIR}/.version" ]]; then installed_type="release"
+  else log_error "Universal Makefile System installation not found. Cannot update."; exit 1
+  fi
+  log_info "-> Installation type detected as: ${installed_type}"; echo ""
+
+  case "$installed_type" in
+    submodule)
+      local old_commit; old_commit=$(git -C "$MAKEFILE_DIR" rev-parse HEAD 2>/dev/null || echo "")
+      log_info "Detecting remote default branch..."; local remote_head; remote_head=$(git -C "$MAKEFILE_DIR" remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p' | head -n1)
+      if [[ -z "$remote_head" ]]; then remote_head=$(git -C "$MAKEFILE_DIR" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' || true); fi
+      if [[ -z "$remote_head" ]]; then if git -C "$MAKEFILE_DIR" ls-remote --exit-code --heads origin main >/dev/null 2>&1; then remote_head=main; elif git -C "$MAKEFILE_DIR" ls-remote --exit-code --heads origin master >/dev/null 2>&1; then remote_head=master; else remote_head="$MAIN_BRANCH"; fi; fi
+      log_info "-> Remote default branch: ${remote_head}"; log_info "Fetching latest changes for submodule..."; git -C "$MAKEFILE_DIR" fetch origin --prune || true
+      local current_branch; current_branch=$(git -C "$MAKEFILE_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
+      if [[ "$FORCE_INSTALL" == true ]]; then log_warn "Forcibly updating submodule to origin/${remote_head}..."; git -C "$MAKEFILE_DIR" reset --hard "origin/${remote_head}"; log_success "Submodule forcibly updated to latest commit from remote."
+      else
+        if [[ "$current_branch" = "HEAD" ]]; then log_warn "Detached HEAD. Checking out '${remote_head}'..."; git -C "$MAKEFILE_DIR" checkout -B "$remote_head" "origin/${remote_head}" --no-track || true; fi
+        log_info "Attempting to merge origin/${remote_head}..."; if ! git -C "$MAKEFILE_DIR" merge --ff-only "origin/${remote_head}"; then echo ""; log_error "Merge into submodule failed (non fast-forward)."; log_warn "You may have local changes or diverged history in '${MAKEFILE_DIR}'."; if [[ "$DEBUG_MODE" == true ]]; then show_diff_installer; else log_info "Re-run with --debug to see local changes, or use --force to hard reset."; fi; exit 1; fi
+        log_success "Submodule updated with fast-forward merge."
+      fi
+      ;;
+    subtree)
+      log_info "Pulling latest changes into git subtree..."; git subtree pull --prefix="$MAKEFILE_DIR" "$REPO_URL" "$MAIN_BRANCH" --squash || { log_error "Failed to pull git subtree."; exit 1; }; log_success "Git subtree pulled successfully."
+      ;;
+    copy)
+      log_info "Updating by re-copying latest files..."; local temp_dir; temp_dir="$(mktemp -d "${UMF_TMP_DIR}/copy-update.XXXXXX")"; log_info "Cloning latest version from $REPO_URL"; git clone "$REPO_URL" "$temp_dir/universal-makefile"; cp -r "$temp_dir/universal-makefile/makefiles" .; cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true; cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true; [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .; log_success "Copied latest files from remote."
+      ;;
+    release)
+      log_info "Re-installing latest release archive..."; install_release || { log_error "Release update failed"; exit 1; }; log_success "Release archive updated"
+      ;;
+  esac
+}
+
+# ---- Uninstall ----
+safe_rm_installer() {
+  if [[ "$DRY_RUN" == true ]]; then log_info "[dry-run] Would remove: $*"; else [[ "$BACKUP" == true ]] && cp -r "$@" "$backup_dir/" 2>/dev/null || true; rm -rf "$@"; log_info "Removed $*"; fi
+}
+
+uninstall_installer() {
+  echo "${BLUE}Uninstalling Universal Makefile System...${RESET}"
+  if [[ "$FORCE_INSTALL" != true && "$YES" != true && "$DRY_RUN" != true ]]; then read -rp "Proceed with uninstall? This will remove generated files. [y/N]: " yn; [[ "$yn" =~ ^[Yy]$ ]] || { log_warn "Aborted by user."; exit 0; }; fi
+  local backup_dir=""; if [[ "$BACKUP" == true ]]; then backup_dir=".backup_universal_makefile_$(date +%Y%m%d_%H%M%S)"; mkdir -p "$backup_dir"; log_info "Backup enabled. Files will be backed up to $backup_dir"; fi
+  local f
+  for f in Makefile Makefile.universal project.mk; do if has_universal_id "$f"; then safe_rm_installer "$f"; log_info "Removed $f"; fi; done
+  [[ -f .project.local.mk ]] && safe_rm_installer .project.local.mk
+  [[ -f .NEW_VERSION.tmp ]] && safe_rm_installer .NEW_VERSION.tmp
+  [[ -f .env ]] && safe_rm_installer .env
+  [[ -d environments ]] && safe_rm_installer environments
+  [[ -d makefiles ]] && safe_rm_installer makefiles
+  [[ -d scripts ]] && safe_rm_installer scripts
+  [[ -d templates ]] && safe_rm_installer templates
+  if [[ -d "$MAKEFILE_DIR" ]]; then
+    if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1 && git config --file .gitmodules --get "submodule.$MAKEFILE_DIR.path" >/dev/null 2>&1; then
+      if [[ "$FORCE_INSTALL" == true ]]; then git submodule deinit -f "$MAKEFILE_DIR" || true; git rm -f "$MAKEFILE_DIR" || true; rm -rf ".git/modules/$MAKEFILE_DIR" "$MAKEFILE_DIR"; log_info "Removed submodule directory ($MAKEFILE_DIR)"; else log_warn "Submodule directory ($MAKEFILE_DIR) not removed. Use --force option to remove."; fi
+    else
+      safe_rm_installer "$MAKEFILE_DIR"; log_info "Removed directory $MAKEFILE_DIR"
+    fi
+  fi
+  sed -i.bak '/Universal Makefile System/d;/.project.local.mk/d;/\.env/d' .gitignore 2>/dev/null || true; rm -f .gitignore.bak
+  [[ -f docker-compose.yml ]] && log_warn "docker-compose.yml is not removed (user/project file)."
+  [[ -f project.mk ]] && ! has_universal_id project.mk && log_warn "project.mk is not removed (user/project file)."
+  log_warn "User project files such as docker-compose.yml are not removed for safety."; log_success "Uninstallation complete"
+}
+
+# ---- Validate ----
+is_universal_makefile_installed_installer() {
+  local ok=true
+  if [[ ! -d "${MAKEFILE_DIR}" && ! -d "makefiles" ]]; then log_error "Universal Makefile System directory (${MAKEFILE_DIR} or makefiles) not found."; ok=false; fi
+  [[ -f "Makefile.universal" ]] || { log_error "Makefile.universal not found."; ok=false; }
+  [[ -f "project.mk" ]] || { log_error "project.mk not found."; ok=false; }
+  if [[ ! -d "environments" || -z "$(ls environments/*.mk 2>/dev/null)" ]]; then log_error "No environments/*.mk files found."; ok=false; fi
+  if [[ -f Makefile ]]; then echo ""; if ! grep -q '^[[:space:]]*include[[:space:]]\+Makefile\.universal' Makefile; then log_warn "Makefile does NOT include 'include Makefile.universal'."; log_info "Add this line to your Makefile:"; echo -e "${YELLOW}include Makefile.universal${RESET} \n\n"; fi; fi
+  if [[ "$ok" == true ]]; then log_success "Universal Makefile System is properly installed 🎉"; return 0; else log_warn "Universal Makefile System is NOT fully installed."; return 1; fi
+}
+
+# ---- Self-update installer script ----
+self_update_script_installer() {
+  log_info "Updating installer script itself..."; local tmp_script; tmp_script="$(mktemp "${UMF_TMP_DIR}/self.XXXXXX")"; local -a curl_args=("-fsSL" "-L" "-H" "Cache-Control: no-cache") wget_args=("-q" "--no-cache")
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then log_info "GITHUB_TOKEN is set. Adding authentication header."; local auth_header="Authorization: Bearer ${GITHUB_TOKEN}"; curl_args+=(-H "${auth_header}"); wget_args+=(--header="${auth_header}"); fi
+  local download_success=true; if command -v curl >/dev/null 2>&1; then curl "${curl_args[@]}" "$INSTALLER_SCRIPT_URL" -o "$tmp_script" || download_success=false; elif command -v wget >/dev/null 2>&1; then wget "${wget_args[@]}" -O "$tmp_script" "$INSTALLER_SCRIPT_URL" || download_success=false; else log_error "curl or wget required for self-update."; exit 1; fi
+  if [[ "$download_success" == true && -s "$tmp_script" ]]; then chmod +x "$tmp_script"; mv "$tmp_script" "$0"; log_success "Installer script updated successfully!"; else rm -f "$tmp_script"; log_error "Failed to download installer script."; exit 1; fi
+}
+
 umf_install_main() {
   local cmd=${1:-install}; shift || true
   case "$cmd" in
@@ -374,10 +531,20 @@ umf_install_main() {
       && install_github_workflow \
       && log_success "🎉 Universal Makefile System installation completed!"
       ;;
+    app|setup-app)
+      local app_type="${1:-}"; shift || true; parse_common_args_installer "$@"; check_requirements_installer; setup_app_example "$app_type" ;;
     status)
       parse_common_args_installer "$@"; show_status_installer ;;
     update|pull)
-      CURRENT_CMD="update"; parse_common_args_installer "$@"; show_status_installer; log_info "Run 'install.sh install --release' to re-install from latest release" ;;
+      CURRENT_CMD="update"; parse_update_args_installer "$@"; check_requirements_installer; show_status_installer; update_makefile_system_installer ;;
+    uninstall)
+      CURRENT_CMD="uninstall"; parse_uninstall_args_installer "$@"; check_requirements_installer; uninstall_installer ;;
+    update-script|self-update|self-update-script)
+      parse_common_args_installer "$@"; self_update_script_installer ;;
+    check)
+      parse_common_args_installer "$@"; is_universal_makefile_installed_installer ;;
+    diff)
+      parse_common_args_installer "$@"; show_diff_installer ;;
     help|-h|--help|'')
       usage_installer ;;
     *)
