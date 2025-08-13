@@ -52,8 +52,32 @@ log_debug() { if [[ "${DEBUG_MODE:-false}" == "true" ]]; then echo "${YELLOW}ðŸ”
 enable_xtrace_if_debug() { if [[ "${DEBUG_MODE:-false}" == "true" ]]; then set -x; log_debug "xtrace enabled"; fi }
 
 # --- Source shared libs (optional) ---
-_umr_try_source() { local cands=("./scripts/lib_release.sh" "${MAKEFILE_DIR}/scripts/lib_release.sh"); for f in "${cands[@]}"; do [[ -f "$f" ]] && . "$f" && return 0; done; return 1; }
-_umc_try_source() { local cands=("./scripts/lib_scaffold.sh" "${MAKEFILE_DIR}/scripts/lib_scaffold.sh"); for f in "${cands[@]}"; do [[ -f "$f" ]] && . "$f" && return 0; done; return 1; }
+_umr_try_source() {
+  local cands=("./scripts/lib_release.sh" "${MAKEFILE_DIR}/scripts/lib_release.sh")
+  local f
+  for f in "${cands[@]}"; do
+    if [[ -f "$f" ]]; then
+      log_info "[lib] sourcing: $f"
+      . "$f"
+      return 0
+    fi
+  done
+  log_warn "[lib] lib_release.sh not found; using internal fallbacks"
+  return 1
+}
+_umc_try_source() {
+  local cands=("./scripts/lib_scaffold.sh" "${MAKEFILE_DIR}/scripts/lib_scaffold.sh")
+  local f
+  for f in "${cands[@]}"; do
+    if [[ -f "$f" ]]; then
+      log_info "[lib] sourcing: $f"
+      . "$f"
+      return 0
+    fi
+  done
+  log_warn "[lib] lib_scaffold.sh not found; using internal scaffold fallbacks"
+  return 1
+}
 _umr_try_source || true
 _umc_try_source || true
 
@@ -164,14 +188,7 @@ type umr_tar_first_dir >/dev/null 2>&1 || umr_tar_first_dir() { local tarfile="$
 
 type umr_extract_tarball >/dev/null 2>&1 || umr_extract_tarball() { local tarfile="$1" dest="$2"; mkdir -p "$dest" && tar -xzf "$tarfile" -C "$dest" 2>/dev/null; }
 
-# Scaffold lib fallbacks
-type umc_scaffold_project_files >/dev/null 2>&1 || umc_scaffold_project_files() { umc_create_main_makefile; umc_create_project_config; umc_update_gitignore; umc_create_environments; }
-
-type umc_create_main_makefile >/dev/null 2>&1 || umc_create_main_makefile() { :; }
-type umc_create_project_config >/dev/null 2>&1 || umc_create_project_config() { :; }
-type umc_update_gitignore >/dev/null 2>&1 || umc_update_gitignore() { :; }
-type umc_create_environments >/dev/null 2>&1 || umc_create_environments() { :; }
-type umc_create_sample_compose >/dev/null 2>&1 || umc_create_sample_compose() { :; }
+# No local umc_* fallbacks here; rely on scripts/lib_scaffold.sh for implementation
 
 usage_installer() {
   cat <<EOF
@@ -237,6 +254,7 @@ parse_common_args_installer() {
   YES=$(resolve_flag "YES" "--yes" "-y" "$@")
 }
 
+SCAFFOLD_ONLY=false
 parse_install_args_installer() {
   INSTALLATION_TYPE="release"; EXISTING_PROJECT=false
   local remaining_args=()
@@ -249,6 +267,7 @@ parse_install_args_installer() {
       --prefix)     MAKEFILE_DIR="$2"; shift 2 ;;
       --version)    DESIRED_REF="$2"; shift 2 ;;
       --ref)        DESIRED_REF="$2"; shift 2 ;;
+      --scaffold-only|--init-only|--no-download) SCAFFOLD_ONLY=true; shift ;;
       --existing-project) EXISTING_PROJECT=true; shift ;;
       --help|-h)    usage_installer; return 2 ;;
       *)            remaining_args+=("$1"); shift ;;
@@ -516,21 +535,33 @@ umf_install_main() {
   case "$cmd" in
     install)
       CURRENT_CMD="install"; parse_install_args_installer "$@"; check_requirements_installer
-      case "$INSTALLATION_TYPE" in
-        submodule) install_submodule ;;
-        copy) install_copy ;;
-        subtree) install_subtree ;;
-        release) install_release ;;
-        *) log_error "Invalid installation type: $INSTALLATION_TYPE"; exit 1 ;;
-      esac
+      log_info "[install] MAKEFILE_DIR=${MAKEFILE_DIR} INSTALLATION_TYPE=${INSTALLATION_TYPE} SCAFFOLD_ONLY=${SCAFFOLD_ONLY}"
+      if [[ "$SCAFFOLD_ONLY" != true ]]; then
+        case "$INSTALLATION_TYPE" in
+          submodule) install_submodule ;;
+          copy) install_copy ;;
+          subtree) install_subtree ;;
+          release) install_release ;;
+          *) log_error "Invalid installation type: $INSTALLATION_TYPE"; exit 1 ;;
+        esac
+      else
+        log_warn "[install] --scaffold-only specified: skipping code download/update"
+      fi
       _umc_try_source || true
+      log_info "[install] invoking umc_scaffold_project_files..."
       umc_scaffold_project_files "${MAKEFILE_DIR}" \
       && umc_update_gitignore \
       && umc_create_environments "${FORCE_INSTALL}" \
       && [[ "$EXISTING_PROJECT" == false ]] && umc_create_sample_compose "${FORCE_INSTALL}" \
       && install_github_workflow \
       && log_success "ðŸŽ‰ Universal Makefile System installation completed!"
+      [[ -f Makefile ]] && log_info "[verify] Makefile exists" || log_warn "[verify] Makefile missing"
+      [[ -f Makefile.universal ]] && log_info "[verify] Makefile.universal exists" || log_warn "[verify] Makefile.universal missing"
+      [[ -f project.mk ]] && log_info "[verify] project.mk exists" || log_warn "[verify] project.mk missing"
+      [[ -d environments ]] && log_info "[verify] environments/ exists" || log_warn "[verify] environments/ missing"
       ;;
+    init)
+      shift || true; parse_common_args_installer "$@"; _umc_try_source || true; log_info "[init] scaffolding only (MAKEFILE_DIR=${MAKEFILE_DIR})"; umc_scaffold_project_files "${MAKEFILE_DIR}" ;;
     app|setup-app)
       local app_type="${1:-}"; shift || true; parse_common_args_installer "$@"; check_requirements_installer; setup_app_example "$app_type" ;;
     status)
