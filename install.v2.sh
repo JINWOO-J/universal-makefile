@@ -48,7 +48,7 @@ CURRENT_CMD=""
 CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
 CURL_RETRY_DELAY_SEC=${CURL_RETRY_DELAY_SEC:-2}
 
-log_debug() { [[ "${DEBUG_MODE:-false}" == "true" ]] && echo "${YELLOW}🔎 $*${RESET}"; }
+log_debug() { if [[ "${DEBUG_MODE:-false}" == "true" ]]; then echo "${YELLOW}🔎 $*${RESET}"; fi; return 0; }
 
 enable_xtrace_if_debug() { if [[ "${DEBUG_MODE:-false}" == "true" ]]; then set -x; log_debug "xtrace enabled"; fi }
 

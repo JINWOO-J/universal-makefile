@@ -84,7 +84,14 @@ umr_build_tarball_urls() {
   local primary="" mirror=""
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     primary="https://api.github.com/repos/${owner}/${repo}/tarball/${ref}"
-    mirror="$primary"
+    case "$ref" in
+      main|master|develop|*-branch|*-snapshot)
+        mirror="https://codeload.github.com/${owner}/${repo}/tar.gz/refs/heads/${ref}"
+        ;;
+      *)
+        mirror="https://codeload.github.com/${owner}/${repo}/tar.gz/refs/tags/${ref}"
+        ;;
+    esac
   else
     case "$ref" in
       main|master|develop|*-branch|*-snapshot)
@@ -106,12 +113,21 @@ umr_download_with_retries() {
   # usage: umr_download_with_retries URL OUT_FILE [HEADER1] [HEADER2] ...
   local url="$1" out="$2"; shift 2
   local -a headers=("$@")
+  local -a curl_headers=()
+  local h
+  for h in "${headers[@]}"; do
+    curl_headers+=( -H "$h" )
+  done
   local attempt=1
   while [[ $attempt -le ${CURL_RETRY_MAX} ]]; do
     if command -v curl >/dev/null 2>&1; then
-      if curl -fSL --connect-timeout 10 --max-time 300 "${headers[@]}" -o "$out" "$url"; then
+      # Do not leak headers in xtrace
+      local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
+      if curl -fSL --connect-timeout 10 --max-time 300 "${curl_headers[@]}" -o "$out" "$url"; then
+        [ "$_had_xtrace" -eq 1 ] && set -x
         [[ -s "$out" ]] && return 0
       fi
+      [ "$_had_xtrace" -eq 1 ] && set -x
     elif command -v wget >/dev/null 2>&1; then
       local -a wget_hdr=()
       for h in "${headers[@]}"; do wget_hdr+=(--header "$h"); done
@@ -145,7 +161,7 @@ umr_download_tarball() {
   if umr_download_with_retries "$primary" "$out_tar" "${headers[@]}"; then
     [[ -s "$out_tar" ]] && return 0
   fi
-  if umr_download_with_retries "$mirror" "$out_tar" "${headers[@]}"; then
+  if [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar"; then
     [[ -s "$out_tar" ]] && return 0
   fi
   return 1
