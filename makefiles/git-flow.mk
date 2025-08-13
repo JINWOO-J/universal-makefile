@@ -32,7 +32,7 @@ endef
 # Reset local branch to remote tracking branch (origin/<branch>)
 # Usage: $(call RESET_TO_REMOTE, <branch-name>)
 define RESET_TO_REMOTE
-    @branch="$(1)"; \
+    branch="$(1)"; \
     if ! git rev-parse --verify "$$branch" >/dev/null 2>&1; then \
         echo "$(BLUE)Creating $$branch branch...$(RESET)"; \
         git checkout -b "$$branch" || exit 1; \
