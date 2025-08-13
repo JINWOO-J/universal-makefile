@@ -418,7 +418,7 @@ else
     cd "${GITHUB_REPO}" && log_info "Running installer..."
     if [ -f ./install.sh ]; then
       log_info "Using install.sh (release-aware)"
-      bash ./install.sh install || { log_warn "install.sh install failed."; exit 0; }
+      bash ./install.sh init || { log_warn "install.sh install failed."; exit 0; }
     elif [ -f ./install.legacy.sh ]; then
       log_info "Using legacy install.sh"
       bash ./install.sh install || { log_warn "install.legacy.sh install failed."; exit 0; }

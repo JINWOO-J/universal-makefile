@@ -2,7 +2,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT="${REPO_ROOT}/install.sh"
 SETUP="${REPO_ROOT}/setup.sh"
@@ -65,8 +65,9 @@ case_run_no_git() {
 
 # 1) subtree install
 case_run "subtree install" '
-  "'"$SCRIPT"'" install --subtree -y &&
-  assert_dir ".makefile-system" &&
+  '"$SCRIPT"' install --subtree -y &&
+  assert_dir "universal-makefile" &&
+  assert_contains "Makefile" "MAKEFILE_SYSTEM_DIR := universal-makefile" &&
   assert_file "Makefile.universal" &&
   assert_file "Makefile" &&
   assert_file "project.mk" &&
@@ -75,36 +76,35 @@ case_run "subtree install" '
 
 # 2) submodule install
 case_run "submodule install" '
-  "'"$SCRIPT"'" install --submodule -y &&
+  '"$SCRIPT"' install --submodule -y &&
   assert_file ".gitmodules" &&
-  assert_contains ".gitmodules" "path = .makefile-system"
+  assert_contains ".gitmodules" "path = universal-makefile"
 '
 
 # 3) copy install
 case_run "copy install" '
-  "'"$SCRIPT"'" install --copy -y &&
+  '"$SCRIPT"' install --copy -y &&
   assert_dir "makefiles" &&
   ! [[ -d ".makefile-system" ]]
 '
 
 # 4) release latest (falls back to branch if no releases)
 case_run "release latest" '
-  "'"$SCRIPT"'" install --release -y &&
-  assert_dir ".makefile-system"
+  '"$SCRIPT"' install --release -y
 '
 
 # 5) install with prefix
 case_run "prefix install" '
-  "'"$SCRIPT"'" install --subtree --prefix vendor/umf -y &&
+  '"$SCRIPT"' install --subtree --prefix vendor/umf -y &&
   assert_dir "vendor/umf" &&
   assert_contains "Makefile" "MAKEFILE_SYSTEM_DIR := vendor/umf"
 '
 
 # 6) uninstall dry-run (should not remove files)
 case_run "uninstall dry-run" '
-  "'"$SCRIPT"'" install --subtree -y &&
-  "'"$SCRIPT"'" uninstall --dry-run &&
-  assert_dir ".makefile-system"
+  '"$SCRIPT"' install --subtree -y &&
+  '"$SCRIPT"' uninstall --dry-run &&
+  assert_dir "universal-makefile"
 '
 
 ## setup.sh tests
@@ -112,9 +112,11 @@ case_run "uninstall dry-run" '
 # 7) setup local: delegate and make help
 case_run "setup local: delegate and make help" '
   cp '"$SCRIPT"' ./install.sh &&
+  cp -r '"$REPO_ROOT"'/scripts ./scripts &&
   ( FORCE_UPDATE=true '"$SETUP"' -- help ) &&
+  ./install.sh init -y &&
   assert_file "Makefile" &&
-  assert_dir ".makefile-system" &&
+  assert_dir "universal-makefile" &&
   make help >/dev/null
 '
 
@@ -123,7 +125,7 @@ case_run_no_git "setup bootstrap: default" '
   '"$SETUP"' &&
   assert_dir "universal-makefile" &&
   assert_file "universal-makefile/Makefile" &&
-  assert_dir "universal-makefile/.makefile-system" &&
+  assert_dir "universal-makefile/makefiles" &&
   make -C universal-makefile help >/dev/null
 '
 
@@ -132,7 +134,7 @@ case_run_no_git "setup bootstrap: -v master" '
   '"$SETUP"' -v master &&
   assert_dir "universal-makefile" &&
   assert_file "universal-makefile/Makefile" &&
-  assert_dir "universal-makefile/.makefile-system" &&
+  assert_dir "universal-makefile/makefiles" &&
   make -C universal-makefile help >/dev/null
 '
 

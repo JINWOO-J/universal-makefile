@@ -8,8 +8,8 @@ if [[ -f "${SCRIPT_DIR}/scripts/lib_installer.sh" ]]; then
   . "${SCRIPT_DIR}/scripts/lib_installer.sh"
 else
   echo "scripts/lib_installer.sh not found. Aborting." >&2
-  exit 1
-fi
+        exit 1
+    fi
 
 umf_install_main "$@"
 
