@@ -26,6 +26,41 @@ NEW_VERSION="v$$MAJOR.$$MINOR.$$NEW_PATCH"
 endef
 
 # ================================================================
+# Common helpers
+# ================================================================
+
+# Reset local branch to remote tracking branch (origin/<branch>)
+# Usage: $(call RESET_TO_REMOTE, <branch-name>)
+define RESET_TO_REMOTE
+    branch="$(1)"; \
+    if ! git rev-parse --verify "$$branch" >/dev/null 2>&1; then \
+        echo "$(BLUE)Creating $$branch branch...$(RESET)"; \
+        git checkout -b "$$branch" || exit 1; \
+    else \
+        git checkout "$$branch"; \
+    fi; \
+    git fetch origin "$$branch"; \
+    git reset --hard "origin/$$branch"
+endef
+
+.PHONY: reset-branch reset-main reset-develop
+
+# Reset arbitrary branch by passing BRANCH=<name>
+reset-branch: check-git-repo ## 🔄 Reset BRANCH to origin/BRANCH
+	@if [ -z "$(BRANCH)" ]; then \
+		echo "$(RED)Error: BRANCH is required (make reset-branch BRANCH=name)$(RESET)"; exit 1; \
+	fi
+	@$(call RESET_TO_REMOTE,$(BRANCH))
+
+# Reset main branch to origin/main (or configured MAIN_BRANCH)
+reset-main: check-git-repo ## 🔄 Reset MAIN_BRANCH to origin/MAIN_BRANCH
+	@$(call RESET_TO_REMOTE,$(MAIN_BRANCH))
+
+# Reset develop branch to origin/develop (or configured DEVELOP_BRANCH)
+reset-develop: check-git-repo ## 🔄 Reset DEVELOP_BRANCH to origin/DEVELOP_BRANCH
+	@$(call RESET_TO_REMOTE,$(DEVELOP_BRANCH))
+
+# ================================================================
 # Git 상태 확인
 # ================================================================
 
@@ -323,9 +358,7 @@ finish-release: ## 🚀 Complete release process (merge to main and develop, cre
 		CHANGELOG=$$(git log --pretty=format:"- %s (%h)" $$PREVIOUS_TAG..$$RELEASE_BRANCH); \
 	fi; \
 	$(call colorecho, "Merging $$RELEASE_BRANCH into $(MAIN_BRANCH)..."); \
-    git checkout $(MAIN_BRANCH); \
-    git fetch origin $(MAIN_BRANCH); \
-    git reset --hard origin/$(MAIN_BRANCH); \
+    $(call RESET_TO_REMOTE,$(MAIN_BRANCH)); \
 	git merge --no-ff -m "Merge $$RELEASE_BRANCH into $(MAIN_BRANCH)" $$RELEASE_BRANCH; \
 	$(call colorecho, "Tagging release: $$RELEASE_VERSION"); \
 	git tag -a $$RELEASE_VERSION -m "Release $$RELEASE_VERSION"; \
@@ -474,16 +507,7 @@ merge-release: ensure-clean ## 🔄 Merge release branch to main branches
 		exit 1; \
 	fi; \
 	echo "$(BLUE)Merging to main...$(RESET)"; \
-    if ! git rev-parse --verify main >/dev/null 2>&1; then \
-        echo "$(BLUE)Creating main branch...$(RESET)"; \
-        git checkout -b main; \
-        git fetch origin $(MAIN_BRANCH) || true; \
-        git reset --hard origin/$(MAIN_BRANCH) || true; \
-    else \
-        git checkout main; \
-        git fetch origin $(MAIN_BRANCH); \
-        git reset --hard origin/$(MAIN_BRANCH); \
-    fi && \
+    $(call RESET_TO_REMOTE,$(MAIN_BRANCH)) && \
 	if ! git merge --no-ff "$$CUR_BRANCH" -m "🔀 Merge release $$CUR_BRANCH into main"; then \
 		echo "$(RED)Error: Failed to merge into main$(RESET)" >&2; \
 		exit 1; \
@@ -513,9 +537,7 @@ start-hotfix: ## 🌿 Start hotfix branch from main
 		$(call error, "HOTFIX_NAME is required. Usage: make start-hotfix HOTFIX_NAME=fix-critical-bug"); \
 		exit 1; \
 	fi; \
-    git checkout $(MAIN_BRANCH); \
-    git fetch origin $(MAIN_BRANCH); \
-    git reset --hard origin/$(MAIN_BRANCH); \
+    $(call RESET_TO_REMOTE,$(MAIN_BRANCH)); \
 	git checkout -b hotfix/$(HOTFIX_NAME) $(MAIN_BRANCH); \
 	$(call success, "Created hotfix branch 'hotfix/$(HOTFIX_NAME)'")
 
@@ -532,9 +554,7 @@ finish-hotfix: ## 🚀 Finish hotfix (merge to main and develop)
 	git pull origin $(MAIN_BRANCH); \
 	git merge --no-ff $$CUR_BRANCH; \
 	$(call colorecho, "Merging $$CUR_BRANCH into $(DEVELOP_BRANCH)..."); \
-    git checkout $(DEVELOP_BRANCH); \
-    git fetch origin $(DEVELOP_BRANCH); \
-    git reset --hard origin/$(DEVELOP_BRANCH); \
+    $(call RESET_TO_REMOTE,$(DEVELOP_BRANCH)); \
 	git merge --no-ff $$CUR_BRANCH; \
 	$(call colorecho, "Pushing changes..."); \
 	git push origin $(MAIN_BRANCH); \
