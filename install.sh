@@ -33,7 +33,7 @@ REPO_URL="https://github.com/${GITHUB_REPO_SLUG}"
 INSTALLER_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO_SLUG}/${MAIN_BRANCH}/install.sh"
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-INSTALLATION_TYPE="subtree"
+INSTALLATION_TYPE="release"
 DESIRED_REF=""
 YES=false
 
