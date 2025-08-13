@@ -187,63 +187,7 @@ fi
 
 # Fallbacks for scaffold lib
 if ! declare -F umc_scaffold_project_files >/dev/null 2>&1; then
-  umc_scaffold_project_files() {
-    # $1: makefile system dir (optional)
-    local mf_dir="${1:-${MAKEFILE_SYSTEM_DIR}}"
-    # Makefile.universal
-    if [ ! -f "Makefile.universal" ]; then
-      cat > Makefile.universal << 'EOF'
-# === Created by setup.v2.sh (scaffold) ===
-
-# System dir variables
-MAKEFILE_SYSTEM_DIR ?= .makefile-system
-MAKEFILE_DIR ?= $(MAKEFILE_SYSTEM_DIR)
-
-# 1. Project config
--include project.mk
--include .project.local.mk
-
-# 2. Environments
-ENV ?= development
--include environments/$(ENV).mk
--include .project.local.mk
-
-# 3. Core system modules
-include $(MAKEFILE_DIR)/makefiles/core.mk
-include $(MAKEFILE_DIR)/makefiles/help.mk
-include $(MAKEFILE_DIR)/makefiles/version.mk
-include $(MAKEFILE_DIR)/makefiles/docker.mk
-include $(MAKEFILE_DIR)/makefiles/compose.mk
-include $(MAKEFILE_DIR)/makefiles/git-flow.mk
-include $(MAKEFILE_DIR)/makefiles/cleanup.mk
-EOF
-      log_success "Makefile.universal scaffolded"
-    fi
-    # Makefile
-    if [ ! -f "Makefile" ]; then
-      cat > Makefile << 'EOF'
-# === Created by setup.v2.sh (scaffold) ===
-MAKEFILE_SYSTEM_DIR := .makefile-system
-MAKEFILE_DIR := $(MAKEFILE_SYSTEM_DIR)
-include Makefile.universal
-EOF
-      log_success "Makefile scaffolded"
-    fi
-    # project.mk
-    if [ ! -f "project.mk" ]; then
-      if [ -f "${mf_dir}/templates/project.mk.template" ]; then
-        cp "${mf_dir}/templates/project.mk.template" project.mk
-        log_success "project.mk created from template"
-      else
-        cat > project.mk << 'EOF'
-# === Created by setup.v2.sh (scaffold) ===
-NAME = $(notdir $(CURDIR))
-MAKEFILE_DIR = .makefile-system
-EOF
-        log_success "project.mk scaffolded (minimal)"
-      fi
-    fi
-  }
+  umc_scaffold_project_files() { :; }
 fi
 if ! declare -F umc_create_main_makefile >/dev/null 2>&1; then
   umc_create_main_makefile() { :; }
@@ -399,19 +343,9 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
   fi
 
-  # Use shared scaffolding
-  if [ ! -f "project.mk" ] || [ ! -f "Makefile" ]; then
-    umc_scaffold_project_files "${MAKEFILE_SYSTEM_DIR}"
-  fi
-  if [ -f "Makefile" ] && ! makefile_includes_universal; then
-    log_warn "Existing 'Makefile' detected but it does not include 'Makefile.universal'."
-    echo ""; echo "Add the following line to your Makefile and re-run ./setup.v2.sh:"; echo ""; echo "  include Makefile.universal"; echo ""; echo "Alternatively, ensure it includes '\$(MAKEFILE_DIR)/makefiles/*.mk' via 'Makefile.universal'."; exit 0
-  fi
-
-  make_args=()
-  for arg in "$@"; do [ "$arg" = "--" ] && continue; make_args+=("$arg"); done
-  if [ "${#make_args[@]}" -eq 0 ]; then make_args=(help); fi
-  log_info "Handing over to make: make ${make_args[*]}"; echo "------------------------------------------------------------"; exec make "${make_args[@]}"
+  # v2: 로컬 모드에서는 프로젝트 스캐폴딩/생성 작업을 하지 않음
+  log_info "Local mode complete. To initialize project files, run './install.sh install'."
+  exit 0
 
 else
   # Bootstrap mode (no git repo)
@@ -434,17 +368,14 @@ else
     log_warn "Target directory '${GITHUB_REPO}' already exists."; [ -n "${current_bootstrap}" ] && log_info "Current installed release: ${current_bootstrap}"; log_info "Desired release: ${DESIRED_VERSION}"
     if umr_is_true "${FORCE_UPDATE}"; then
       log_info "--force specified: updating in place..."
-    elif prompt_confirm "Overwrite existing directory with release ${DESIRED_VERSION}?"; then
-      log_info "User confirmed overwrite. Updating in place..."
+      TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
+      TARBALL_PATH="${TMPDIR_UMR}/repo.tar.gz"; umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}" || { log_warn "Download failed"; exit 1; }
+      EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"; umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed"; exit 1; }
+      ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"; [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
+      rm -rf "${GITHUB_REPO}" && mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"; echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-release-version" || true; [ -f "${GITHUB_REPO}/.ums-version" ] || echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-version" || true; log_success "Project updated to '${DESIRED_VERSION}'."; exit 0
     else
-      log_warn "Aborted by user. Run with --force to overwrite/update the existing directory."
-      exit 1
+      log_warn "Run with --force to overwrite/update the existing directory."; exit 1
     fi
-    TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
-    TARBALL_PATH="${TMPDIR_UMR}/repo.tar.gz"; umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}" || { log_warn "Download failed"; exit 1; }
-    EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"; umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed"; exit 1; }
-    ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"; [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
-    rm -rf "${GITHUB_REPO}" && mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"; echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-release-version" || true; [ -f "${GITHUB_REPO}/.ums-version" ] || echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-version" || true; log_success "Project updated to '${DESIRED_VERSION}'."; exit 0
   fi
 
   TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
@@ -454,13 +385,12 @@ else
   mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"; echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-release-version" || true; [ -f "${GITHUB_REPO}/.ums-version" ] || echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-version" || true; log_success "Project downloaded to '${GITHUB_REPO}' from release ${DESIRED_VERSION}."
 
   (
-    cd "${GITHUB_REPO}" && log_info "Installing Makefile system via release ${DESIRED_VERSION}..."; TMPDIR_INNER="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_INNER}" >/dev/null 2>&1 || true' EXIT INT TERM
-    TARBALL_INNER="${TMPDIR_INNER}/umf.tar.gz"; umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_INNER}" || exit 0
-    EXTRACT_INNER="${TMPDIR_INNER}/extract"; mkdir -p "${EXTRACT_INNER}"; umr_extract_tarball "${TARBALL_INNER}" "${EXTRACT_INNER}" || exit 0
-    ROOT_INNER="$(umr_tar_first_dir "${TARBALL_INNER}" || true)"; [ -z "${ROOT_INNER}" ] && exit 0
-    rm -rf "${MAKEFILE_SYSTEM_DIR}" || true; mv "${EXTRACT_INNER}/${ROOT_INNER}" "${MAKEFILE_SYSTEM_DIR}"; echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"; umc_scaffold_project_files "${MAKEFILE_SYSTEM_DIR}"
-    # 안전망: 최소 스캐폴드 보장
-    [ -f "project.mk" ] || umc_scaffold_project_files "${MAKEFILE_SYSTEM_DIR}"
+    cd "${GITHUB_REPO}" && log_info "Running installer (install.sh install)..."
+    if [ -x ./install.sh ]; then
+      ./install.sh install || { log_warn "install.sh install failed."; exit 0; }
+    else
+      log_warn "install.sh not found or not executable. Skipping initialization."
+    fi
   )
 
   echo ""; log_info "Next steps:"; echo "1. cd ${GITHUB_REPO}"; echo "2. make help"
