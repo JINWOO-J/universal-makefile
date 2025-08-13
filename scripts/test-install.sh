@@ -138,6 +138,85 @@ case_run_no_git "setup bootstrap: -v master" '
   make -C universal-makefile help >/dev/null
 '
 
+# 10) init debug logs
+case_run "init debug logs" '
+  cp '"$SCRIPT"' ./install.sh &&
+  cp -r '"$REPO_ROOT"'/scripts ./scripts &&
+  ./install.sh init --debug -y > out.txt 2>&1 &&
+  assert_contains out.txt "\\[scaffold\\]\\[debug\\] begin"
+'
+
+# 11) scaffold-only install
+case_run "scaffold-only install" '
+  cp '"$SCRIPT"' ./install.sh &&
+  cp -r '"$REPO_ROOT"'/scripts ./scripts &&
+  ./install.sh install --scaffold-only -y &&
+  assert_file "Makefile" &&
+  assert_file "Makefile.universal" &&
+  assert_file "project.mk"
+'
+
+# 12) status and check on subtree
+case_run "status and check on subtree" '
+  '"$SCRIPT"' install --subtree -y &&
+  '"$SCRIPT"' status > status.txt 2>&1 &&
+  '"$SCRIPT"' check
+'
+
+# 13) update on copy install
+case_run "update on copy install" '
+  '"$SCRIPT"' install --copy -y &&
+  '"$SCRIPT"' update -y
+'
+
+# 14) uninstall backup creates backup dir
+case_run "uninstall backup" '
+  '"$SCRIPT"' install --subtree -y &&
+  '"$SCRIPT"' uninstall --backup -y &&
+  ls -d .backup_universal_makefile_* >/dev/null 2>&1
+'
+
+# 15) app setup non-interactive
+case_run "app setup non-interactive" '
+  '"$SCRIPT"' install --subtree -y &&
+  '"$SCRIPT"' app -y &&
+  assert_file "app/index.html"
+'
+
+# 16) prefix + scaffold-only
+case_run "prefix + scaffold-only" '
+  cp '"$SCRIPT"' ./install.sh &&
+  cp -r '"$REPO_ROOT"'/scripts ./scripts &&
+  ./install.sh install --scaffold-only --subtree --prefix vendor/umf -y &&
+  assert_contains "Makefile" "MAKEFILE_SYSTEM_DIR := vendor/umf"
+'
+
+# 17) submodule uninstall --force
+case_run "submodule uninstall --force" '
+  '"$SCRIPT"' install --submodule -y &&
+  '"$SCRIPT"' uninstall --force -y &&
+  ! [[ -d "universal-makefile" ]] &&
+  ( ! [[ -f .gitmodules ]] || ! grep -q "path = universal-makefile" .gitmodules )
+'
+
+# 18) init idempotency (second run makes no changes)
+case_run "init idempotency" '
+  cp '"$SCRIPT"' ./install.sh &&
+  cp -r '"$REPO_ROOT"'/scripts ./scripts &&
+  ./install.sh init -y &&
+  cp Makefile Makefile.bak && cp Makefile.universal Makefile.universal.bak && cp project.mk project.mk.bak &&
+  ./install.sh init -y &&
+  cmp -s Makefile Makefile.bak &&
+  cmp -s Makefile.universal Makefile.universal.bak &&
+  cmp -s project.mk project.mk.bak
+'
+
+# 19) release install with GITHUB_TOKEN (fallback to unauthenticated if 401)
+case_run "release with GITHUB_TOKEN" '
+  ( GITHUB_TOKEN=dummy '"$SCRIPT"' install --release -y || '"$SCRIPT"' install --release -y ) &&
+  assert_dir "universal-makefile"
+'
+
 echo
 echo "Passed: $pass  Failed: $fail"
 exit $fail
