@@ -10,7 +10,7 @@ set -euo pipefail
 GITHUB_OWNER="jinwoo-j"
 GITHUB_REPO="universal-makefile"
 MAIN_BRANCH="main"
-MAKEFILE_SYSTEM_DIR=".makefile-system"
+MAKEFILE_SYSTEM_DIR="${GITHUB_REPO}"
 
 # Colors
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
