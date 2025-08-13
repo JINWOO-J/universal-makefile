@@ -604,7 +604,16 @@ umf_install_main() {
     init)
       parse_common_args_installer "$@"; _umc_try_source || true; log_info "[init] scaffolding only (MAKEFILE_DIR=${MAKEFILE_DIR})"; if [[ "${DEBUG_MODE}" == "true" ]]; then print_debug_context; fi; umc_scaffold_project_files "${MAKEFILE_DIR}" ;;
     app|setup-app)
-      local app_type="${1:-}"; shift || true; parse_common_args_installer "$@"; check_requirements_installer; setup_app_example "$app_type" ;;
+      # Support: app [-y|--yes] [TYPE]
+      local app_type=""
+      if [[ "${1:-}" =~ ^- ]]; then
+        # Flags first, no explicit type
+        parse_common_args_installer "$@"
+      else
+        app_type="${1:-}"; shift || true
+        parse_common_args_installer "$@"
+      fi
+      check_requirements_installer; setup_app_example "$app_type" ;;
     status)
       parse_common_args_installer "$@"; show_status_installer ;;
     update|pull)
