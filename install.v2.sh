@@ -166,17 +166,147 @@ type umr_tar_first_dir >/dev/null 2>&1 || umr_tar_first_dir() { local tarfile="$
 type umr_extract_tarball >/dev/null 2>&1 || umr_extract_tarball() { local tarfile="$1" dest="$2"; mkdir -p "$dest" && tar -xzf "$tarfile" -C "$dest" 2>/dev/null; }
 
 # Scaffold lib fallbacks
-type umc_scaffold_project_files >/dev/null 2>&1 || umc_scaffold_project_files() { :; }
+type umc_scaffold_project_files >/dev/null 2>&1 || umc_scaffold_project_files() {
+  umc_create_main_makefile
+  umc_create_project_config
+  umc_update_gitignore
+  umc_create_environments
+}
 
-type umc_create_main_makefile >/dev/null 2>&1 || umc_create_main_makefile() { :; }
+type umc_create_main_makefile >/dev/null 2>&1 || umc_create_main_makefile() {
+  local universal_makefile="Makefile.universal"
+  if [[ ! -f "$universal_makefile" ]]; then
+    log_info "Creating ${universal_makefile}..."
+    cat > "$universal_makefile" << 'EOF'
+# === Created by Universal Makefile System Installer ===
+# This file is the entry point for the universal makefile system.
+# It should be included by the project's main Makefile.
 
-type umc_create_project_config >/dev/null 2>&1 || umc_create_project_config() { :; }
+.DEFAULT_GOAL := help
 
-type umc_update_gitignore >/dev/null 2>&1 || umc_update_gitignore() { :; }
+# 1. Project config
+ifeq ($(wildcard project.mk),)
+    $(warning project.mk not found. Run 'install.v2.sh install')
+endif
+-include project.mk
+-include .project.local.mk
 
-type umc_create_environments >/dev/null 2>&1 || umc_create_environments() { :; }
+# 2. Environments
+ENV ?= development
+-include environments/$(ENV).mk
+-include .project.local.mk
 
-type umc_create_sample_compose >/dev/null 2>&1 || umc_create_sample_compose() { :; }
+# 3. Core system modules
+include $(MAKEFILE_DIR)/makefiles/core.mk
+include $(MAKEFILE_DIR)/makefiles/help.mk
+include $(MAKEFILE_DIR)/makefiles/version.mk
+include $(MAKEFILE_DIR)/makefiles/docker.mk
+include $(MAKEFILE_DIR)/makefiles/compose.mk
+include $(MAKEFILE_DIR)/makefiles/git-flow.mk
+include $(MAKEFILE_DIR)/makefiles/cleanup.mk
+EOF
+    log_success "${universal_makefile} created"
+  fi
+
+  local main_makefile="Makefile"
+  if [[ ! -f ${main_makefile} ]]; then
+    log_info "Creating ${main_makefile}..."
+    cat > "${main_makefile}" << EOF
+# === Created by Universal Makefile System Installer ===
+MAKEFILE_SYSTEM_DIR := ${MAKEFILE_DIR}
+MAKEFILE_DIR := \\$(MAKEFILE_SYSTEM_DIR)
+include Makefile.universal
+EOF
+    log_success "${main_makefile} created"
+  fi
+}
+
+type umc_create_project_config >/dev/null 2>&1 || umc_create_project_config() {
+  if [[ -f "project.mk" ]]; then return 0; fi
+  log_info "Creating project.mk..."
+  local default_name; default_name=$(basename "$(pwd)")
+  local default_repo_hub="mycompany"
+  if git remote get-url origin >/dev/null 2>&1; then
+    local url; url=$(git remote get-url origin)
+    [[ "$url" =~ github.com[:/]([^/]+) ]] && default_repo_hub="${BASH_REMATCH[1]}"
+  fi
+  cat > "project.mk" << EOF
+# === Created by Universal Makefile System Installer ===
+REPO_HUB = ${default_repo_hub}
+NAME = ${default_name}
+VERSION = v1.0.0
+
+MAIN_BRANCH = main
+DEVELOP_BRANCH = develop
+
+DOCKERFILE_PATH = Dockerfile
+DOCKER_BUILD_ARGS =
+
+COMPOSE_FILE = docker-compose.yml
+DEV_COMPOSE_FILE = docker-compose.dev.yml
+PROD_COMPOSE_FILE = docker-compose.prod.yml
+MAKEFILE_DIR = ${MAKEFILE_DIR}
+EOF
+  log_success "project.mk created"
+}
+
+type umc_update_gitignore >/dev/null 2>&1 || umc_update_gitignore() {
+  log_info "Updating .gitignore..."
+  local entries=(
+    "# Universal Makefile System"
+    ".project.local.mk"
+    ".NEW_VERSION.tmp"
+    ".env"
+    "environments/*.local.mk"
+  )
+  [[ ! -f .gitignore ]] && touch .gitignore
+  local e
+  for e in "${entries[@]}"; do
+    grep -qxF "$e" .gitignore || echo "$e" >> .gitignore
+  done
+  log_success ".gitignore updated"
+}
+
+type umc_create_environments >/dev/null 2>&1 || umc_create_environments() {
+  [[ -d "environments" ]] || mkdir -p environments
+  if [[ ! -f environments/development.mk ]]; then
+    log_info "Creating environments/development.mk..."
+    cat > environments/development.mk << 'EOF'
+# === Created by Universal Makefile System Installer ===
+DEBUG = true
+DOCKER_BUILD_OPTION += --progress=plain
+COMPOSE_FILE = docker-compose.dev.yml
+EOF
+  fi
+  if [[ ! -f environments/production.mk ]]; then
+    log_info "Creating environments/production.mk..."
+    cat > environments/production.mk << 'EOF'
+# === Created by Universal Makefile System Installer ===
+DEBUG = false
+DOCKER_BUILD_OPTION += --no-cache
+COMPOSE_FILE = docker-compose.prod.yml
+EOF
+  fi
+  log_success "Environment configs ensured"
+}
+
+type umc_create_sample_compose >/dev/null 2>&1 || umc_create_sample_compose() {
+  if [[ -f "docker-compose.dev.yml" ]]; then return 0; fi
+  log_info "Creating docker-compose.dev.yml..."
+  cat > docker-compose.dev.yml << 'EOF'
+# === Created by Universal Makefile System Installer ===
+#version: '3.8'
+services:
+  app:
+    image: ${REPO_HUB}/${NAME}:${TAGNAME}
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+EOF
+  log_success "Sample docker-compose.dev.yml created"
+}
 
 usage() {
   cat <<EOF
