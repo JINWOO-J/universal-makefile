@@ -9,38 +9,60 @@ This repository provides a bootstrap/setup entrypoint in [setup.sh](mdc:setup.sh
 - Local mode (inside a git repo): verifies/installs the Makefile system and hands off to make/install scripts.
 - Bootstrap mode (outside a git repo): downloads the repository release/snapshot into a new directory, then integrates the Makefile system.
 
-## Version Selection Order
-- CLI provided version via `--version/-v <ref>` or positional (`vX.Y.Z`, `main`, `master`, `develop`)
-- `.ums-version` pin file in project root (if present)
-- Latest release tag (GitHub API fallback to ls-remote)
+## Version Selection & Policy (Unified)
+- Priority: `--version <ref>` > `-f/--force` > `UMS_BOOTSTRAP_POLICY`(latest|prompt|pin) > `.ums-version` (pin) > current install
+- CLI version can also be positional: `vX.Y.Z`, `main`, `master`, `develop`.
+
+### Force Rule (-f/--force)
+- If `CLI_VERSION` is empty, force ignores policy/pin/prompt and uses the latest release.
+- If `CLI_VERSION` is provided, install that version (reinstall if identical), with clear logs.
+
+### Bootstrap Policy
+- `UMS_BOOTSTRAP_POLICY` default is `pin`.
+- `pin`: keep pin; when newer exists, just inform.
+- `prompt`: on TTY, ask once if newer exists (default is Pinned). Non-interactive: keep pin.
+- `latest`: always use latest.
 
 ## Force & Debug
-- `--force/-f`: reinstall/update without interactive prompts, even when current version equals desired.
+- `--force/-f`: when no CLI version, override to latest; with CLI version, force (re)install that version. No prompts.
 - `--debug/-d`: enable detailed logs and xtrace; prints flags, context, paths, and file write locations.
 
 ## Version Files
 - Installed UMF version: `$(MAKEFILE_SYSTEM_DIR)/.version`
 - Pinned desired version: `.ums-version` (project root)
-- Last bootstrap/desired release record: `.ums-release-version` (project root)
+- Last bootstrap/installed release: `.ums-release-version` (project root)
+- Pin sync: when updated via latest/force/user choice, `.ums-version` is synchronized (controlled by `UPDATE_PIN=true`).
 
 ## Local Mode Details
-- Resolves desired version (see order above).
-- Installs/updates the Makefile system from a release tarball.
-- Writes installed version to `$(MAKEFILE_SYSTEM_DIR)/.version`.
-- Also writes `.ums-release-version` in the parent project root, and initializes `.ums-version` if missing.
-- With `--force`, re-install proceeds without prompting.
+- Apply the same unified priority/policy as bootstrap.
+- If `current==pinned` and a newer exists (not forced), ask once in TTY.
+- Install/update from release tarball; write installed version to `$(MAKEFILE_SYSTEM_DIR)/.version`.
+- After install/update: always update `.ums-release-version`; sync `.ums-version` when `UPDATE_PIN=true`.
+- `--force` performs without prompts as described above.
 
 ## Bootstrap Mode Details
-- Resolves desired version (see order above). If none available, falls back to `main` snapshot.
+- Apply unified priority/policy. If none resolved, fall back to `main` snapshot.
 - Downloads into `${GITHUB_REPO}` directory.
-- Records `.ums-release-version` and ensures `.ums-version` in the parent project root.
+- After install/update: always update `.ums-release-version`; ensure/sync `.ums-version` according to `UPDATE_PIN`.
 - Invokes project installer if present (prefers `install.sh init`).
-- With `--force`, update proceeds without prompting.
+- `--force`: no prompts; uses latest unless CLI version provided.
+
+## Integrity & Download Robustness
+- SHA256 verification path retained (`.ums-version.sha256` or `UMS_TARBALL_SHA256`), warn-and-skip if absent.
+- Tarball URLs: prefer API with token; safe mirrors handled; headers fixed.
+- Retries with exponential backoff preserved.
 
 ## Notes
-- `MAKEFILE_SYSTEM_DIR` defaults to `${GITHUB_REPO}` in this script.
+- `MAKEFILE_SYSTEM_DIR` defaults to `${GITHUB_REPO}`.
 - Positional versions: `./setup.sh v1.2.3`, `./setup.sh main`.
-- Debug examples include: `[debug] wrote installed version to: .../.version`, and bootstrap/pin file writes in project root.
+- Debug examples: `[debug] wrote installed version to: .../.version`, bootstrap/pin sync logs, policy/force overrides.
+
+## UX Scenarios
+- `./setup.sh` (pin v1.0.54, latest v1.0.56, policy=pin) → keep pin; log newer available.
+- `UMS_BOOTSTRAP_POLICY=prompt ./setup.sh` → TTY prompt (P/L/C/S), default Pinned.
+- `./setup.sh -f` (no CLI version) → install latest without prompt; update `.ums-version` to latest.
+- `./setup.sh -f v1.0.54` → force (re)install v1.0.54.
+- Local repo current==pinned & newer exists & not forced → ask once in TTY.
 
 ---
 alwaysApply: true
