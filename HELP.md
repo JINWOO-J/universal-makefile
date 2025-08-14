@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.63
-Project: universal-makefile vv1.0.63
+📋 Universal Makefile System v1.0.64
+Project: universal-makefile vv1.0.64
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
@@ -63,7 +63,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   help-md              Generate help.md file  [help.mk]
   version-info         Show version information  [help.mk]
   getting-started      Show getting started guide  [help.mk]
-  version              Show current version  [version.mk]
+  version              Show current version	  [version.mk]
   show-version         Alias for version command  [version.mk]
   uv                   Update version (shortcut)  [version.mk]
   update-version       Update version using appropriate tool  [version.mk]
