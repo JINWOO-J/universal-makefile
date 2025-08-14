@@ -20,17 +20,15 @@ UMS_BOOTSTRAP_FILE ?= .ums-release-version
 # 기본 버전 관리 타겟들
 # ================================================================
 
-version: ## 🔧 Show current version
-	@echo "$(BLUE)Version Information:$(RESET)"
-	@echo "  Project Version: $(VERSION)"
-	@echo "  Tag Name: $(TAGNAME)"
-	@echo "  Current Branch: $(CURRENT_BRANCH)"
-	@echo "  Last Git Tag: $$(git describe --tags --abbrev=0 2>/dev/null || echo 'none')"
-	@echo "  Git Commit: $$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
-	@echo "  UMF Installed: $$(cat $(UM_VERSION_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none')"
-	@echo "  UMF Pinned: $$(cat $(UMS_PIN_FILE) 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none')"
-	@echo "  UMF Bootstrap Release: $$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || echo 'none')"
-	
+version: ## 🔧 Show current version	
+	@$(ECHO_CMD) "$(MAGENTA)🐰 Version Information:$(RESET)"
+	@$(call print_var, Project Version, $(VERSION))
+	@$(call print_var, Tag Name, $(TAGNAME))
+	@$(call print_var, Current Branch, $(CURRENT_BRANCH))
+	@$(call print_var, Last Git Tag, $$(git describe --tags --abbrev=0 2>/dev/null || echo 'none'))
+	@$(call print_var, Git Commit, $$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown'))
+	@$(call print_var, UMF Installed, $$(cat $(UM_VERSION_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none'))
+	@$(call print_var, UMF Pinned, $$(cat $(UMS_PIN_FILE) 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none'))
 	@$(call print_var, UMF Bootstrap Release, $$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || echo 'none'))
 
 show-version: version ## 🔧 Alias for version command
