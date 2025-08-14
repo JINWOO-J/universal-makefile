@@ -293,7 +293,19 @@ parse_install_args_installer() {
 }
 
 parse_uninstall_args_installer() { parse_common_args_installer "$@"; }
-parse_update_args_installer() { parse_common_args_installer "$@"; }
+parse_update_args_installer() {
+  # Support version/ref on update as well
+  local remaining_args=()
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --version|-v) DESIRED_REF="$2"; shift 2 ;;
+      --ref)        DESIRED_REF="$2"; shift 2 ;;
+      --*)          remaining_args+=("$1"); shift ;;
+      *)            remaining_args+=("$1"); shift ;;
+    esac
+  done
+  parse_common_args_installer "${remaining_args[@]:-}"
+}
 
 # The following functions are adapted from install.sh
 has_universal_id() { local file=$1; [[ -f "$file" ]] && grep -q "Universal Makefile System" "$file"; }
@@ -531,7 +543,32 @@ update_makefile_system_installer() {
       log_info "Updating by re-copying latest files..."; local temp_dir; temp_dir="$(mktemp -d "${UMF_TMP_DIR}/copy-update.XXXXXX")"; log_info "Cloning latest version from $REPO_URL"; git clone "$REPO_URL" "$temp_dir/universal-makefile"; cp -r "$temp_dir/universal-makefile/makefiles" .; cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true; cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true; [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .; log_success "Copied latest files from remote."
       ;;
     release)
-      log_info "Re-installing latest release archive..."; install_release || { log_error "Release update failed"; exit 1; }; log_success "Release archive updated"
+      # Decide desired ref for update
+      local PINNED="" LATEST="" CURRENT="" UPDATE_PIN=false
+      [[ -f .ums-version ]] && PINNED="$(cat .ums-version)"
+      [[ -f "${MAKEFILE_DIR}/.version" ]] && CURRENT="$(cat "${MAKEFILE_DIR}/.version")"
+      LATEST="$(umr_fetch_latest_release_tag "${GITHUB_OWNER}" "${GITHUB_REPO}" || true)"
+      if [[ -z "${DESIRED_REF:-}" ]]; then
+        if [[ "${FORCE_INSTALL}" == "true" && -n "${LATEST}" ]]; then
+          DESIRED_REF="${LATEST}"; UPDATE_PIN=true; log_info "--force: overriding to latest ${DESIRED_REF}"
+        elif [[ -n "${PINNED}" ]]; then
+          if [[ -n "${LATEST}" && "${PINNED}" != "${LATEST}" && -t 0 && "${YES}" != "true" ]]; then
+            echo ""; echo "A newer release is available."; echo "  pinned : ${PINNED}"; echo "  latest : ${LATEST}"
+            read -r -p "Update to latest? [y/N]: " yn || true
+            case "$yn" in [yY][eE][sS]|[yY]) DESIRED_REF="${LATEST}"; UPDATE_PIN=true ;; *) DESIRED_REF="${PINNED}" ;; esac
+          else
+            DESIRED_REF="${PINNED}"
+          fi
+        else
+          DESIRED_REF="${LATEST:-${CURRENT}}"
+        fi
+      fi
+      log_info "Re-installing latest release archive (ref: ${DESIRED_REF})..."
+      install_release || { log_error "Release update failed"; exit 1; }
+      # Sync version files in project root
+      echo "${DESIRED_REF}" > .ums-release-version 2>/dev/null || true
+      if [[ "${UPDATE_PIN}" == "true" ]]; then echo "${DESIRED_REF}" > .ums-version 2>/dev/null || true; fi
+      log_success "Release archive updated"
       ;;
   esac
 }
