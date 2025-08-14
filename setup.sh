@@ -247,6 +247,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
 
     UPDATE_PIN=false
+    USER_VERSION_CHOICE_MADE=false
 
     # -f: 명시 버전이 없고 latest를 알면 최신으로 강제
     if is_true "${FORCE_UPDATE}" && [ -z "${CLI_VERSION}" ] && [ -n "${LATEST_TAG}" ] && [ "${LATEST_TAG}" != "${DESIRED_VERSION}" ]; then
@@ -415,6 +416,7 @@ else
           echo "  pinned : ${DESIRED_VERSION}"
           echo "  latest : ${LATEST_TAG}"
           read -r -p "Choose [P]inned / [L]atest / [C]ustom / [S]kip (default P): " ans
+          USER_VERSION_CHOICE_MADE=true
           case "${ans}" in
             [lL]*) DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true ;;
             [cC]*) read -r -p "Enter tag/branch: " custom; if [ -n "$custom" ]; then DESIRED_VERSION="$custom"; UPDATE_PIN=true; fi ;;
@@ -438,7 +440,7 @@ else
 
     # 이미 원하는 버전과 동일 & 강제 아님 → 최신이 있고 policy=prompt 이면 제안
     if [ -n "${current_bootstrap}" ] && [ "${current_bootstrap}" = "${DESIRED_VERSION}" ] && ! umr_is_true "${FORCE_UPDATE}"; then
-      if [ -n "${LATEST_TAG}" ] && [ "${LATEST_TAG}" != "${DESIRED_VERSION}" ] && [ "${UMS_BOOTSTRAP_POLICY}" = "prompt" ] && [ -t 0 ]; then
+      if [ -n "${LATEST_TAG}" ] && [ "${LATEST_TAG}" != "${DESIRED_VERSION}" ] && [ "${UMS_BOOTSTRAP_POLICY}" = "prompt" ] && [ -t 0 ]  && [ "${USER_VERSION_CHOICE_MADE}" != "true" ]; then
         if umr_prompt_confirm "A newer release is available (${DESIRED_VERSION} → ${LATEST_TAG}). Update now?"; then
           DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true
         else
