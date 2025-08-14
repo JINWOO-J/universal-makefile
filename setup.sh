@@ -21,6 +21,8 @@ fi
 log_info()    { echo -e "${BLUE}ℹ️  $1${RESET}"; }
 log_success() { echo -e "${GREEN}✅ $1${RESET}"; }
 log_warn()    { echo -e "${YELLOW}⚠️  $1${RESET}"; }
+log_debug()   { if [ "${DEBUG:-false}" = "true" ]; then echo -e "${YELLOW}[debug] $1${RESET}"; fi; }
+enable_xtrace_if_debug() { if [ "${DEBUG:-false}" = "true" ]; then set -x; log_debug "xtrace enabled"; fi }
 
 # Retry defaults (env-overridable)
 CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
@@ -28,6 +30,7 @@ CURL_RETRY_DELAY_SEC=${CURL_RETRY_DELAY_SEC:-2}
 
 FORCE_UPDATE=${FORCE_UPDATE:-false}
 CLI_VERSION=""
+DEBUG=${DEBUG:-false}
 
 # --- Try source shared libs; else define fallback wrappers ---
 _umr_try_source_release() {
@@ -213,6 +216,7 @@ parse_cli_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force|-f) FORCE_UPDATE=true; shift ;;
+      --debug|-d) DEBUG=true; shift ;;
       --version|-v)
         shift || true
         CLI_VERSION="${1:-}"
@@ -235,6 +239,11 @@ makefile_includes_universal() {
 
 # --- Local mode vs bootstrap mode ---
 parse_cli_args "$@"
+if [ "${DEBUG}" = "true" ]; then
+  log_info "[debug] flags: FORCE_UPDATE=${FORCE_UPDATE} DEBUG=${DEBUG} CLI_VERSION=${CLI_VERSION}"
+  log_info "[debug] context: PWD=$(pwd) USER=$(id -un 2>/dev/null || whoami) SHELL=${SHELL:-n/a}"
+  log_info "[debug] paths: MAKEFILE_SYSTEM_DIR=${MAKEFILE_SYSTEM_DIR} GITHUB_REPO=${GITHUB_REPO}"
+fi
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   log_info "Project repository found. Verifying Makefile system..."
@@ -255,7 +264,10 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     else
       log_info "Version status: current=${CURRENT_VERSION:-none}, desired=${DESIRED_VERSION}"
     fi
-    if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]]; then
+    if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]] || is_true "${FORCE_UPDATE}"; then
+      if is_true "${FORCE_UPDATE}" && [[ "${CURRENT_VERSION}" = "${DESIRED_VERSION}" ]]; then
+        log_info "--force specified: reinstalling ${DESIRED_VERSION} (current is identical)"
+      fi
       if [ -z "${CURRENT_VERSION}" ]; then
         log_warn "Makefile system is missing. Installing version ${DESIRED_VERSION}..."
       else
@@ -293,6 +305,11 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       fi
       mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
       echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"
+      log_debug "wrote installed version to: ${MAKEFILE_SYSTEM_DIR}/.version"
+      # Ensure parent project has UMF version tracking files
+      echo "${DESIRED_VERSION}" > .ums-release-version || true
+      log_debug "wrote bootstrap release to: $(pwd)/.ums-release-version"
+      if [ ! -f .ums-version ]; then echo "${DESIRED_VERSION}" > .ums-version || true; log_debug "initialized pin file: $(pwd)/.ums-version"; else log_debug "pin file exists: $(pwd)/.ums-version"; fi
       log_success "Makefile system version ${DESIRED_VERSION} is now ready."
     else
       if [ -n "${LATEST_TAG:-}" ] && [ "${DESIRED_VERSION}" = "${LATEST_TAG}" ]; then
@@ -323,8 +340,11 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         CURRENT_VERSION=""
       fi
       log_info "Version status: current=${CURRENT_VERSION:-none}, latest=${DESIRED_VERSION}"
-      if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]]; then
+      if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]] || umr_is_true "${FORCE_UPDATE}"; then
         DO_UPDATE=1
+        if umr_is_true "${FORCE_UPDATE}" && [[ "${CURRENT_VERSION}" = "${DESIRED_VERSION}" ]]; then
+          log_info "--force specified: reinstalling ${DESIRED_VERSION} (current is identical)"
+        fi
         if [ -n "${CURRENT_VERSION}" ] && ! umr_is_true "${FORCE_UPDATE}"; then
           if ! umr_prompt_confirm "New release available (${CURRENT_VERSION} → ${DESIRED_VERSION}). Update now?"; then
             log_info "Skipped update by user choice."
@@ -344,6 +364,11 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
           [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
           mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
           echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"
+          log_debug "updated installed version: ${MAKEFILE_SYSTEM_DIR}/.version"
+          # Update parent project tracking files
+          echo "${DESIRED_VERSION}" > .ums-release-version || true
+          log_debug "updated bootstrap release: $(pwd)/.ums-release-version"
+          if [ ! -f .ums-version ]; then echo "${DESIRED_VERSION}" > .ums-version || true; log_debug "initialized pin file: $(pwd)/.ums-version"; fi
           log_success "Updated Makefile system to latest: ${DESIRED_VERSION}."
         else
           log_success "Staying on current version (current: ${CURRENT_VERSION}, latest: ${DESIRED_VERSION})."
@@ -375,11 +400,11 @@ else
   if [ -n "${CLI_VERSION}" ]; then DESIRED_VERSION="${CLI_VERSION}"; log_info "CLI version specified: ${DESIRED_VERSION}"; fi
 
   if [ -e "${GITHUB_REPO}" ]; then
-    current_bootstrap=""; if [ -f "${GITHUB_REPO}/.ums-release-version" ]; then current_bootstrap="$(cat "${GITHUB_REPO}/.ums-release-version")"; elif [ -f "${GITHUB_REPO}/VERSION" ]; then current_bootstrap="$(tr -d '\n\r' < "${GITHUB_REPO}/VERSION")"; fi
+    current_bootstrap=""; if [ -f ".ums-release-version" ]; then current_bootstrap="$(cat ".ums-release-version")"; elif [ -f "${GITHUB_REPO}/VERSION" ]; then current_bootstrap="$(tr -d '\n\r' < "${GITHUB_REPO}/VERSION")"; fi
     log_warn "Target directory '${GITHUB_REPO}' already exists."; [ -n "${current_bootstrap}" ] && log_info "Current installed release: ${current_bootstrap}"; log_info "Desired release: ${DESIRED_VERSION}"
 
     # If already up to date, exit quietly
-    if [ -n "${current_bootstrap}" ] && [ "${current_bootstrap}" = "${DESIRED_VERSION}" ]; then
+    if [ -n "${current_bootstrap}" ] && [ "${current_bootstrap}" = "${DESIRED_VERSION}" ] && ! umr_is_true "${FORCE_UPDATE}"; then
       log_success "Already up to date (installed: ${current_bootstrap})."; exit 0
     fi
 
@@ -402,8 +427,10 @@ else
       EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"; umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed"; exit 1; }
       ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"; [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
       rm -rf "${GITHUB_REPO}" && mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}";
-      echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-release-version" || true;
-      [ -f "${GITHUB_REPO}/.ums-version" ] || echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-version" || true;
+      # Record UMF tracking files in parent project root
+      echo "${DESIRED_VERSION}" > .ums-release-version || true;
+      [ -f ".ums-version" ] || echo "${DESIRED_VERSION}" > .ums-version || true;
+      log_debug "bootstrap updated: wrote $(pwd)/.ums-release-version and ensured $(pwd)/.ums-version"
       log_success "Project updated to '${DESIRED_VERSION}'."; exit 0
     fi
   fi
@@ -412,21 +439,21 @@ else
   TARBALL_PATH="${TMPDIR_UMR}/repo.tar.gz"; umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}" || { log_warn "Failed to download repository release tarball for ${DESIRED_VERSION}."; exit 1; }
   EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"; umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed."; exit 1; }
   ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"; [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
-  mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"; echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-release-version" || true; [ -f "${GITHUB_REPO}/.ums-version" ] || echo "${DESIRED_VERSION}" > "${GITHUB_REPO}/.ums-version" || true; log_success "Project downloaded to '${GITHUB_REPO}' from release ${DESIRED_VERSION}."
+  mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"; echo "${DESIRED_VERSION}" > .ums-release-version || true; [ -f ".ums-version" ] || echo "${DESIRED_VERSION}" > .ums-version || true; log_debug "bootstrap created: $(pwd)/.ums-release-version and $(pwd)/.ums-version"; log_success "Project downloaded to '${GITHUB_REPO}' from release ${DESIRED_VERSION}."
 
   (
-    cd "${GITHUB_REPO}" && log_info "Running installer..."
-    if [ -f ./install.sh ]; then
+    log_info "Running installer..." # CHANGED
+    if [ -f "${GITHUB_REPO}/install.sh" ]; then # CHANGED
       log_info "Using install.sh (release-aware)"
-      bash ./install.sh init || { log_warn "install.sh install failed."; exit 0; }
-    elif [ -f ./install.legacy.sh ]; then
+      MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.sh" init || { log_warn "install.sh init failed."; exit 0; } # CHANGED
+    elif [ -f "${GITHUB_REPO}/install.legacy.sh" ]; then # CHANGED
       log_info "Using legacy install.sh"
-      bash ./install.sh install || { log_warn "install.legacy.sh install failed."; exit 0; }
+      MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.legacy.sh" install || { log_warn "install.legacy.sh install failed."; exit 0; } # CHANGED
     else
       log_warn "No installer found. Running scaffold fallback."
       umc_scaffold_project_files "${MAKEFILE_SYSTEM_DIR}"
     fi
   )
-
+  
   echo ""; log_info "Next steps:"; echo "1. cd ${GITHUB_REPO}"; echo "2. make help"
 fi
