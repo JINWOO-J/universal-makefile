@@ -214,6 +214,9 @@ Common options:
     -d, --debug         Show detailed debug info and context logs
     -y, --yes           Non-interactive mode; auto-approve prompts
 
+  Uninstall options:
+    --remove-pins      Also remove pin files (.ums-version, .ums-release-version)
+
 Install options:
     --copy              Install by copying files instead of submodule
     --subtree           Install using git subtree
@@ -292,7 +295,18 @@ parse_install_args_installer() {
   parse_common_args_installer "${remaining_args[@]:-}"
 }
 
-parse_uninstall_args_installer() { parse_common_args_installer "$@"; }
+parse_uninstall_args_installer() {
+  # Support pin file removal flag
+  local remaining_args=()
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --remove-pins) REMOVE_PIN_FILES=true; shift ;;
+      --*)          remaining_args+=("$1"); shift ;;
+      *)            remaining_args+=("$1"); shift ;;
+    esac
+  done
+  parse_common_args_installer "${remaining_args[@]:-}"
+}
 parse_update_args_installer() {
   # Support version/ref on update as well
   local remaining_args=()
@@ -601,6 +615,11 @@ uninstall_installer() {
     else
       safe_rm_installer "$MAKEFILE_DIR"; log_info "Removed directory $MAKEFILE_DIR"
     fi
+  fi
+  # Optionally remove UMF pin files in project root
+  if [[ "${REMOVE_PIN_FILES:-false}" == true ]]; then
+    [[ -f .ums-version ]] && safe_rm_installer .ums-version
+    [[ -f .ums-release-version ]] && safe_rm_installer .ums-release-version
   fi
   sed -i.bak '/Universal Makefile System/d;/.project.local.mk/d;/\.env/d' .gitignore 2>/dev/null || true; rm -f .gitignore.bak
   [[ -f docker-compose.yml ]] && log_warn "docker-compose.yml is not removed (user/project file)."
