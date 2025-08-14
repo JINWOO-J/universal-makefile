@@ -1,5 +1,49 @@
 ---
 alwaysApply: true
+---
+# setup.sh Behavior and Version Files
+
+This repository provides a bootstrap/setup entrypoint in [setup.sh](mdc:setup.sh).
+
+## Modes
+- Local mode (inside a git repo): verifies/installs the Makefile system and hands off to make/install scripts.
+- Bootstrap mode (outside a git repo): downloads the repository release/snapshot into a new directory, then integrates the Makefile system.
+
+## Version Selection Order
+- CLI provided version via `--version/-v <ref>` or positional (`vX.Y.Z`, `main`, `master`, `develop`)
+- `.ums-version` pin file in project root (if present)
+- Latest release tag (GitHub API fallback to ls-remote)
+
+## Force & Debug
+- `--force/-f`: reinstall/update without interactive prompts, even when current version equals desired.
+- `--debug/-d`: enable detailed logs and xtrace; prints flags, context, paths, and file write locations.
+
+## Version Files
+- Installed UMF version: `$(MAKEFILE_SYSTEM_DIR)/.version`
+- Pinned desired version: `.ums-version` (project root)
+- Last bootstrap/desired release record: `.ums-release-version` (project root)
+
+## Local Mode Details
+- Resolves desired version (see order above).
+- Installs/updates the Makefile system from a release tarball.
+- Writes installed version to `$(MAKEFILE_SYSTEM_DIR)/.version`.
+- Also writes `.ums-release-version` in the parent project root, and initializes `.ums-version` if missing.
+- With `--force`, re-install proceeds without prompting.
+
+## Bootstrap Mode Details
+- Resolves desired version (see order above). If none available, falls back to `main` snapshot.
+- Downloads into `${GITHUB_REPO}` directory.
+- Records `.ums-release-version` and ensures `.ums-version` in the parent project root.
+- Invokes project installer if present (prefers `install.sh init`).
+- With `--force`, update proceeds without prompting.
+
+## Notes
+- `MAKEFILE_SYSTEM_DIR` defaults to `${GITHUB_REPO}` in this script.
+- Positional versions: `./setup.sh v1.2.3`, `./setup.sh main`.
+- Debug examples include: `[debug] wrote installed version to: .../.version`, and bootstrap/pin file writes in project root.
+
+---
+alwaysApply: true
 description: How setup.sh behaves in local and bootstrap modes, scaffolding, and tarball auth
 ---
 
