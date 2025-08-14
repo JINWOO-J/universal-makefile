@@ -154,7 +154,9 @@ umr_download_tarball() {
 
   local -a headers=()
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    headers+=("Authorization: Bearer ${GITHUB_TOKEN}" "X-GitHub-Api-Version: 2022-11-28" "Accept: application/vnd.github+json")
+    headers+=("Authorization: token ${GITHUB_TOKEN}")  # CHANGED
+    headers+=("Accept: application/vnd.github+json")   # CHANGED
+    headers+=("X-GitHub-Api-Version: 2022-11-28")
   fi
 
   # try primary then mirror
