@@ -1,5 +1,47 @@
 ---
 alwaysApply: true
+---
+# Make Help 안정 가이드 (macOS/BSD awk, GNU Make 3.81 호환)
+
+참고 구현: [makefiles/help.mk](mdc:makefiles/help.mk)
+
+## 핵심 원칙
+- 한 레시피 줄 = 셸 한 번. 멀티라인/ heredoc 금지.
+- 레시피 내 awk는 반드시 한 줄, `$`는 모두 `$$`로 이스케이프.
+- 파이프 금지(`grep | awk` 등). `awk $(MAKEFILE_LIST)`로 직접 읽어 `FILENAME` 유지.
+- 색상 출력은 `printf` 사용.
+- 카테고리 매칭은 포함(contains) 로직 허용(이모지 위치 불문).
+- mac 기본 awk 기준 POSIX awk만 사용(gawk 전용 기능 금지).
+
+## 안전 템플릿
+카테고리 목록(파일 배지 포함):
+```
+_show-category:
+	@awk -v cat="$(CATEGORY)" 'function base(p,a,n){n=split(p,a,"/");return a[n]} /^[A-Za-z0-9_.-]+:[[:space:]].*##[[:space:]]/ { line=$$0; pos=index(line,"## "); if(!pos) next; comment=substr(line,pos+3); if(index(comment,cat)==0) next; split(line,parts,":"); t=parts[1]; printf("  \033[0;32m%-20s\033[0m %s  \033[90m[%s]\033[0m\n", t, comment, base(FILENAME)) }' $(MAKEFILE_LIST)
+```
+
+특정 타깃 위치 찾기:
+```
+where:
+	@awk -v tgt="$(TARGET)" 'function base(p,a,n){n=split(p,a,"/");return a[n]} /^[A-Za-z0-9_.-]+:[[:space:]]/ { split($$0,p,":"); if(p[1]==tgt) print "• " tgt "  ->  " base(FILENAME) }' $(MAKEFILE_LIST)
+```
+
+헤더/색상 예시:
+```
+help:
+	@printf '\033[0;34m%s\033[0m\n' "📋 Universal Makefile System"
+	@printf '\033[0;33m%s\033[0m\n' "🎯 Main Build Targets:"
+	@$(MAKE) --no-print-directory _show-category CATEGORY="🎯"
+```
+
+## PR 체크리스트
+- 레시피 한 줄 보장, awk 내 `$` 이스케이프 확인.
+- `$(MAKEFILE_LIST)` 직접 읽기(파이프 사용 금지).
+- 색상은 `printf`로만 출력.
+- `make -n help` 결과 따옴표/개행 이상 여부 점검.
+
+---
+alwaysApply: true
 description: >-
   Make help stability guide for GNU Make 3.81/macOS. Enforce one-line recipes,
   POSIX awk, filename badges without pipes, portable colors via printf,

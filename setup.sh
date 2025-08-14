@@ -225,6 +225,9 @@ parse_cli_args() {
         fi
         shift ;;
       --) shift; break ;;
+      # Positional short-form for version (e.g., v1.2.3 or branch name)
+      v[0-9]*|main|master|develop)
+        CLI_VERSION="$1"; shift ;;
       *) break ;;
     esac
   done

@@ -1,0 +1,25 @@
+---
+alwaysApply: true
+---
+# Version Separation: Project vs UMF
+
+참고 파일: [makefiles/version.mk](mdc:makefiles/version.mk), [project.mk](mdc:project.mk)
+
+## 원칙
+- `VERSION`는 "프로젝트 버전" 전용.
+- UMF(Universal Makefile System) 버전은 별도 파일로 관리/표시.
+
+## 파일 매핑
+- 설치된 UMF 버전: `UM_VERSION_FILE ?= $(MAKEFILE_DIR)/.version`
+- 핀(희망) 버전: `UMS_PIN_FILE ?= .ums-version` (프로젝트 루트)
+- 부트스트랩 릴리스 기록: `UMS_BOOTSTRAP_FILE ?= .ums-release-version` (프로젝트 루트)
+
+## 표시/도구
+- `make version`에서 Project/UMF(Installed/Pinned/Bootstrap) 함께 출력.
+- `export-version-info` JSON에 `umVersionInstalled`, `umVersionPinned`, `umVersionBootstrap` 포함.
+- `um-version`, `um-check` 타깃을 제공하여 UMF 상태 조회/검증.
+
+## 주의
+- `UM_VERSION_FILE`와 `.ums-*`는 역할이 다름: 설치된/핀 구분 유지.
+- `.ums-*` 경로를 변경하려면 [setup.sh](mdc:setup.sh) 생성/참조 로직을 함께 조정해야 함.
+

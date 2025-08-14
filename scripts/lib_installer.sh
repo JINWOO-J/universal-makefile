@@ -524,6 +524,10 @@ uninstall_installer() {
   [[ -f .project.local.mk ]] && safe_rm_installer .project.local.mk
   [[ -f .NEW_VERSION.tmp ]] && safe_rm_installer .NEW_VERSION.tmp
   [[ -f .env ]] && safe_rm_installer .env
+  # Remove compose file only if created by UMS installer (marker present)
+  if [[ -f docker-compose.dev.yml ]] && has_universal_id docker-compose.dev.yml; then
+    safe_rm_installer docker-compose.dev.yml
+  fi
   [[ -d environments ]] && safe_rm_installer environments
   [[ -d makefiles ]] && safe_rm_installer makefiles
   [[ -d scripts ]] && safe_rm_installer scripts
