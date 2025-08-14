@@ -32,7 +32,10 @@ get_latest_release_tag() {
 	local api_url="https://api.github.com/repos/${owner}/${repo}/releases/latest"
 	if command -v curl >/dev/null 2>&1; then
 		local auth=()
-		[[ -n "${GITHUB_TOKEN:-}" ]] && auth+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
+		if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+			# GitHub API v3 prefers "token" prefix for auth header
+			auth+=( -H "Authorization: token ${GITHUB_TOKEN}" )
+		fi
 		curl -fsSL "${auth[@]}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
 	else
 		git ls-remote --tags --refs "https://github.com/${owner}/${repo}.git" 2>/dev/null | awk '{print $2}' | sed 's@refs/tags/@@' | sort -Vr | head -n1
@@ -245,7 +248,24 @@ case_run "init idempotency" '
 
 # 19) release install with GITHUB_TOKEN (fallback to unauthenticated if 401)
 case_run "release with GITHUB_TOKEN" '
-  ( GITHUB_TOKEN=dummy '"$SCRIPT"' install --release -y || '"$SCRIPT"' install --release -y ) &&
+  # 토큰 디버깅 정보 출력
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    # 토큰 첫 4자만 로그로 출력 (보안)
+    echo "Using token: ${GITHUB_TOKEN:0:4}..." >&2
+    
+    # 토큰 권한 테스트 (HTTP 상태 코드 확인)
+    local status=$(curl -s -o /dev/null -w "%{http_code}" \
+      -H "Authorization: token ${GITHUB_TOKEN}" \
+      "https://api.github.com/repos/jinwoo-j/universal-makefile")
+    echo "API access status: $status" >&2
+    
+    # 토큰으로 릴리스 설치 시도
+    '"$SCRIPT"' install --release -y
+  else
+    # 토큰 없으면 비인증 설치 시도
+    echo "No GITHUB_TOKEN set, using unauthenticated access" >&2
+    '"$SCRIPT"' install --release -y
+  fi &&
   assert_dir "universal-makefile"
 '
 

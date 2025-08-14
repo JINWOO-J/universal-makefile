@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# 토큰 디버깅 스크립트 - 테스트 실패 시 실행하여 토큰 권한 진단
+
+set -euo pipefail
+
+# 토큰 설정 (CI에서는 환경 변수로 전달됨)
+: "${GITHUB_TOKEN:?GITHUB_TOKEN must be set}"
+
+# 안전을 위해 토큰 첫 부분만 표시
+TOKEN_PREFIX="${GITHUB_TOKEN:0:4}"
+echo "Using token: ${TOKEN_PREFIX}..."
+
+# 1. 사용자 정보 확인
+echo -e "\n=== User Info ==="
+curl -s -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/user | grep -E "login|type"
+
+# 2. API 접근 테스트
+echo -e "\n=== API Access Test ==="
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/jinwoo-j/universal-makefile")
+echo "API access status: $STATUS"
+
+# 3. 저장소 권한 확인
+echo -e "\n=== Repository Permissions ==="
+curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/jinwoo-j/universal-makefile/collaborators/jinwoo-j/permission" | grep -E "permission|admin|push|pull"
+
+# 4. 토큰 스코프 확인
+echo -e "\n=== Token Scopes ==="
+curl -s -I -H "Authorization: token ${GITHUB_TOKEN}" \
+  "https://api.github.com/users/jinwoo-j" | grep -i "x-oauth-scopes" || echo "(scopes header may be empty for fine-grained PAT)"
+
+# 5. 릴리스 목록 확인
+echo -e "\n=== Latest Release ==="
+curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/jinwoo-j/universal-makefile/releases/latest" | grep "tag_name"
+
+# 6. 다운로드 URL 테스트
+echo -e "\n=== Tarball Download URL Test ==="
+LATEST_TAG=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/jinwoo-j/universal-makefile/releases/latest" | 
+  sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+
+if [[ -n "$LATEST_TAG" ]]; then
+  echo "Latest tag: $LATEST_TAG"
+  
+  # API URL 테스트
+  API_URL="https://api.github.com/repos/jinwoo-j/universal-makefile/tarball/${LATEST_TAG}"
+  API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token ${GITHUB_TOKEN}" "$API_URL")
+  echo "API tarball URL status: $API_STATUS"
+  
+  # 일반 URL 테스트
+  NORMAL_URL="https://github.com/jinwoo-j/universal-makefile/archive/refs/tags/${LATEST_TAG}.tar.gz"
+  NORMAL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$NORMAL_URL")
+  echo "Normal tarball URL status: $NORMAL_STATUS"
+  
+  # 대체 URL 테스트
+  ALT_URL="https://codeload.github.com/jinwoo-j/universal-makefile/tar.gz/refs/tags/${LATEST_TAG}"
+  ALT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$ALT_URL")
+  echo "Alternative tarball URL status: $ALT_STATUS"
+else
+  echo "Failed to get latest tag"
+fi
+
+echo -e "\n=== Done ==="
