@@ -26,6 +26,19 @@ assert_contains() { grep -qE "$2" "$1"; }
 # 필요 시 하위 셸에서도 쓰이도록 export (eval 사용 시 필수는 아님)
 export -f assert_file assert_dir assert_contains || true
 
+# Helper: fetch latest release tag for this repo (token-aware)
+get_latest_release_tag() {
+	local owner="jinwoo-j" repo="universal-makefile"
+	local api_url="https://api.github.com/repos/${owner}/${repo}/releases/latest"
+	if command -v curl >/dev/null 2>&1; then
+		local auth=()
+		[[ -n "${GITHUB_TOKEN:-}" ]] && auth+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" )
+		curl -fsSL "${auth[@]}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
+	else
+		git ls-remote --tags --refs "https://github.com/${owner}/${repo}.git" 2>/dev/null | awk '{print $2}' | sed 's@refs/tags/@@' | sort -Vr | head -n1
+	fi
+}
+
 case_run() {
   local name="$1"; shift
   local cmd="$1"
@@ -138,6 +151,17 @@ case_run_no_git "setup bootstrap: -v master" '
   make -C universal-makefile help >/dev/null
 '
 
+# 10.5) setup bootstrap + update --force to latest (release install)
+case_run_no_git "setup bootstrap + update --force to latest" '
+	'"$SETUP"' &&
+	assert_dir "universal-makefile" &&
+	echo "v0.0.0" > .ums-version &&  # deliberately stale pin
+	LATEST_TAG="$(get_latest_release_tag)" && [[ -n "$LATEST_TAG" ]] &&
+	./universal-makefile/install.sh update --force >/dev/null &&
+	assert_contains .ums-release-version "$LATEST_TAG" &&
+	assert_contains .ums-version "$LATEST_TAG"
+'
+
 # 10) init debug logs
 case_run "init debug logs" '
   cp '"$SCRIPT"' ./install.sh &&
@@ -174,6 +198,14 @@ case_run "uninstall backup" '
   '"$SCRIPT"' install --subtree -y &&
   '"$SCRIPT"' uninstall --backup -y &&
   ls -d .backup_universal_makefile_* >/dev/null 2>&1
+'
+
+# 14.5) uninstall removes marked docker-compose.dev.yml
+case_run "uninstall removes marked compose dev file" '
+	'"$SCRIPT"' install --subtree -y &&
+	echo "# === Created by Universal Makefile System Installer ===" > docker-compose.dev.yml &&
+	'"$SCRIPT"' uninstall -y &&
+	! [[ -f docker-compose.dev.yml ]]
 '
 
 # 15) app setup non-interactive

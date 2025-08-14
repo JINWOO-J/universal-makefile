@@ -35,6 +35,10 @@ curl -fsSL https://raw.githubusercontent.com/jinwoo-j/universal-makefile/main/se
 
 # 자동으로 <universal-makefile> 디렉토리가 생기고, 내부에서 install.sh --release가 실행됩니다.
 make help
+
+# 주의: setup.sh는 "부트스트랩 전용"입니다.
+# - 프로젝트 리포 내부나 UMF 시스템 디렉토리(universal-makefile) 안에서는 실행이 차단됩니다.
+# - 필요 시 --allow-local 또는 환경변수 UMS_SETUP_ALLOW_LOCAL=true 로만 허용됩니다.
 ```
 
 특정 버전을 설치하는 방법
@@ -43,11 +47,12 @@ make help
 # 버전 명시/플래그 예시
 ./setup.sh v1.2.3        # 위치 인자로 버전 지정 (또는 main/master/develop)
 ./setup.sh -v v1.2.3     # --version/-v 로 버전 지정
-./setup.sh -f            # --force/-f 프롬프트 없이 강제(동일 버전이어도 재설치)
+./setup.sh -f            # --force/-f: 정책/핀/프롬프트 무시, 최신(release) 강제 (명시 버전 없을 때)
 ./setup.sh --debug       # 상세 로그 + xtrace
 
 # 동작 요약
-# - 버전 선택 우선순위: CLI 지정(인자/옵션) > .ums-version > 최신 릴리스
+# - 버전 선택 우선순위: --version > -f > UMS_BOOTSTRAP_POLICY(latest|prompt|pin) > .ums-version > 현재 설치본
+# - 기본 정책: UMS_BOOTSTRAP_POLICY=prompt (TTY에서 최신 존재 시 1회 질의, 기본은 핀 유지)
 # - 설치 후 기록: $(MAKEFILE_SYSTEM_DIR)/.version (설치된 UMF),
 #                 ./.ums-release-version (부모 루트), ./.ums-version 없으면 초기화
 ```
@@ -115,6 +120,18 @@ export UMS_TARBALL_SHA256="<EXPECTED_SHA256>"
 ./install.sh install --copy
 ```
 
+#### 업데이트 (release 설치 시)
+
+```bash
+# 최신으로 강제 업데이트 (핀 무시)
+./universal-makefile/install.sh update --force
+
+# 특정 버전으로 업데이트
+./universal-makefile/install.sh update --version v1.2.3
+
+# TTY에서 핀(.ums-version)과 최신이 다르면 한 번 물어봅니다 (기본은 핀 유지)
+```
+
 ### 기존 프로젝트에 추가(선택)
 
 ```bash
@@ -122,6 +139,11 @@ export UMS_TARBALL_SHA256="<EXPECTED_SHA256>"
 git submodule add https://github.com/jinwoo-j/universal-makefile .makefile-system
 ./.makefile-system/install.sh --existing-project
 ```
+
+> 설치자와 부트스트랩의 역할 분리
+>
+> - `setup.sh`: 부트스트랩 전용(레포 밖). 정책/핀/최신/강제/토큰을 반영해 릴리스 아카이브를 내려받고 스캐폴딩까지 수행합니다.
+> - `install.sh`: 로컬 유지보수 전용(레포 안). 설치/업데이트/언인스톨/상태/스캐폴딩을 제공합니다.
 
 ## 📋 기본 사용법
 
