@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System
-Project: universal-makefile vv1.0.23
+📋 Universal Makefile System v1.0.62
+Project: universal-makefile vv1.0.62
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
@@ -28,6 +28,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   git-status           Show comprehensive git status  [git-flow.mk]
   git-branches         Show all branches with status  [git-flow.mk]
   sync-develop         Sync current branch to develop branch  [git-flow.mk]
+  push-all-branches    Push all local branches to remote ($(REMOTE))  [git-flow.mk]
   start-release        Start new release branch from develop  [git-flow.mk]
   list-old-branches    List merged release branches that can be deleted  [git-flow.mk]
   check-git-repo       Check if current directory is a git repository  [git-flow.mk]
@@ -59,6 +60,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   help-system          Installer/system commands help (auto, grouped)  [help.mk]
   list-targets         List all available targets  [help.mk]
   search-targets       Search targets by keyword (usage: make search-targets KEYWORD=docker)  [help.mk]
+  help-md              Generate help.md file  [help.mk]
   version-info         Show version information  [help.mk]
   getting-started      Show getting started guide  [help.mk]
   version              Show current version  [version.mk]
@@ -78,6 +80,8 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   version-major        Bump major version and create tag  [version.mk]
   validate-version     Validate version format  [version.mk]
   check-version-consistency Check version consistency across files  [version.mk]
+  um-version           Show UMF version (installed/pinned/bootstrap)  [version.mk]
+  um-check             Check UMF version sync with pinned  [version.mk]
   export-version-info  Export version information to file  [version.mk]
   version-help         Show version management help  [version.mk]
   bash                 Run bash in the container  [docker.mk]
