@@ -60,7 +60,12 @@ help: ## 🏠 Show this help message
 
 
 _show-category:
-	@awk -v cat="$(CATEGORY)" 'function base(p,a,n){n=split(p,a,"/");return a[n]} /^[A-Za-z0-9_.-]+:[[:space:]].*##[[:space:]]/ { line=$$0; pos=index(line,"## "); if(!pos) next; comment=substr(line,pos+3); if(index(comment,cat)==0) next; split(line,parts,":"); t=parts[1]; if(index(comment,cat)==1){ desc=substr(comment,length(cat)+1); sub(/^[[:space:]]+/,"",desc) } else { desc=comment } printf("  \033[0;32m%-20s\033[0m %s  \033[90m[%s]\033[0m\n", t, desc, base(FILENAME)) }' $(MAKEFILE_LIST)
+	@awk -v cat="$(CATEGORY)" -v GREEN="$(GREEN)" -v RESET="$(RESET)" 'function base(p,a,n){n=split(p,a,"/");return a[n]} /^[A-Za-z0-9_.-]+:[[:space:]].*##[[:space:]]/ { line=$$0; pos=index(line,"## "); if(!pos) next; comment=substr(line,pos+3); if(index(comment,cat)==0) next; split(line,parts,":"); t=parts[1]; if(index(comment,cat)==1){ desc=substr(comment,length(cat)+1); sub(/^[[:space:]]+/,"",desc) } else { desc=comment } printf("  %s%-20s%s %s  [%s]\n", GREEN, t, RESET, desc, base(FILENAME)) }' $(MAKEFILE_LIST)
+
+# Find which file defines a specific target (usage: make where TARGET=<name>)
+.PHONY: where
+where:
+	@awk -v tgt="$(TARGET)" 'function base(p,a,n){n=split(p,a,"/");return a[n]} /^[A-Za-z0-9_.-]+:[[:space:]]/ { split($$0,p,":"); if(p[1]==tgt) print "• " tgt "  ->  " base(FILENAME) }' $(MAKEFILE_LIST)
 
 
 # Start of Selection
