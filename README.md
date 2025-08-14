@@ -31,21 +31,73 @@
 
 ```bash
 # 원격 부트스트랩: 레포가 없는 곳에서 실행 → 프로젝트 디렉토리 생성, 릴리스 설치, 스캐폴딩까지 자동
-curl -fsSL https://raw.githubusercontent.com/jinwoo-j/universal-makefile/master/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jinwoo-j/universal-makefile/main/setup.sh | bash
 
 # 자동으로 <universal-makefile> 디렉토리가 생기고, 내부에서 install.sh --release가 실행됩니다.
-cd universal-makefile
 make help
 ```
 
+특정 버전을 설치하는 방법
+
 ```bash
-# 로컬(레포 안)에서 버전 고정 후 동기화
-echo "vX.Y.Z" > .ums-version          # 선택: 미지정 시 최신 태그 사용
-echo "<SHA256>" > .ums-version.sha256 # 선택: 무결성 검증
-./setup.sh                            # 릴리스 동기화 후 make로 위임
+# 버전 명시/플래그 예시
+./setup.sh v1.2.3        # 위치 인자로 버전 지정 (또는 main/master/develop)
+./setup.sh -v v1.2.3     # --version/-v 로 버전 지정
+./setup.sh -f            # --force/-f 프롬프트 없이 강제(동일 버전이어도 재설치)
+./setup.sh --debug       # 상세 로그 + xtrace
+
+# 동작 요약
+# - 버전 선택 우선순위: CLI 지정(인자/옵션) > .ums-version > 최신 릴리스
+# - 설치 후 기록: $(MAKEFILE_SYSTEM_DIR)/.version (설치된 UMF),
+#                 ./.ums-release-version (부모 루트), ./.ums-version 없으면 초기화
 ```
 
 토큰 사용 팁: 사설 레포일 경우 `GITHUB_TOKEN` 환경변수를 설정하면 API tarball로 인증 다운로드가 됩니다.
+
+#### 토큰 사용 예시 (사설 레포)
+
+```bash
+# 1) 로컬 쉘에서 토큰 설정 후 버전 동기화
+export GITHUB_TOKEN="<YOUR_GH_TOKEN>"   # 최소 Contents: Read 권한, SSO 승인 필요할 수 있음
+./setup.sh -v v1.2.3 --debug            # 지정 버전 설치 + 디버그 로그
+
+# 핀 파일 사용 시
+echo "v1.2.3" > .ums-version
+./setup.sh -f                            # 프롬프트 없이 강제 재설치/업데이트
+```
+
+```bash
+# 2) Git submodule/subtree에서 private fetch를 위해 토큰으로 https 치환
+export GITHUB_TOKEN="<YOUR_GH_TOKEN>"
+git config --global url."https://oauth2:${GITHUB_TOKEN}@github.com/".insteadof https://github.com/
+
+# 이제 일반 git fetch/submodule 명령이 토큰 포함 URL로 자동 대체됩니다
+git submodule update --init --recursive
+```
+
+```yaml
+# 3) GitHub Actions에서 토큰 주입 예시
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Bootstrap UMF via setup.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.UMF_TOKEN }}
+        run: |
+          ./setup.sh -v v1.2.3 -f --debug
+```
+
+```bash
+# 4) (선택) 무결성 검증을 토큰과 함께 사용
+export GITHUB_TOKEN="<YOUR_GH_TOKEN>"
+export UMS_TARBALL_SHA256="<EXPECTED_SHA256>"
+./setup.sh -v v1.2.3 --debug
+```
+
 
 ### 방법 2: 고급(install.sh 직접 사용)
 
@@ -128,6 +180,8 @@ your-project/
 ├── Makefile                  # 프로젝트 진입점
 ├── project.mk               # 프로젝트 설정
 ├── .project.local.mk        # 개발자별 로컬 설정
+├── .ums-version             # (선택) UMF 고정 버전 핀 파일
+├── .ums-release-version     # (자동) 마지막 설치/동기화된 릴리스 태그
 └── environments/            # 환경별 설정
     ├── development.mk
     ├── staging.mk
@@ -496,6 +550,11 @@ make help-build      # build 타겟 상세 정보
 
 # 미지정 시 최신 태그로 동기화
 ./setup.sh
+
+# 버전/플래그 활용
+./setup.sh v1.2.3   # 특정 버전으로 동기화
+./setup.sh -f       # 프롬프트 없이 강제 재설치/재동기화
+./setup.sh --debug  # 디버그 컨텍스트/경로/파일 기록 로그
 ```
 
 ### Submodule 방식
@@ -528,6 +587,12 @@ git submodule update --remote .makefile-system
 ./install.sh uninstall          # 안전 제거 (서브모듈은 --force 필요할 수 있음)
 ./install.sh uninstall --force  # 서브모듈 강제 제거 포함
 ```
+
+주의사항
+- 설치기가 생성한 파일은 마커를 통해 식별 후 제거됩니다.
+- 예: `docker-compose.dev.yml` 맨 위에 다음 마커가 있으면 제거 대상입니다.
+  - `# === Created by Universal Makefile System Installer ===`
+  (사용자 파일 보호를 위해 마커가 없으면 제거하지 않습니다.)
 
 ## 🤝 팀 협업
 
