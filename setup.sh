@@ -41,6 +41,8 @@ CURL_RETRY_DELAY_SEC=${CURL_RETRY_DELAY_SEC:-2}
 FORCE_UPDATE=${FORCE_UPDATE:-false}
 CLI_VERSION=""
 DEBUG=${DEBUG:-false}
+# Allow running local mode explicitly (default false). Env override: UMS_SETUP_ALLOW_LOCAL=true
+ALLOW_LOCAL="${UMS_SETUP_ALLOW_LOCAL:-false}"
 
 # --- Try source shared libs; else define fallback wrappers ---
 _umr_try_source_release() {
@@ -185,6 +187,7 @@ parse_cli_args() {
     case "$1" in
       --force|-f) FORCE_UPDATE=true; shift ;;
       --debug|-d) DEBUG=true; shift ;;
+      --allow-local) ALLOW_LOCAL=true; shift ;;
       --version|-v)
         shift || true
         CLI_VERSION="${1:-}"
@@ -212,11 +215,22 @@ if [ "${DEBUG}" = "true" ]; then
   log_info "[debug] paths: MAKEFILE_SYSTEM_DIR=${MAKEFILE_SYSTEM_DIR} GITHUB_REPO=${GITHUB_REPO}"
 fi
 
+# Hard guard: prevent running inside UMF system directory itself
+if [[ -f "makefiles/core.mk" ]] && [[ "$(basename "${PWD}")" = "${GITHUB_REPO}" ]]; then
+  log_warn "Detected UMF system directory (${GITHUB_REPO}). Use install.sh for maintenance."
+  exit 1
+fi
+
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   # -------------------------
   # Local (inside git repo)
   # -------------------------
-  log_info "Project repository found. Verifying Makefile system..."
+  if ! is_true "${ALLOW_LOCAL}"; then
+    log_warn "setup.sh is bootstrap-only. In a project repository, use install.sh (init/update/uninstall)."
+    log_info "Tip: pass --allow-local or set UMS_SETUP_ALLOW_LOCAL=true to override."
+    exit 1
+  fi
+  log_info "Project repository found (override allowed). Verifying Makefile system..."
 
   if [ -n "${CLI_VERSION}" ]; then
     DESIRED_VERSION="${CLI_VERSION}"
