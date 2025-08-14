@@ -3,7 +3,7 @@
 # 정책 요약 (우선순위):
 # 1) --version <ref> (또는 위치 인자 vX / main 등)
 # 2) -f/--force  : 명시 버전 없으면 최신으로 강제 (정책/핀/프롬프트 무시)
-# 3) UMS_BOOTSTRAP_POLICY : latest | prompt | pin (기본 pin)
+# 3) UMS_BOOTSTRAP_POLICY : latest | prompt | pin (기본 prompt)
 # 4) .ums-version (핀)
 # 5) 현재 설치본
 #
@@ -393,8 +393,18 @@ else
 
   UPDATE_PIN=false
 
-  # 정책 적용 (CLI_VERSION 미지정시에만 의미)
-  if [ -z "${CLI_VERSION}" ] && [ -n "${LATEST_TAG}" ] && [ "${DESIRED_VERSION}" != "${LATEST_TAG}" ]; then
+  if umr_is_true "${FORCE_UPDATE}" && [ -z "${CLI_VERSION}" ] && [ -n "${LATEST_TAG}" ]; then
+    if [ "${DESIRED_VERSION}" != "${LATEST_TAG}" ]; then
+      log_info "--force specified: overriding desired (${DESIRED_VERSION}) -> ${LATEST_TAG}"
+      DESIRED_VERSION="${LATEST_TAG}"
+      UPDATE_PIN=true
+    else
+      log_info "--force specified: reinstalling latest ${LATEST_TAG}"
+    fi
+  fi
+
+  # 정책 적용: FORCE가 아닐 때만 프롬프트/정책 수행
+  if ! umr_is_true "${FORCE_UPDATE}" && [ -z "${CLI_VERSION}" ] && [ -n "${LATEST_TAG}" ] && [ "${DESIRED_VERSION}" != "${LATEST_TAG}" ]; then
     case "${UMS_BOOTSTRAP_POLICY}" in
       latest)
         log_info "Policy=latest: overriding pin (${DESIRED_VERSION}) -> ${LATEST_TAG}"
@@ -416,12 +426,6 @@ else
         fi ;;
       pin|*) log_info "Pinned ${DESIRED_VERSION}; newer exists (${LATEST_TAG}). Use -f or UMS_BOOTSTRAP_POLICY=latest to override." ;;
     esac
-  fi
-
-  # -f: 정책/핀/프롬프트보다 우선, 명시 버전 없고 latest를 알면 최신으로 강제
-  if umr_is_true "${FORCE_UPDATE}" && [ -z "${CLI_VERSION}" ] && [ -n "${LATEST_TAG}" ] && [ "${LATEST_TAG}" != "${DESIRED_VERSION}" ]; then
-    log_info "--force specified: overriding desired (${DESIRED_VERSION}) -> ${LATEST_TAG}"
-    DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true
   fi
 
   if [ -e "${GITHUB_REPO}" ]; then
