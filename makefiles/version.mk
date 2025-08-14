@@ -20,7 +20,7 @@ UMS_BOOTSTRAP_FILE ?= .ums-release-version
 # 기본 버전 관리 타겟들
 # ================================================================
 
-version: ## 🔧 Show current version	
+show-version: ## 🔧 Show current version	
 	@$(ECHO_CMD) "$(MAGENTA)🐰 Version Information:$(RESET)"
 	@$(call print_var, Project Version, $(VERSION))
 	@$(call print_var, Tag Name, $(TAGNAME))
@@ -37,7 +37,7 @@ show-umf-version:
 	@$(call print_var, UMF Bootstrap Release, $$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || echo 'none'))
 
 
-show-version: version ## 🔧 Alias for version command
+# show-version: version ## 🔧 Alias for version command
 
 uv: update-version ## 🔧 Update version (shortcut)
 
