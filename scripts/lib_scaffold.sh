@@ -29,7 +29,7 @@ umc_scaffold_project_files() {
 
 umc_create_main_makefile() {
   local makefile_dir_var
-  makefile_dir_var="${MAKEFILE_DIR:-.makefile-system}"
+  makefile_dir_var="${MAKEFILE_DIR:-universal-makefile}"
   umc_debug "umc_create_main_makefile: makefile_dir_var=${makefile_dir_var}"
 
   local universal_makefile="Makefile.universal"
@@ -90,7 +90,7 @@ umc_create_project_config() {
     local url; url=$(git remote get-url origin)
     [[ "$url" =~ github.com[:/]([^/]+) ]] && default_repo_hub="${BASH_REMATCH[1]}"
   fi
-  umc_debug "umc_create_project_config: NAME=${default_name} REPO_HUB=${default_repo_hub} MAKEFILE_DIR=${MAKEFILE_DIR:-.makefile-system}"
+  umc_debug "umc_create_project_config: NAME=${default_name} REPO_HUB=${default_repo_hub} MAKEFILE_DIR=${MAKEFILE_DIR:-universal-makefile}"
   cat > "project.mk" << EOF
 # === Created by Universal Makefile System Installer ===
 REPO_HUB = ${default_repo_hub}
@@ -106,7 +106,7 @@ DOCKER_BUILD_ARGS =
 COMPOSE_FILE = docker-compose.yml
 DEV_COMPOSE_FILE = docker-compose.dev.yml
 PROD_COMPOSE_FILE = docker-compose.prod.yml
-MAKEFILE_DIR = ${MAKEFILE_DIR:-.makefile-system}
+MAKEFILE_DIR = ${MAKEFILE_DIR:-universal-makefile}
 EOF
   log_success "project.mk created"
 }

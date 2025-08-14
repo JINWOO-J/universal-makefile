@@ -839,10 +839,10 @@ A: **Submodule 방식을 권장**합니다. 중앙 집중식 업데이트가 가
 ### Q: 프로젝트별로 다른 버전의 시스템을 사용할 수 있나요?
 A: 네, Submodule에서 특정 태그나 커밋을 지정할 수 있습니다:
 ```bash
-cd .makefile-system
+cd universal-makefile
 git checkout v1.2.0
 cd ..
-git add .makefile-system
+git add universal-makefile
 ```
 
 ### Q: Docker 없이도 사용할 수 있나요?
