@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.64
-Project: universal-makefile vv1.0.64
+📋 Universal Makefile System v1.0.65
+Project: universal-makefile vv1.0.65
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
