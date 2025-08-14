@@ -36,10 +36,16 @@ umc_create_main_makefile() {
   if [[ ! -f "$universal_makefile" ]]; then
     log_info "Creating ${universal_makefile}..."
     umc_debug "writing ${universal_makefile}"
-    cat > "$universal_makefile" << 'EOF'
+    # Write header comments first (literal)
+    cat > "$universal_makefile" << 'EOF_HEAD'
 # === Created by Universal Makefile System Installer ===
 # This file is the entry point for the universal makefile system.
 # It should be included by the project's main Makefile.
+EOF_HEAD
+    # Provide a safe default for MAKEFILE_DIR only when not already defined
+    echo "MAKEFILE_DIR ?= ${makefile_dir_var}" >> "$universal_makefile"
+    # Append the rest of the content (literal)
+    cat >> "$universal_makefile" << 'EOF_BODY'
 
 .DEFAULT_GOAL := help
 
@@ -63,7 +69,7 @@ include $(MAKEFILE_DIR)/makefiles/docker.mk
 include $(MAKEFILE_DIR)/makefiles/compose.mk
 include $(MAKEFILE_DIR)/makefiles/git-flow.mk
 include $(MAKEFILE_DIR)/makefiles/cleanup.mk
-EOF
+EOF_BODY
     log_success "${universal_makefile} created"
   fi
 
