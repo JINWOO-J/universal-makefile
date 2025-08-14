@@ -136,8 +136,8 @@ export UMS_TARBALL_SHA256="<EXPECTED_SHA256>"
 
 ```bash
 # Submodule 방식으로 포함하고 싶을 때
-git submodule add https://github.com/jinwoo-j/universal-makefile .makefile-system
-./.makefile-system/install.sh --existing-project
+git submodule add https://github.com/jinwoo-j/universal-makefile
+./universal-makefile/install.sh --existing-project
 ```
 
 > 설치자와 부트스트랩의 역할 분리
@@ -194,7 +194,7 @@ make release ENV=production
 ### Submodule 방식
 ```
 your-project/
-├── .makefile-system/          # 공통 시스템 (submodule)
+├── universal-makefile/          # 공통 시스템 (submodule)
 │   ├── Makefile              # 메인 시스템
 │   ├── makefiles/            # 기능별 모듈
 │   ├── templates/            # 템플릿 파일들
@@ -586,7 +586,7 @@ make help-build      # build 타겟 상세 정보
 make update-makefile-system
 
 # 수동 업데이트
-git submodule update --remote .makefile-system
+git submodule update --remote universal-makefile
 ```
 
 ### 복사 방식
