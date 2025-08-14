@@ -495,6 +495,7 @@ auto-release: ## 🚀 Automated release process
 
 update-and-release: ## 🚀 Update version, then run auto-release (alias: ur)
 	@echo "$(BLUE)📝 Updating version, then starting auto-release...$(RESET)"
+	$(MAKE) help-md
 	$(MAKE) update-version
 	$(MAKE) auto-release
 
