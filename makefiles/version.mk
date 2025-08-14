@@ -5,10 +5,16 @@ include $(MAKEFILE_DIR)/makefiles/colors.mk
 
 .PHONY: version update-version uv show-version version-info
 .PHONY: version-tag version-changelog version-release-notes
+.PHONY: um-version um-check
 
 # 버전 업데이트 도구 설정 (project.mk에서 오버라이드 가능)
 VERSION_UPDATE_TOOL ?= auto-detect
 VERSION_FILES ?= project.mk package.json pyproject.toml Cargo.toml VERSION
+
+# CHANGED: UMF 버전 정보 파일 경로
+UM_VERSION_FILE ?= $(MAKEFILE_DIR)/.version
+UMS_PIN_FILE ?= .ums-version
+UMS_BOOTSTRAP_FILE ?= .ums-release-version
 
 # ================================================================
 # 기본 버전 관리 타겟들
@@ -21,6 +27,9 @@ version: ## 🔧 Show current version
 	@echo "  Current Branch: $(CURRENT_BRANCH)"
 	@echo "  Last Git Tag: $$(git describe --tags --abbrev=0 2>/dev/null || echo 'none')"
 	@echo "  Git Commit: $$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+	@echo "  UMF Installed: $$(cat $(UM_VERSION_FILE) 2>/dev/null || echo 'none')"
+	@echo "  UMF Pinned: $$(cat $(UMS_PIN_FILE) 2>/dev/null || echo 'none')"
+	@echo "  UMF Bootstrap Release: $$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || echo 'none')"
 
 show-version: version ## 🔧 Alias for version command
 
@@ -333,6 +342,25 @@ check-version-consistency: ## 🔧 Check version consistency across files
 	fi
 
 # ================================================================
+# UMF 버전 표시/검증 (CHANGED)
+# ================================================================
+
+um-version: ## 🔧 Show UMF version (installed/pinned/bootstrap)
+	@echo "$(BLUE)UMF Version:$(RESET)"
+	@echo "  Installed: $$(cat $(UM_VERSION_FILE) 2>/dev/null || echo 'none')"
+	@echo "  Pinned:    $$(cat $(UMS_PIN_FILE) 2>/dev/null || echo 'none')"
+	@echo "  Bootstrap: $$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || echo 'none')"
+
+um-check: ## 🔧 Check UMF version sync with pinned
+	@installed="$$(cat $(UM_VERSION_FILE) 2>/dev/null || echo '')"; pinned="$$(cat $(UMS_PIN_FILE) 2>/dev/null || echo '')"; \
+	if [ -n "$$pinned" ] && [ "$$installed" != "$$pinned" ]; then \
+		$(call warn, "UMF installed ($$installed) differs from pinned ($$pinned)"); \
+		exit 1; \
+	else \
+		$(call success, "UMF version is in sync"); \
+	fi
+
+# ================================================================
 # 버전 정보 내보내기
 # ================================================================
 
@@ -347,6 +375,9 @@ export-version-info: ## 🔧 Export version information to file
 	@echo '  "lastTag": "'$$(git describe --tags --abbrev=0 2>/dev/null || echo 'none')'",' >> version-info.json
 	@echo '  "buildDate": "'$$(date -u +%Y-%m-%dT%H:%M:%SZ)'",' >> version-info.json
 	@echo '  "project": "$(NAME)",' >> version-info.json
+	@echo '  "umVersionInstalled": "'$$(cat $(UM_VERSION_FILE) 2>/dev/null || echo 'unknown')'",' >> version-info.json
+	@echo '  "umVersionPinned": "'$$(cat $(UMS_PIN_FILE) 2>/dev/null || echo '')'",' >> version-info.json
+	@echo '  "umVersionBootstrap": "'$$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || echo '')'",' >> version-info.json
 	@echo '  "repository": "$(REPO_HUB)/$(NAME)"' >> version-info.json
 	@echo '}' >> version-info.json
 	@$(call success, "Version info exported to version-info.json")
@@ -383,3 +414,7 @@ version-help: ## 🔧 Show version management help
 	@echo "$(YELLOW)Validation:$(RESET)"
 	@echo "  $(GREEN)validate-version$(RESET)         Check version format"
 	@echo "  $(GREEN)check-version-consistency$(RESET) Check consistency across files"
+	@echo ""
+	@echo "$(YELLOW)UMF:$(RESET)"
+	@echo "  $(GREEN)um-version$(RESET)               Show UMF version (installed/pinned/bootstrap)"
+	@echo "  $(GREEN)um-check$(RESET)                 Check UMF version sync with pinned"
