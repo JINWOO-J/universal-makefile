@@ -27,9 +27,15 @@ version: ## 🔧 Show current version
 	@$(call print_var, Current Branch, $(CURRENT_BRANCH))
 	@$(call print_var, Last Git Tag, $$(git describe --tags --abbrev=0 2>/dev/null || echo 'none'))
 	@$(call print_var, Git Commit, $$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown'))
+	@$(ECHO_CMD) ""
+	@$(MAKE) show-umf-version
+
+show-umf-version:
+	@$(ECHO_CMD) "$(MAGENTA)🐰 Universal Makefile Information:$(RESET)"
 	@$(call print_var, UMF Installed, $$(cat $(UM_VERSION_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none'))
 	@$(call print_var, UMF Pinned, $$(cat $(UMS_PIN_FILE) 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none'))
 	@$(call print_var, UMF Bootstrap Release, $$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || echo 'none'))
+
 
 show-version: version ## 🔧 Alias for version command
 
