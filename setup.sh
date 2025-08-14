@@ -415,10 +415,19 @@ esac
     log_info "Running installer..."
     if [ -f "${GITHUB_REPO}/install.sh" ]; then
       log_info "Using install.sh (release-aware)"
-      MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.sh" init || { log_warn "install.sh init failed."; exit 0; }
+      # Forward debug flag to installer so DEBUG_MODE propagates to lib_installer/lib_scaffold
+      if [ "${DEBUG}" = "true" ]; then
+        MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.sh" init --debug || { log_warn "install.sh init failed."; exit 0; }
+      else
+        MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.sh" init || { log_warn "install.sh init failed."; exit 0; }
+      fi
     elif [ -f "${GITHUB_REPO}/install.legacy.sh" ]; then
       log_info "Using legacy install.sh"
-      MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.legacy.sh" install || { log_warn "install.legacy.sh install failed."; exit 0; }
+      if [ "${DEBUG}" = "true" ]; then
+        MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.legacy.sh" install --debug || { log_warn "install.legacy.sh install failed."; exit 0; }
+      else
+        MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.legacy.sh" install || { log_warn "install.legacy.sh install failed."; exit 0; }
+      fi
     else
       log_warn "No installer found. Running scaffold fallback."
       umc_scaffold_project_files "${MAKEFILE_SYSTEM_DIR}"
