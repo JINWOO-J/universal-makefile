@@ -42,9 +42,9 @@ show-umf-version:
 uv: update-version ## 🔧 Update version (shortcut)
 
 update-version: ## 🔧 Update version using appropriate tool
-	@$(call colorecho, "🔄 Updating version... using $(VERSION_UPDATE_TOOL)")
+	@$(call colorecho, 🔄 Updating version... using $(VERSION_UPDATE_TOOL))
 	@$(MAKE) _detect_and_update_version
-	@$(call success, "Version updated successfully")
+	@$(call success, Version updated successfully)
 
 # ================================================================
 # 버전 업데이트 도구 자동 감지 및 실행
@@ -57,28 +57,29 @@ _detect_and_update_version:
 		$(MAKE) _update_version_with_tool TOOL=$(VERSION_UPDATE_TOOL); \
 	fi
 
+
 _auto_detect_version_tool:
-	@$(call colorecho, "🔍 Detecting version update tool...")
+	@$(call colorecho, 🔍 Detecting version update tool...)
 	@if [ -f "package.json" ] && command -v yarn >/dev/null 2>&1; then \
-		$(call colorecho, "📦 Detected: Yarn + package.json"); \
+		$(call colorecho, 📦 Detected: Yarn + package.json); \
 		$(MAKE) _update_version_with_tool TOOL=yarn; \
 	elif [ -f "package.json" ] && command -v npm >/dev/null 2>&1; then \
-		$(call colorecho, "📦 Detected: NPM + package.json"); \
+		$(call colorecho, 📦 Detected: NPM + package.json); \
 		$(MAKE) _update_version_with_tool TOOL=npm; \
 	elif [ -f "pyproject.toml" ] && command -v poetry >/dev/null 2>&1; then \
-		$(call colorecho, "🐍 Detected: Poetry + pyproject.toml"); \
+		$(call colorecho, 🐍 Detected: Poetry + pyproject.toml); \
 		$(MAKE) _update_version_with_tool TOOL=poetry; \
 	elif [ -f "setup.py" ] && command -v python >/dev/null 2>&1; then \
-		$(call colorecho, "🐍 Detected: Python + setup.py"); \
+		$(call colorecho, 🐍 Detected: Python + setup.py); \
 		$(MAKE) _update_version_with_tool TOOL=python; \
 	elif [ -f "go.mod" ] && command -v go >/dev/null 2>&1; then \
-		$(call colorecho, "🔷 Detected: Go + go.mod"); \
+		$(call colorecho, 🔷 Detected: Go + go.mod); \
 		$(MAKE) _update_version_with_tool TOOL=go; \
 	elif [ -f "Cargo.toml" ] && command -v cargo >/dev/null 2>&1; then \
-		$(call colorecho, "🦀 Detected: Rust + Cargo.toml"); \
+		$(call colorecho, 🦀 Detected: Rust + Cargo.toml); \
 		$(MAKE) _update_version_with_tool TOOL=cargo; \
 	else \
-		$(call colorecho, "⚙️  No specific tool detected, using generic approach"); \
+		$(call colorecho, ⚙️  No specific tool detected, using generic approach); \
 		$(MAKE) _update_version_with_tool TOOL=generic; \
 	fi
 
@@ -96,33 +97,33 @@ _bump_version_from_variable:
 	else \
 		new_version=v1.0.1; \
 	fi; \
-	$(call colorecho, "📝 New version: $$new_version"); \
+	$(call colorecho, 📝 New version: $$new_version); \
 	$(MAKE) update-version-file NEW_VERSION=$$new_version
 
 _update_version_with_tool:
 	@case "$(TOOL)" in \
 		yarn) \
-			$(call colorecho, "📦 Updating version with Yarn..."); \
+			$(call colorecho, 📦 Updating version with Yarn...); \
 			yarn version --patch --no-git-tag-version; \
 			;; \
 		npm) \
-			$(call colorecho, "📦 Updating version with NPM..."); \
+			$(call colorecho, 📦 Updating version with NPM...); \
 			npm version patch --no-git-tag-version; \
 			;; \
 		poetry) \
-			$(call colorecho, "🐍 Updating version with Poetry..."); \
+			$(call colorecho, 🐍 Updating version with Poetry...); \
 			poetry version patch; \
 			;; \
 		python) \
-			$(call colorecho, "🐍 Updating Python version..."); \
+			$(call colorecho, 🐍 Updating Python version...); \
 			python setup.py --version; \
 			;; \
 		go) \
-			$(call colorecho, "🔷 Go version management..."); \
+			$(call colorecho, 🔷 Go version management...); \
 			echo "Go versions are typically managed through git tags"; \
 			;; \
 		cargo) \
-			$(call colorecho, "🦀 Updating Cargo version..."); \
+			$(call colorecho, 🦀 Updating Cargo version...); \
 			cargo bump patch; \
 			;; \
 		generic) \
@@ -213,20 +214,20 @@ push-tags: ## 🔧 Push all tags to remote
 
 delete-tag: ## 🔧 Delete version tag (usage: make delete-tag TAG=v1.0.0)
 	@if [ -z "$(TAG)" ]; then \
-		$(call error, "TAG is required. Usage: make delete-tag TAG=v1.0.0"); \
+		$(call error, TAG is required. Usage: make delete-tag TAG=v1.0.0); \
 		exit 1; \
 	fi; \
-	$(call colorecho, "🗑️  Deleting tag: $(TAG)"); \
+	$(call colorecho, 🗑️  Deleting tag: $(TAG)); \
 	git tag -d $(TAG); \
 	git push origin :refs/tags/$(TAG); \
-	$(call success, "Tag $(TAG) deleted")
+	$(call success, Tag $(TAG) deleted)
 
 # ================================================================
 # 버전 히스토리 및 변경사항
 # ================================================================
 
 version-changelog: ## 🔧 Generate changelog since last version
-	@$(call colorecho, "📋 Generating changelog...")
+	@$(call colorecho, 📋 Generating changelog...)
 	@LAST_TAG=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \
 	if [ -n "$$LAST_TAG" ]; then \
 		echo "$(BLUE)Changes since $$LAST_TAG:$(RESET)"; \
@@ -238,7 +239,7 @@ version-changelog: ## 🔧 Generate changelog since last version
 	echo ""
 
 version-release-notes: ## 🔧 Generate release notes for current version
-	@$(call colorecho, "📝 Generating release notes...")
+	@$(call colorecho, 📝 Generating release notes...)
 	@CURRENT_TAG=$(VERSION); \
 	LAST_TAG=$$(git tag --sort=-version:refname | grep -v "$$CURRENT_TAG" | head -1); \
 	echo "# Release Notes for $$CURRENT_TAG"; \
@@ -261,7 +262,7 @@ version-release-notes: ## 🔧 Generate release notes for current version
 # ================================================================
 
 version-compare: ## 🔧 Compare current version with remote tags
-	@$(call colorecho, "🔍 Comparing versions...")
+	@$(call colorecho, 🔍 Comparing versions...)
 	@echo "$(BLUE)Local Version: $(VERSION)$(RESET)"
 	@echo "$(BLUE)Local Tags:$(RESET)"
 	@git tag --sort=-version:refname | head -5 | sed 's/^/  /'
@@ -272,7 +273,7 @@ version-compare: ## 🔧 Compare current version with remote tags
 		echo "  Unable to fetch remote tags"
 
 version-next: ## 🔧 Show what the next version would be
-	@$(call colorecho, "🔮 Calculating next versions...")
+	@$(call colorecho, 🔮 Calculating next versions...)
 	@CURRENT=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
 	CURRENT_NUM=$$(echo $$CURRENT | sed 's/v//'); \
 	MAJOR=$$(echo $$CURRENT_NUM | cut -d. -f1); \
@@ -293,58 +294,58 @@ version-patch: ## 🔧 Bump patch version and create tag
 	@NEW_VERSION=$$(cat .NEW_VERSION.tmp); \
 	$(MAKE) update-version-file NEW_VERSION=$$NEW_VERSION; \
 	$(MAKE) version-tag TAG_VERSION=$$NEW_VERSION; \
-	$(call success, "Patch version bumped to $$NEW_VERSION")
+	$(call success, Patch version bumped to $$NEW_VERSION)
 
 version-minor: ## 🔧 Bump minor version and create tag
 	@$(MAKE) bump-minor
 	@NEW_VERSION=$$(cat .NEW_VERSION.tmp); \
 	$(MAKE) update-version-file NEW_VERSION=$$NEW_VERSION; \
 	$(MAKE) version-tag TAG_VERSION=$$NEW_VERSION; \
-	$(call success, "Minor version bumped to $$NEW_VERSION")
+	$(call success, Minor version bumped to $$NEW_VERSION)
 
 version-major: ## 🔧 Bump major version and create tag
 	@$(MAKE) bump-major
 	@NEW_VERSION=$$(cat .NEW_VERSION.tmp); \
 	$(MAKE) update-version-file NEW_VERSION=$$NEW_VERSION; \
 	$(MAKE) version-tag TAG_VERSION=$$NEW_VERSION; \
-	$(call success, "Major version bumped to $$NEW_VERSION")
+	$(call success, Major version bumped to $$NEW_VERSION)
 
 # ================================================================
 # 버전 검증
 # ================================================================
 
 validate-version: ## 🔧 Validate version format
-	@$(call colorecho, "✅ Validating version format...")
+	@$(call colorecho, ✅ Validating version format...)
 	@if echo "$(VERSION)" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$$' >/dev/null; then \
-		$(call success, "Version format is valid: $(VERSION)"); \
+		$(call success, Version format is valid: $(VERSION)); \
 	else \
-		$(call error, "Invalid version format: $(VERSION)"); \
+		$(call error, Invalid version format: $(VERSION)); \
 		echo "Expected format: v1.2.3 or v1.2.3-alpha.1"; \
 		exit 1; \
 	fi
 
 check-version-consistency: ## 🔧 Check version consistency across files
-	@$(call colorecho, "🔍 Checking version consistency...")
+	@$(call colorecho, 🔍 Checking version consistency...)
 	@INCONSISTENT=false; \
 	if [ -f "package.json" ]; then \
 		PKG_VERSION=$$(grep '"version"' package.json | sed 's/.*"version": "\([^"]*\)".*/\1/'); \
 		if [ "$(VERSION:v%=%)" != "$$PKG_VERSION" ]; then \
-			$(call warn, "Version mismatch in package.json: $$PKG_VERSION vs $(VERSION)"); \
+			$(call warn, Version mismatch in package.json: $$PKG_VERSION vs $(VERSION)); \
 			INCONSISTENT=true; \
 		fi; \
 	fi; \
 	if [ -f "pyproject.toml" ]; then \
 		TOML_VERSION=$$(grep '^version =' pyproject.toml | sed 's/version = "\([^"]*\)"/\1/'); \
 		if [ "$(VERSION:v%=%)" != "$$TOML_VERSION" ]; then \
-			$(call warn, "Version mismatch in pyproject.toml: $$TOML_VERSION vs $(VERSION)"); \
+			$(call warn, Version mismatch in pyproject.toml: $$TOML_VERSION vs $(VERSION)); \
 			INCONSISTENT=true; \
 		fi; \
 	fi; \
 	if [ "$$INCONSISTENT" = "true" ]; then \
-		$(call error, "Version inconsistencies found"); \
+		$(call error, Version inconsistencies found); \
 		exit 1; \
 	else \
-		$(call success, "All versions are consistent"); \
+		$(call success, All versions are consistent); \
 	fi
 
 # ================================================================
@@ -360,10 +361,10 @@ um-version: ## 🔧 Show UMF version (installed/pinned/bootstrap)
 um-check: ## 🔧 Check UMF version sync with pinned
 	@installed="$$(cat $(UM_VERSION_FILE) 2>/dev/null || echo '')"; pinned="$$(cat $(UMS_PIN_FILE) 2>/dev/null || echo '')"; \
 	if [ -n "$$pinned" ] && [ "$$installed" != "$$pinned" ]; then \
-		$(call warn, "UMF installed ($$installed) differs from pinned ($$pinned)"); \
+		$(call warn, UMF installed ($$installed) differs from pinned ($$pinned)); \
 		exit 1; \
 	else \
-		$(call success, "UMF version is in sync"); \
+		$(call success, UMF version is in sync); \
 	fi
 
 # ================================================================
@@ -371,7 +372,7 @@ um-check: ## 🔧 Check UMF version sync with pinned
 # ================================================================
 
 export-version-info: ## 🔧 Export version information to file
-	@$(call colorecho, "📤 Exporting version information...")
+	@$(call colorecho, 📤 Exporting version information...)
 	@echo '{' > version-info.json
 	@echo '  "version": "$(VERSION)",' >> version-info.json
 	@echo '  "tagname": "$(TAGNAME)",' >> version-info.json
@@ -386,7 +387,7 @@ export-version-info: ## 🔧 Export version information to file
 	@echo '  "umVersionBootstrap": "'$$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || echo '')'",' >> version-info.json
 	@echo '  "repository": "$(REPO_HUB)/$(NAME)"' >> version-info.json
 	@echo '}' >> version-info.json
-	@$(call success, "Version info exported to version-info.json")
+	@$(call success, Version info exported to version-info.json)
 
 
 # ================================================================
