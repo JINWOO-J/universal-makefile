@@ -15,7 +15,7 @@ CAT_CLEAN  := 🧹
 
 help: ## 🏠 Show this help message
 	@echo ""
-	@echo "$(BLUE)📋 Universal Makefile System$(RESET)"
+	@echo "$(BLUE)📋 Universal Makefile System $(VERSION)$(RESET)"
 	@echo "$(BLUE)Project: $(NAME) v$(VERSION)$(RESET)"
 	@echo "$(BLUE)Repository: $(REPO_HUB)/$(NAME)$(RESET)"
 	@echo "$(BLUE)Current Branch: $(CURRENT_BRANCH)$(RESET)"
