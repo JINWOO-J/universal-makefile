@@ -136,8 +136,8 @@ export UMS_TARBALL_SHA256="<EXPECTED_SHA256>"
 
 ```bash
 # Submodule 방식으로 포함하고 싶을 때
-git submodule add https://github.com/jinwoo-j/universal-makefile .makefile-system
-./.makefile-system/install.sh --existing-project
+git submodule add https://github.com/jinwoo-j/universal-makefile
+./universal-makefile/install.sh --existing-project
 ```
 
 > 설치자와 부트스트랩의 역할 분리
@@ -194,7 +194,7 @@ make release ENV=production
 ### Submodule 방식
 ```
 your-project/
-├── .makefile-system/          # 공통 시스템 (submodule)
+├── universal-makefile/          # 공통 시스템 (submodule)
 │   ├── Makefile              # 메인 시스템
 │   ├── makefiles/            # 기능별 모듈
 │   ├── templates/            # 템플릿 파일들
@@ -586,7 +586,7 @@ make help-build      # build 타겟 상세 정보
 make update-makefile-system
 
 # 수동 업데이트
-git submodule update --remote .makefile-system
+git submodule update --remote universal-makefile
 ```
 
 ### 복사 방식
@@ -839,10 +839,10 @@ A: **Submodule 방식을 권장**합니다. 중앙 집중식 업데이트가 가
 ### Q: 프로젝트별로 다른 버전의 시스템을 사용할 수 있나요?
 A: 네, Submodule에서 특정 태그나 커밋을 지정할 수 있습니다:
 ```bash
-cd .makefile-system
+cd universal-makefile
 git checkout v1.2.0
 cd ..
-git add .makefile-system
+git add universal-makefile
 ```
 
 ### Q: Docker 없이도 사용할 수 있나요?
