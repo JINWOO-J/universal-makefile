@@ -46,7 +46,11 @@ jobs:
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists. Updating notes…"
-            gh release edit "$TAG" --generate-notes
+            # Some gh versions do not support --generate-notes on 'edit'. Use API to generate notes.
+            gh api repos/${GITHUB_REPOSITORY}/releases/generate-notes \
+              -f tag_name="$TAG" \
+              -q .body > GENERATED_NOTES.md
+            gh release edit "$TAG" --title "Release $TAG" --notes-file GENERATED_NOTES.md
           else
             gh release create "$TAG" --title "Release $TAG" --generate-notes
           fi
