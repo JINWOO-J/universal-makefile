@@ -1,97 +1,63 @@
 ---
 alwaysApply: true
+description: setup.sh mode dispatcher (bootstrap/submodule/subtree/auto), hard guard scope, and debug
+globs: setup.sh
 ---
-# setup.sh Behavior and Version Files
+# setup.sh — Source Mode Dispatcher and Defaults
 
-This repository provides a bootstrap/setup entrypoint in [setup.sh](mdc:setup.sh).
+- 기본 동작: `UMS_SOURCE_MODE` 기본값은 `bootstrap`.
+- CLI 플래그: `--mode|--source <bootstrap|submodule|subtree|auto>` 지원. 환경변수 `UMS_SOURCE_MODE`도 동일하게 지원.
+- 디버그: `--debug|-d` 시 `[debug] source: SOURCE_MODE=...` 출력.
 
-## Modes
-- Local mode (inside a git repo): verifies/installs the Makefile system and hands off to make/install scripts.
-- Bootstrap mode (outside a git repo): downloads the repository release/snapshot into a new directory, then integrates the Makefile system.
+## Mode Dispatcher
+
+- bootstrap:
+  - 항상 릴리스 부트스트랩 경로 실행.
+  - `.ums-version` 또는 최신 태그로 `DESIRED_VERSION` 결정. `--version`이 있으면 우선. `--force`로 최신 강제 가능.
+  - 토큰 인지 API tarball URL을 우선 사용하고, 필요 시 공개 codeload로 폴백.
+  - `.ums-release-version` 기록, `UPDATE_PIN`에 따라 `.ums-version` 동기화.
+
+- submodule:
+  - `.gitmodules`에 `path = ${MAKEFILE_SYSTEM_DIR}`(기본 `universal-makefile`) 확인.
+  - 미초기화 시 `git submodule update --init --recursive` 실행.
+  - 성공 시 `./install.sh install` 안내 후 종료. 없으면 `bootstrap`으로 폴백.
+
+- subtree:
+  - git 리포에서만 동작. `git log --grep="git-subtree-dir: ${MAKEFILE_SYSTEM_DIR}" --oneline 2>/dev/null`로 감지.
+  - 감지 실패 시 `bootstrap`으로 폴백.
+
+- auto:
+  - git 리포인 경우 `submodule` → `subtree` 순으로 감지 후 처리.
+  - 둘 다 없으면 `bootstrap`으로 폴백.
+
+## Hard Guard Scope
+
+- UMS 시스템 디렉토리 내부에서 실행할 때만 차단:
+  - 조건: `[[ -f "makefiles/core.mk" ]] && [[ $(basename $PWD) == ${GITHUB_REPO} ]]`
+  - 메시지: “Detected UMF system directory (...). Use install.sh for maintenance.”
+- 단지 git 리포라는 이유만으로는 차단하지 않음. (로컬 리포에서 사용 가능)
+- 필요 시 `--allow-local` 또는 `UMS_SETUP_ALLOW_LOCAL=true`로 우회.
 
 ## Version Selection & Policy (Unified)
-- Priority: `--version <ref>` > `-f/--force` > `UMS_BOOTSTRAP_POLICY`(latest|prompt|pin) > `.ums-version` (pin) > current install
-- CLI version can also be positional: `vX.Y.Z`, `main`, `master`, `develop`.
 
-### Force Rule (-f/--force)
-- If `CLI_VERSION` is empty, force ignores policy/pin/prompt and uses the latest release.
-- If `CLI_VERSION` is provided, install that version (reinstall if identical), with clear logs.
-
-### Bootstrap Policy
-- `UMS_BOOTSTRAP_POLICY` default is `pin`.
-- `pin`: keep pin; when newer exists, just inform.
-- `prompt`: on TTY, ask once if newer exists (default is Pinned). Non-interactive: keep pin.
-- `latest`: always use latest.
-
-## Force & Debug
-- `--force/-f`: when no CLI version, override to latest; with CLI version, force (re)install that version. No prompts.
-- `--debug/-d`: enable detailed logs and xtrace; prints flags, context, paths, and file write locations.
+- 우선순위: `--version <ref>` > `-f/--force` > `UMS_BOOTSTRAP_POLICY`(latest|prompt|pin) > `.ums-version`(핀) > 현재 설치본
+- 기본 정책: `UMS_BOOTSTRAP_POLICY=prompt`
+  - TTY에서 최신 존재 시 한 번 질의(기본은 Pinned)
+  - 비대화형/CI에서는 조용히 정책/핀에 따름
+- 최신/동의/강제로 버전이 바뀌면 `.ums-version` 동기화(`UPDATE_PIN=true`).
 
 ## Version Files
-- Installed UMF version: `$(MAKEFILE_SYSTEM_DIR)/.version`
-- Pinned desired version: `.ums-version` (project root)
-- Last bootstrap/installed release: `.ums-release-version` (project root)
-- Pin sync: when updated via latest/force/user choice, `.ums-version` is synchronized (controlled by `UPDATE_PIN=true`).
 
-## Local Mode Details
-- Apply the same unified priority/policy as bootstrap.
-- If `current==pinned` and a newer exists (not forced), ask once in TTY.
-- Install/update from release tarball; write installed version to `$(MAKEFILE_SYSTEM_DIR)/.version`.
-- After install/update: always update `.ums-release-version`; sync `.ums-version` when `UPDATE_PIN=true`.
-- `--force` performs without prompts as described above.
+- 설치된 UMF 버전: `$(MAKEFILE_SYSTEM_DIR)/.version`
+- 핀(희망) 버전: `.ums-version` (프로젝트 루트)
+- 마지막 부트스트랩/설치 릴리스: `.ums-release-version` (프로젝트 루트)
 
-## Bootstrap Mode Details
-- Apply unified priority/policy. If none resolved, fall back to `main` snapshot.
-- Downloads into `${GITHUB_REPO}` directory.
-- After install/update: always update `.ums-release-version`; ensure/sync `.ums-version` according to `UPDATE_PIN`.
-- Invokes project installer if present (prefers `install.sh init`).
-- `--force`: no prompts; uses latest unless CLI version provided.
+## 참고
 
-## Integrity & Download Robustness
-- SHA256 verification path retained (`.ums-version.sha256` or `UMS_TARBALL_SHA256`), warn-and-skip if absent.
-- Tarball URLs: prefer API with token; safe mirrors handled; headers fixed.
-- Retries with exponential backoff preserved.
+- `MAKEFILE_SYSTEM_DIR` 기본값은 `${GITHUB_REPO}`.
+- 위치 인자: `./setup.sh v1.2.3`, `./setup.sh main` 등 지원.
+- 디버그 예시: `[debug] flags ...`, `[debug] source: SOURCE_MODE=...`
 
-## Notes
-- `MAKEFILE_SYSTEM_DIR` defaults to `${GITHUB_REPO}`.
-- Positional versions: `./setup.sh v1.2.3`, `./setup.sh main`.
-- Debug examples: `[debug] wrote installed version to: .../.version`, bootstrap/pin sync logs, policy/force overrides.
-
-## UX Scenarios
-- `./setup.sh` (pin v1.0.54, latest v1.0.56, policy=pin) → keep pin; log newer available.
-- `UMS_BOOTSTRAP_POLICY=prompt ./setup.sh` → TTY prompt (P/L/C/S), default Pinned.
-- `./setup.sh -f` (no CLI version) → install latest without prompt; update `.ums-version` to latest.
-- `./setup.sh -f v1.0.54` → force (re)install v1.0.54.
-- Local repo current==pinned & newer exists & not forced → ask once in TTY.
-
----
-alwaysApply: true
-description: How setup.sh behaves in local and bootstrap modes, scaffolding, and tarball auth
----
-
-# setup.sh Behavior
-
-- Modes
-  - Local (inside a git repo): verifies/installs Makefile system, scaffolds missing files, then runs `make`.
-  - Bootstrap (outside a git repo): downloads repo (release or branch snapshot), installs Makefile system into the new dir, scaffolds minimal files.
-
-- Local Mode
-  - Version resolution: reads `.ums-version` and `${MAKEFILE_SYSTEM_DIR}/.version` if present; otherwise fetches latest via API.
-  - Installation: uses internal `install_from_release` (no delegation) to populate `.makefile-system`.
-  - Scaffolding: if `Makefile` or `project.mk` is missing, creates them using `scaffold_project_files`.
-    - `Makefile.universal` sets `MAKEFILE_SYSTEM_DIR ?= .makefile-system` and `MAKEFILE_DIR ?= $(MAKEFILE_SYSTEM_DIR)`.
-    - All includes use `$(MAKEFILE_DIR)/makefiles/*.mk` to avoid absolute path issues.
-  - Make arguments: strips `--` and defaults to `help` when no target is provided.
-  - Pipefail: tar list extraction around `tar -tzf` is wrapped with `set +o pipefail`/`set -o pipefail` to avoid SIGPIPE failures.
-
-- Bootstrap Mode
-  - Selects desired version from `.ums-version` or latest release; falls back to `MAIN_BRANCH` snapshot if API lookup fails.
-  - With `GITHUB_TOKEN` set, uses API tarball URLs (works for private repos); otherwise public archive URLs.
-  - After extracting, runs `install_from_release` inside the new project directory and then `scaffold_project_files`.
-  - Ensures `project.mk`, `Makefile`, `Makefile.universal` exist so `make help` works immediately.
-
-- References
-  - [setup.sh](mdc:setup.sh)
-  - [makefiles/core.mk](mdc:makefiles/core.mk)
-  - [templates/project.mk.template](mdc:templates/project.mk.template)
+참조 파일
+- [setup.sh](mdc:setup.sh)
 
