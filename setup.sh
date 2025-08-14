@@ -20,7 +20,7 @@ MAIN_BRANCH="main"
 MAKEFILE_SYSTEM_DIR="${GITHUB_REPO}"
 
 # Bootstrap version selection policy: pin | prompt | latest
-UMS_BOOTSTRAP_POLICY="${UMS_BOOTSTRAP_POLICY:-pin}"
+UMS_BOOTSTRAP_POLICY="${UMS_BOOTSTRAP_POLICY:-prompt}"
 
 # Colors
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
