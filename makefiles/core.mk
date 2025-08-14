@@ -498,7 +498,7 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(call print_var, DEBUG, $(DEBUG))
 	@$(call print_var, FORCE_REBUILD, $(FORCE_REBUILD))
 	@$(ECHO_CMD) ""
-	$(MAKE) show-umf-version
+	@$(MAKE) show-umf-version
 
 
 info: debug-vars
