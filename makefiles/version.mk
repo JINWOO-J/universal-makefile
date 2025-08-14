@@ -13,8 +13,8 @@ VERSION_FILES ?= project.mk package.json pyproject.toml Cargo.toml VERSION
 
 # CHANGED: UMF 버전 정보 파일 경로
 UM_VERSION_FILE ?= $(MAKEFILE_DIR)/.version
-UMS_PIN_FILE ?= .ums-version
-UMS_BOOTSTRAP_FILE ?= .ums-release-version
+UMS_PIN_FILE ?= $(MAKEFILE_DIR)/.ums-version
+UMS_BOOTSTRAP_FILE ?= $(MAKEFILE_DIR)/.ums-release-version
 
 # ================================================================
 # 기본 버전 관리 타겟들
