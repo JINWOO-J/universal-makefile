@@ -21,6 +21,8 @@ MAKEFILE_SYSTEM_DIR="${GITHUB_REPO}"
 
 # Bootstrap version selection policy: pin | prompt | latest
 UMS_BOOTSTRAP_POLICY="${UMS_BOOTSTRAP_POLICY:-prompt}"
+# Source selection: bootstrap | submodule | subtree | auto (default: bootstrap)
+SOURCE_MODE="${UMS_SOURCE_MODE:-bootstrap}"
 
 # Colors
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
@@ -187,6 +189,12 @@ parse_cli_args() {
     case "$1" in
       --force|-f) FORCE_UPDATE=true; shift ;;
       --debug|-d) DEBUG=true; shift ;;
+      --mode|--source)
+        shift || true
+        SOURCE_MODE="${1:-}"
+        if [ -z "${SOURCE_MODE}" ]; then echo "--mode requires a value (bootstrap|submodule|subtree|auto)" >&2; exit 2; fi
+        case "${SOURCE_MODE}" in bootstrap|submodule|subtree|auto) : ;; *) echo "Invalid --mode: ${SOURCE_MODE}" >&2; exit 2 ;; esac
+        shift ;;
       --allow-local) ALLOW_LOCAL=true; shift ;;
       --version|-v)
         shift || true
@@ -213,6 +221,7 @@ if [ "${DEBUG}" = "true" ]; then
   log_info "[debug] flags: FORCE_UPDATE=${FORCE_UPDATE} DEBUG=${DEBUG} CLI_VERSION=${CLI_VERSION}"
   log_info "[debug] context: PWD=$(pwd) USER=$(id -un 2>/dev/null || whoami) SHELL=${SHELL:-n/a}"
   log_info "[debug] paths: MAKEFILE_SYSTEM_DIR=${MAKEFILE_SYSTEM_DIR} GITHUB_REPO=${GITHUB_REPO}"
+  log_info "[debug] source: SOURCE_MODE=${SOURCE_MODE}"
 fi
 
 # Hard guard: prevent running inside UMF system directory itself
@@ -221,155 +230,64 @@ if [[ -f "makefiles/core.mk" ]] && [[ "$(basename "${PWD}")" = "${GITHUB_REPO}" 
   exit 1
 fi
 
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  # -------------------------
-  # Local (inside git repo)
-  # -------------------------
-  if ! is_true "${ALLOW_LOCAL}"; then
-    log_warn "setup.sh is bootstrap-only. In a project repository, use install.sh (init/update/uninstall)."
-    log_info "Tip: pass --allow-local or set UMS_SETUP_ALLOW_LOCAL=true to override."
-    exit 1
-  fi
-  log_info "Project repository found (override allowed). Verifying Makefile system..."
-
-  if [ -n "${CLI_VERSION}" ]; then
-    DESIRED_VERSION="${CLI_VERSION}"
-    log_info "CLI version specified: ${DESIRED_VERSION}"
-  elif [ -f ".ums-version" ]; then
-    DESIRED_VERSION=$(cat .ums-version)
-    if [ -f "${MAKEFILE_SYSTEM_DIR}/.version" ]; then CURRENT_VERSION="$(cat "${MAKEFILE_SYSTEM_DIR}/.version")"; else CURRENT_VERSION=""; fi
-    LATEST_TAG="$(umr_fetch_latest_release_tag "${GITHUB_OWNER}" "${GITHUB_REPO}" || true)"
-
-    if [ -n "${LATEST_TAG}" ]; then
-      log_info "Version status: current=${CURRENT_VERSION:-none}, desired=${DESIRED_VERSION}, latest=${LATEST_TAG}"
-    else
-      log_info "Version status: current=${CURRENT_VERSION:-none}, desired=${DESIRED_VERSION}"
-    fi
-
-    UPDATE_PIN=false
-    USER_VERSION_CHOICE_MADE=false
-
-    # -f: 명시 버전이 없고 latest를 알면 최신으로 강제
-    if is_true "${FORCE_UPDATE}" && [ -z "${CLI_VERSION}" ] && [ -n "${LATEST_TAG}" ] && [ "${LATEST_TAG}" != "${DESIRED_VERSION}" ]; then
-      log_info "--force specified: overriding pin (${DESIRED_VERSION}) with latest ${LATEST_TAG}"
-      DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true
-    fi
-
-    # 현재==핀이고 최신이 다르면(강제 아님) 묻기
-    if [ -n "${CURRENT_VERSION}" ] && [ "${CURRENT_VERSION}" = "${DESIRED_VERSION}" ] && ! is_true "${FORCE_UPDATE}" && [ -n "${LATEST_TAG}" ] && [ "${LATEST_TAG}" != "${DESIRED_VERSION}" ]; then
-      if prompt_confirm "A newer release is available (${DESIRED_VERSION} → ${LATEST_TAG}). Update now?"; then
-        DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true
+case "${SOURCE_MODE}" in
+  bootstrap)
+    log_info "Bootstrap mode detected (forced)"
+    ;;
+  submodule)
+    if [ -f ".gitmodules" ] && grep -q "path = ${MAKEFILE_SYSTEM_DIR}" .gitmodules; then
+      if [ ! -f "${MAKEFILE_SYSTEM_DIR}/Makefile.universal" ]; then
+        log_warn "Submodule is not initialized. Running 'git submodule update'..."
+        git submodule update --init --recursive
+        log_success "Submodule initialized successfully."
       else
-        log_info "Staying on pinned version ${DESIRED_VERSION}."
+        log_success "Submodule is already initialized."
       fi
-    fi
-
-    if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]] || is_true "${FORCE_UPDATE}"; then
-      if is_true "${FORCE_UPDATE}" && [[ "${CURRENT_VERSION}" = "${DESIRED_VERSION}" ]]; then
-        log_info "--force specified: reinstalling ${DESIRED_VERSION} (current is identical)"
-      fi
-      if [ -z "${CURRENT_VERSION}" ]; then
-        log_warn "Makefile system is missing. Installing version ${DESIRED_VERSION}..."
-      else
-        if ! is_true "${FORCE_UPDATE}"; then
-          if ! prompt_confirm "New version available (${CURRENT_VERSION} → ${DESIRED_VERSION}). Update now?"; then
-            log_info "Skipped update by user choice."; DESIRED_VERSION="${CURRENT_VERSION}"
-          fi
-        fi
-      fi
-
-      TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
-      TARBALL_PATH="${TMPDIR_UMR}/umf.tar.gz"
-      if ! umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}"; then log_warn "Failed to download release tarball for ${DESIRED_VERSION}."; exit 1; fi
-
-      EXPECTED_SHA256="${UMS_TARBALL_SHA256:-}"
-      if [ -z "${EXPECTED_SHA256}" ] && [ -f ".ums-version.sha256" ]; then EXPECTED_SHA256="$(tr -d ' \n\r' < .ums-version.sha256)"; fi
-      if [ -n "${EXPECTED_SHA256}" ]; then
-        if umr_verify_sha256 "${TARBALL_PATH}" "${EXPECTED_SHA256}"; then log_success "SHA256 checksum verified."; else log_warn "SHA256 checksum mismatch or verification unavailable. Aborting."; exit 1; fi
-      else
-        log_warn "No SHA256 provided (.ums-version.sha256 or UMS_TARBALL_SHA256). Skipping integrity verification."
-      fi
-
-      rm -rf "${MAKEFILE_SYSTEM_DIR}" || true
-      EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"
-      umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed."; exit 1; }
-      ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"
-      if [ -z "${ROOT_DIR_NAME}" ] || [ ! -d "${EXTRACT_DIR}/${ROOT_DIR_NAME}" ]; then log_warn "Extracted directory not found. Aborting."; exit 1; fi
-      mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
-      echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"
-
-      echo "${DESIRED_VERSION}" > .ums-release-version || true
-      if [ "${UPDATE_PIN}" = "true" ]; then echo "${DESIRED_VERSION}" > .ums-version || true; fi
-
-      log_success "Makefile system version ${DESIRED_VERSION} is now ready."
+      log_info "Local mode complete. To initialize project files, run './install.sh install'."
+      exit 0
     else
-      if [ -n "${LATEST_TAG:-}" ] && [ "${DESIRED_VERSION}" = "${LATEST_TAG}" ]; then
-        log_success "Up to date (latest: ${LATEST_TAG})."
-      else
-        log_success "Up to date (pinned: ${DESIRED_VERSION}${LATEST_TAG:+, latest: ${LATEST_TAG}})."
-      fi
+      log_warn "Submodule config not found for path ${MAKEFILE_SYSTEM_DIR}. Falling back to bootstrap."
+      SOURCE_MODE="bootstrap"
     fi
-  elif [ -f ".gitmodules" ] && grep -q "path = ${MAKEFILE_SYSTEM_DIR}" .gitmodules; then
-    if [ ! -f "${MAKEFILE_SYSTEM_DIR}/Makefile.universal" ]; then
-      log_warn "Submodule is not initialized. Running 'git submodule update'..."
-      git submodule update --init --recursive
-      log_success "Submodule initialized successfully."
+    ;;
+  subtree)
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+      && git log --grep="git-subtree-dir: ${MAKEFILE_SYSTEM_DIR}" --oneline 2>/dev/null | grep -q .; then
+      log_success "Subtree is present."
+      log_info "Local mode complete. To initialize project files, run './install.sh install'."
+      exit 0
     else
-      log_success "Submodule is already initialized."
+      log_warn "Subtree not detected or not a git repo. Falling back to bootstrap."
+      SOURCE_MODE="bootstrap"
     fi
-  elif git log --grep="git-subtree-dir: ${MAKEFILE_SYSTEM_DIR}" --oneline | grep -q .; then
-    log_success "Subtree is present."
-  else
-    # Repo exists but not as submodule/subtree -> attempt latest install
-    LATEST_TAG="$(umr_fetch_latest_release_tag "${GITHUB_OWNER}" "${GITHUB_REPO}" || true)"
-    if [ -z "${LATEST_TAG}" ]; then
-      log_warn "Unable to resolve latest release tag from GitHub."
-    else
-      DESIRED_VERSION="${LATEST_TAG}"
-      if [ -f "${MAKEFILE_SYSTEM_DIR}/.version" ]; then CURRENT_VERSION="$(cat "${MAKEFILE_SYSTEM_DIR}/.version")"; else CURRENT_VERSION=""; fi
-      log_info "Version status: current=${CURRENT_VERSION:-none}, latest=${DESIRED_VERSION}"
-
-      DO_UPDATE=false
-      if [[ "${CURRENT_VERSION}" != "${DESIRED_VERSION}" ]] || umr_is_true "${FORCE_UPDATE}"; then
-        DO_UPDATE=true
-        if umr_is_true "${FORCE_UPDATE}" && [[ "${CURRENT_VERSION}" = "${DESIRED_VERSION}" ]]; then
-          log_info "--force specified: reinstalling ${DESIRED_VERSION} (current is identical)"
-        fi
-        if [ -n "${CURRENT_VERSION}" ] && ! umr_is_true "${FORCE_UPDATE}"; then
-          if ! umr_prompt_confirm "New release available (${CURRENT_VERSION} → ${DESIRED_VERSION}). Update now?"; then
-            log_info "Skipped update by user choice."; DO_UPDATE=false
-          fi
-        fi
-        if umr_is_true "${DO_UPDATE}"; then
-          TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
-          TARBALL_PATH="${TMPDIR_UMR}/umf.tar.gz"
-          if ! umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}"; then log_warn "Failed to download release tarball for ${DESIRED_VERSION}."; exit 1; fi
-          rm -rf "${MAKEFILE_SYSTEM_DIR}" || true
-          EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"
-          umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed."; exit 1; }
-          ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"; [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
-          mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
-          echo "${DESIRED_VERSION}" > "${MAKEFILE_SYSTEM_DIR}/.version"
-          echo "${DESIRED_VERSION}" > .ums-release-version || true
-          [ -f .ums-version ] || echo "${DESIRED_VERSION}" > .ums-version || true
-          log_success "Updated Makefile system to latest: ${DESIRED_VERSION}."
+    ;;
+  auto)
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      if [ -f ".gitmodules" ] && grep -q "path = ${MAKEFILE_SYSTEM_DIR}" .gitmodules; then
+        if [ ! -f "${MAKEFILE_SYSTEM_DIR}/Makefile.universal" ]; then
+          log_warn "Submodule is not initialized. Running 'git submodule update'..."
+          git submodule update --init --recursive
+          log_success "Submodule initialized successfully."
         else
-          log_success "Staying on current version (current: ${CURRENT_VERSION}, latest: ${DESIRED_VERSION})."
+          log_success "Submodule is already initialized."
         fi
-      else
-        log_success "Already up to date (latest: ${DESIRED_VERSION})."
+        log_info "Local mode complete. To initialize project files, run './install.sh install'."
+        exit 0
+      elif git log --grep="git-subtree-dir: ${MAKEFILE_SYSTEM_DIR}" --oneline 2>/dev/null | grep -q .; then
+        log_success "Subtree is present."
+        log_info "Local mode complete. To initialize project files, run './install.sh install'."
+        exit 0
       fi
     fi
-  fi
+    SOURCE_MODE="bootstrap"
+    ;;
+  *) : ;;
+esac
 
-  log_info "Local mode complete. To initialize project files, run './install.sh install'."
-  exit 0
-
-else
   # -------------------------
-  # Bootstrap (no git repo)
+  # Bootstrap (default path)
   # -------------------------
-  log_info "Bootstrap mode detected (no git repo)"
+  log_info "Bootstrap mode detected (${SOURCE_MODE} => bootstrap)"
   DESIRED_VERSION=""
   if [ -f ".ums-version" ]; then
     DESIRED_VERSION="$(cat .ums-version)"; log_info "Found .ums-version: ${DESIRED_VERSION}"
@@ -508,4 +426,4 @@ else
   )
 
   echo ""; log_info "Next steps:"; echo "1. cd ${GITHUB_REPO}"; echo "2. make help"
-fi
+ 
