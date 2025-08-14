@@ -30,6 +30,8 @@ version: ## 🔧 Show current version
 	@echo "  UMF Installed: $$(cat $(UM_VERSION_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none')"
 	@echo "  UMF Pinned: $$(cat $(UMS_PIN_FILE) 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none')"
 	@echo "  UMF Bootstrap Release: $$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || echo 'none')"
+	
+	@$(call print_var, UMF Bootstrap Release, $$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || echo 'none'))
 
 show-version: version ## 🔧 Alias for version command
 
