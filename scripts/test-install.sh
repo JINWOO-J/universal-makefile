@@ -129,7 +129,7 @@ case_run "uninstall dry-run" '
 case_run "setup local: delegate and make help" '
   cp '"$SCRIPT"' ./install.sh &&
   cp -r '"$REPO_ROOT"'/scripts ./scripts &&
-  ( FORCE_UPDATE=true '"$SETUP"' -- help ) &&
+  ( FORCE_UPDATE=true '"$SETUP"' --allow-local -- help ) &&
   ./install.sh init -y &&
   assert_file "Makefile" &&
   assert_dir "universal-makefile" &&
