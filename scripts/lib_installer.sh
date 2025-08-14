@@ -492,17 +492,11 @@ show_diff_installer() {
 update_makefile_system_installer() {
   log_info "Updating Universal Makefile System..."; log_info "Detecting installation type..."
   local installed_type=""
-  # Prefer explicit release/archive installs first to avoid unnecessary git checks
-  if [[ -f "${MAKEFILE_DIR}/.version" || -d "${MAKEFILE_DIR}/makefiles" ]]; then
-    installed_type="release"
-  elif grep -q "path = ${MAKEFILE_DIR}" .gitmodules 2>/dev/null; then
-    installed_type="submodule"
-  elif git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git log --grep="git-subtree-dir: ${MAKEFILE_DIR}" --oneline 2>/dev/null | grep -q .; then
-    installed_type="subtree"
-  elif [[ -d "makefiles" ]]; then
-    installed_type="copy"
-  else
-    log_error "Universal Makefile System installation not found. Cannot update."; exit 1
+  if grep -q "path = ${MAKEFILE_DIR}" .gitmodules 2>/dev/null; then installed_type="submodule"
+  elif git log --grep="git-subtree-dir: ${MAKEFILE_DIR}" --oneline | grep -q .; then installed_type="subtree"
+  elif [[ -d "makefiles" ]]; then installed_type="copy"
+  elif [[ -f "${MAKEFILE_DIR}/.version" ]]; then installed_type="release"
+  else log_error "Universal Makefile System installation not found. Cannot update."; exit 1
   fi
   log_info "-> Installation type detected as: ${installed_type}"; echo ""
 
@@ -522,18 +516,13 @@ update_makefile_system_installer() {
       fi
       ;;
     subtree)
-      log_info "Pulling latest changes into git subtree..."
-      git rev-parse --git-dir >/dev/null 2>&1 || { log_error "Not in a git repository. Cannot update subtree."; exit 1; }
-      git subtree pull --prefix="$MAKEFILE_DIR" "$REPO_URL" "$MAIN_BRANCH" --squash || { log_error "Failed to pull git subtree."; exit 1; }
-      log_success "Git subtree pulled successfully."
+      log_info "Pulling latest changes into git subtree..."; git subtree pull --prefix="$MAKEFILE_DIR" "$REPO_URL" "$MAIN_BRANCH" --squash || { log_error "Failed to pull git subtree."; exit 1; }; log_success "Git subtree pulled successfully."
       ;;
     copy)
       log_info "Updating by re-copying latest files..."; local temp_dir; temp_dir="$(mktemp -d "${UMF_TMP_DIR}/copy-update.XXXXXX")"; log_info "Cloning latest version from $REPO_URL"; git clone "$REPO_URL" "$temp_dir/universal-makefile"; cp -r "$temp_dir/universal-makefile/makefiles" .; cp -r "$temp_dir/universal-makefile/scripts" . 2>/dev/null || true; cp -r "$temp_dir/universal-makefile/templates" . 2>/dev/null || true; [[ -f "$temp_dir/universal-makefile/VERSION" ]] && cp "$temp_dir/universal-makefile/VERSION" .; log_success "Copied latest files from remote."
       ;;
     release)
-      log_info "Re-installing latest release archive..."
-      install_release || { log_error "Release update failed"; exit 1; }
-      log_success "Release archive updated"
+      log_info "Re-installing latest release archive..."; install_release || { log_error "Release update failed"; exit 1; }; log_success "Release archive updated"
       ;;
   esac
 }
