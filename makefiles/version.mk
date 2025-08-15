@@ -180,6 +180,9 @@ update-version-file: ## 🔧 Update version in specific file
 		echo "$(YELLOW)Warning: No suitable version file found. Creating VERSION file...$(RESET)"; \
 		echo "$(VERSION_TO_UPDATE)" > VERSION && \
 		echo "$(GREEN)✅ Created VERSION file with new version$(RESET)"; \
+	fi; \
+	if [ -n "$(VERSION_POST_UPDATE_HOOK)" ]; then \
+		$(MAKE) $(VERSION_POST_UPDATE_HOOK) VERSION=$(VERSION_TO_UPDATE); \
 	fi
 
 .PHONY: update-version-file
