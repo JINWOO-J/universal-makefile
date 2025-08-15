@@ -13,6 +13,52 @@
 
 set -euo pipefail
 
+# --- Robust error tracing ---
+set -E                                  # ERR trap이 함수/서브셸에도 전파되도록
+set -o errtrace                         # (동일의미, bash에서 안전)
+# set -o functrace                     # 필요시 DEBUG trap에도 전파 (보통 불필요)
+
+if [[ -t 2 ]] && command -v tput >/dev/null 2>&1; then
+  RED=$(tput setaf 1 || true); YELLOW=$(tput setaf 3 || true); RESET=$(tput sgr0 || true)
+else
+  RED=""; YELLOW=""; RESET=""
+fi
+
+_stacktrace() {
+  local i=1 depth=${#BASH_LINENO[@]}
+  while (( i < depth )); do
+    local line=${BASH_LINENO[i-1]}
+    local func=${FUNCNAME[i]:-MAIN}
+    local src=${BASH_SOURCE[i]:-n/a}
+    printf '  at %s(%s:%s)\n' "$func" "${src##*/}" "$line" >&2
+    ((i++))
+  done
+}
+
+# _on_error() {
+#   local code=$1
+#   local cmd=${BASH_COMMAND}
+#   local pipestatus_str=""
+#   if [[ -n ${PIPESTATUS[*]-} ]]; then
+#     pipestatus_str=" | PIPESTATUS=(${PIPESTATUS[*]})"
+#   fi
+#   echo -e "${RED}✖ Error: exit ${code}${RESET}" >&2
+#   echo -e "${YELLOW}↳ while executing:${RESET} ${cmd}" >&2
+#   _stacktrace
+# }
+
+_on_error(){ local code=$?; local cmd=$BASH_COMMAND; set +e
+  echo -e "${RED:-}✖ exit ${code}${RESET:-}" >&2
+  echo -e "${YELLOW:-}↳ cmd:${RESET:-} ${cmd}" >&2
+  local i=1; while (( i<${#BASH_LINENO[@]} )); do
+    printf '  at %s(%s:%s)\n' "${FUNCNAME[i]:-MAIN}" "${BASH_SOURCE[i]##*/}" "${BASH_LINENO[i-1]}" >&2
+    ((i++))
+  done
+}
+
+
+trap '_on_error $?; exit $?' ERR
+
 # --- Project settings ---
 GITHUB_OWNER="jinwoo-j"
 GITHUB_REPO="universal-makefile"
@@ -34,7 +80,28 @@ log_info()    { echo -e "${BLUE}ℹ️  $1${RESET}"; }
 log_success() { echo -e "${GREEN}✅ $1${RESET}"; }
 log_warn()    { echo -e "${YELLOW}⚠️  $1${RESET}"; }
 log_debug()   { if [ "${DEBUG:-false}" = "true" ]; then echo -e "${YELLOW}[debug] $1${RESET}"; fi; }
-enable_xtrace_if_debug() { if [ "${DEBUG:-false}" = "true" ]; then set -x; log_debug "xtrace enabled"; fi }
+enable_xtrace_if_debug() {
+  if [ "${DEBUG:-false}" = "true" ]; then
+    # xtrace를 파일로 분리
+    : "${UMS_XTRACE_LOG:=.ums-xtrace.log}"
+    exec {__xtrace_fd}>>"${UMS_XTRACE_LOG}"
+    export BASH_XTRACEFD=${__xtrace_fd}
+
+    # PS4: 시간/파일/라인/함수명 표시
+    # bash 4.2+ 에서 date 호출이 줄줄 나가도 실사용엔 충분히 빠름
+    export PS4='+ $(date "+%H:%M:%S") ${BASH_SOURCE##*/}:${LINENO}:${FUNCNAME[0]:-MAIN}: '
+
+    set -x
+    log_debug "xtrace enabled → ${UMS_XTRACE_LOG}"
+  fi
+}
+
+enable_xtrace_if_debug_once() {
+  case "$-" in *x*) return 0;; esac
+  enable_xtrace_if_debug
+}
+
+enable_xtrace_if_debug_once
 
 # Retry defaults (env-overridable)
 CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
@@ -45,6 +112,10 @@ CLI_VERSION=""
 DEBUG=${DEBUG:-false}
 # Allow running local mode explicitly (default false). Env override: UMS_SETUP_ALLOW_LOCAL=true
 ALLOW_LOCAL="${UMS_SETUP_ALLOW_LOCAL:-false}"
+# prompt 시도 여부의 set -u 안전성 확보
+USER_VERSION_CHOICE_MADE=false
+
+has_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 # --- Try source shared libs; else define fallback wrappers ---
 _umr_try_source_release() {
@@ -215,6 +286,74 @@ makefile_includes_universal() {
   return 1
 }
 
+# --- Detect current source mode (bootstrap | submodule | subtree | none) ---
+detect_current_source_mode() {
+  # submodule: .gitmodules에 path가 있고 메타가 존재하거나 .git 파일(링크)이 존재
+  if [ -f ".gitmodules" ] && grep -q "path = ${MAKEFILE_SYSTEM_DIR}" .gitmodules; then
+    if [ -d ".git/modules/${MAKEFILE_SYSTEM_DIR}" ] || [ -f "${MAKEFILE_SYSTEM_DIR}/.git" ]; then
+      echo "submodule"; return 0
+    fi
+  fi
+  # subtree: 커밋 메시지에 git-subtree-dir 흔적
+  if has_cmd git && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if git log --grep="git-subtree-dir: ${MAKEFILE_SYSTEM_DIR}" --oneline -n 1 >/dev/null 2>&1; then
+      echo "subtree"; return 0
+    fi
+  fi
+  # bootstrap: 디렉터리 + 릴리스 흔적 파일
+  if [ -d "${MAKEFILE_SYSTEM_DIR}" ]; then
+    if [ -f ".ums-release-version" ] || [ -f "${MAKEFILE_SYSTEM_DIR}/VERSION" ] || [ -f "${MAKEFILE_SYSTEM_DIR}/Makefile.universal" ]; then
+      echo "bootstrap"; return 0
+    fi
+  fi
+  echo "none"
+}
+
+# --- Cleanups for switching modes ---
+cleanup_submodule() {
+  if ! has_cmd git; then return 0; fi
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then return 0; fi
+  if [ -f ".gitmodules" ] && grep -q "path = ${MAKEFILE_SYSTEM_DIR}" .gitmodules; then
+    git submodule deinit -f "${MAKEFILE_SYSTEM_DIR}" || true
+    git rm -f "${MAKEFILE_SYSTEM_DIR}" || true
+    rm -rf ".git/modules/${MAKEFILE_SYSTEM_DIR}" || true
+    git config -f .gitmodules --remove-section "submodule.${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
+    if [ ! -s .gitmodules ]; then rm -f .gitmodules; fi
+  fi
+}
+
+cleanup_subtree() {
+  if [ -d "${MAKEFILE_SYSTEM_DIR}" ]; then
+    if has_cmd git && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      git rm -r -f "${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || rm -rf "${MAKEFILE_SYSTEM_DIR}"
+    else
+      rm -rf "${MAKEFILE_SYSTEM_DIR}"
+    fi
+  fi
+}
+
+cleanup_bootstrap() {
+  if has_cmd git && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git rm -r -f --cached "${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
+  fi
+  rm -rf "${MAKEFILE_SYSTEM_DIR}"
+}
+
+force_switch_mode_if_needed() {
+  local target="$1"
+  local current; current="$(detect_current_source_mode)"
+  if [ "$target" = "auto" ] || [ "$target" = "$current" ]; then
+    return 0
+  fi
+  log_warn "Forcing source mode switch: ${current} → ${target}"
+  case "$current" in
+    submodule) cleanup_submodule ;;
+    subtree)   cleanup_subtree   ;;
+    bootstrap) cleanup_bootstrap ;;
+    none) : ;;
+  esac
+}
+
 # --- Entry ---
 parse_cli_args "$@"
 if [ "${DEBUG}" = "true" ]; then
@@ -230,39 +369,162 @@ if [[ -f "makefiles/core.mk" ]] && [[ "$(basename "${PWD}")" = "${GITHUB_REPO}" 
   exit 1
 fi
 
+# --force 시 목표 모드로 수렴하도록 선제 정리
+if umr_is_true "${FORCE_UPDATE}"; then
+  force_switch_mode_if_needed "${SOURCE_MODE}"
+fi
+
 case "${SOURCE_MODE}" in
   bootstrap)
     log_info "Bootstrap mode detected (forced)"
     ;;
+
   submodule)
-    if [ -f ".gitmodules" ] && grep -q "path = ${MAKEFILE_SYSTEM_DIR}" .gitmodules; then
-      if [ ! -f "${MAKEFILE_SYSTEM_DIR}/Makefile.universal" ]; then
-        log_warn "Submodule is not initialized. Running 'git submodule update'..."
-        git submodule update --init --recursive
-        log_success "Submodule initialized successfully."
-      else
-        log_success "Submodule is already initialized."
+    # --- prerequisites & move to repo root ---
+    if ! has_cmd git; then log_warn "git not found on PATH"; exit 1; fi
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      log_warn "Not in a git repository. Initializing git..."; git init; log_success "Git repository initialized."
+    fi
+    REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
+    if [ -n "${REPO_ROOT}" ] && [ "${PWD}" != "${REPO_ROOT}" ]; then
+      log_info "Switching to repo root: ${REPO_ROOT}"; OLDPWD_SUBMODULE="$PWD"; cd "${REPO_ROOT}"
+    fi
+
+    # --- robust sparse handling (temporarily disable if needed) ---
+    SPARSE_ACTIVE=false; SPARSE_BACKUP=""
+    if git sparse-checkout list >/dev/null 2>&1; then
+      if git config --bool core.sparseCheckout 2>/dev/null | grep -qi true; then SPARSE_ACTIVE=true; fi
+      if git ls-files -v -- .gitmodules 2>/dev/null | grep -qE '^[SsmHh] '; then SPARSE_ACTIVE=true; fi
+      if [ "${SPARSE_ACTIVE}" = "true" ]; then
+        SPARSE_BACKUP="$(mktemp)"; git sparse-checkout list > "${SPARSE_BACKUP}" 2>/dev/null || true
+        log_warn "Temporarily disabling sparse-checkout to update .gitmodules..."; git sparse-checkout disable || true
       fi
-      log_info "Local mode complete. To initialize project files, run './install.sh install'."
-      exit 0
-    else
-      log_warn "Submodule config not found for path ${MAKEFILE_SYSTEM_DIR}. Falling back to bootstrap."
-      SOURCE_MODE="bootstrap"
     fi
+
+    # --- ensure .gitmodules exists & is not skipped ---
+    : > .gitmodules
+    git update-index --no-assume-unchanged .gitmodules 2>/dev/null || true
+    git update-index --no-skip-worktree    .gitmodules 2>/dev/null || true
+
+    # --- HARD RESET of path (index + working tree) ---
+    git ls-files -z -- "${MAKEFILE_SYSTEM_DIR}" "${MAKEFILE_SYSTEM_DIR}/*" 2>/dev/null \
+      | git update-index -z --force-remove --stdin 2>/dev/null || true
+    git rm -r -f --cached --ignore-unmatch -- "${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
+    rm -rf -- "${MAKEFILE_SYSTEM_DIR}"
+
+    # --- ALSO nuke any stale submodule metadata/config ---
+    rm -rf ".git/modules/${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
+    git config -f .gitmodules --remove-section "submodule.${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
+    git config --remove-section "submodule.${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
+
+    # --- add submodule ---
+    log_warn "Submodule not found. Adding submodule..."
+    git submodule add "https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git" "${MAKEFILE_SYSTEM_DIR}"
+    log_success "Submodule added successfully."
+
+    # --- init submodule ---
+    if [ ! -f "${MAKEFILE_SYSTEM_DIR}/Makefile.universal" ]; then
+      log_warn "Submodule is not initialized. Running 'git submodule update'..."
+      git submodule update --init --recursive
+      log_success "Submodule initialized successfully."
+    else
+      log_success "Submodule is already initialized."
+    fi
+
+    # --- restore sparse-checkout if it was active ---
+    if [ "${SPARSE_ACTIVE}" = "true" ]; then
+      if [ -s "${SPARSE_BACKUP}" ]; then
+        log_info "Restoring previous sparse-checkout patterns..."
+        git sparse-checkout set --stdin < "${SPARSE_BACKUP}" 2>/dev/null || git sparse-checkout reapply 2>/dev/null || true
+      fi
+      rm -f "${SPARSE_BACKUP}" 2>/dev/null || true
+    fi
+
+    if [ -n "${OLDPWD_SUBMODULE:-}" ]; then cd "${OLDPWD_SUBMODULE}"; fi
+    log_info "Local mode complete. To initialize project files, run './install.sh install'."
+    exit 0
     ;;
+
   subtree)
-    if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-      && git log --grep="git-subtree-dir: ${MAKEFILE_SYSTEM_DIR}" --oneline 2>/dev/null | grep -q .; then
-      log_success "Subtree is present."
-      log_info "Local mode complete. To initialize project files, run './install.sh install'."
-      exit 0
-    else
-      log_warn "Subtree not detected or not a git repo. Falling back to bootstrap."
-      SOURCE_MODE="bootstrap"
+    if ! has_cmd git; then log_warn "git not found"; exit 1; fi
+
+    # git repo 체크 및 루트로 이동
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      log_warn "Not in a git repository. Initializing git..."
+      git init
+      log_success "Git repository initialized."
     fi
+    REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
+    if [ -n "${REPO_ROOT}" ] && [ "${PWD}" != "${REPO_ROOT}" ]; then
+      log_info "Switching to repo root: ${REPO_ROOT}"
+      OLDPWD_SUBTREE="$PWD"
+      cd "${REPO_ROOT}"
+    fi
+
+    # git subtree 명령 가용성 확인
+    if git help -a | grep -q '\bsubtree\b'; then
+      if ! git log --grep="git-subtree-dir: ${MAKEFILE_SYSTEM_DIR}" --oneline 2>/dev/null | grep -q .; then
+        log_warn "Subtree not detected. Adding subtree with 'git subtree'..."
+        if ! git remote get-url umf >/dev/null 2>&1; then
+          git remote add umf "https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git"
+        fi
+        git fetch umf
+        git subtree add --prefix="${MAKEFILE_SYSTEM_DIR}" umf "${MAIN_BRANCH}" --squash
+        log_success "Subtree added successfully."
+      else
+        log_success "Subtree is present."
+      fi
+
+    else
+      log_warn "'git subtree' is not available; using vendor-snapshot fallback (no history)."
+
+      # 사용할 ref 결정: CLI > .ums-version > MAIN_BRANCH
+      DESIRED_VERSION=""
+      if [ -n "${CLI_VERSION:-}" ]; then
+        DESIRED_VERSION="${CLI_VERSION}"
+      elif [ -f ".ums-version" ]; then
+        DESIRED_VERSION="$(cat .ums-version)"
+      else
+        DESIRED_VERSION="${MAIN_BRANCH}"
+      fi
+      log_info "Vendor snapshot ref: ${DESIRED_VERSION}"
+
+      # 경로를 인덱스/워킹트리에서 반드시 비움 (충돌 방지)
+      git ls-files -z -- "${MAKEFILE_SYSTEM_DIR}" "${MAKEFILE_SYSTEM_DIR}/*" 2>/dev/null \
+        | git update-index -z --force-remove --stdin 2>/dev/null || true
+      git rm -r -f --cached --ignore-unmatch -- "${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
+      rm -rf -- "${MAKEFILE_SYSTEM_DIR}"
+
+      # tarball 다운로드 → 추출 → 디렉터리로 이동
+      TMPDIR_UMR="$(mktemp -d)"; TARBALL_PATH="${TMPDIR_UMR}/repo.tar.gz"
+      EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"
+      if ! umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}"; then
+        log_warn "Failed to download ${GITHUB_OWNER}/${GITHUB_REPO} @ ${DESIRED_VERSION}"; rm -rf "${TMPDIR_UMR}"; exit 1
+      fi
+      if ! umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}"; then
+        log_warn "Extraction failed."; rm -rf "${TMPDIR_UMR}"; exit 1
+      fi
+      ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"
+      if [ -z "${ROOT_DIR_NAME}" ]; then
+        log_warn "Extracted directory not found."; rm -rf "${TMPDIR_UMR}"; exit 1
+      fi
+      # 벤더 스냅샷 복사(최상위 디렉터리째 두는 방식)
+      mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
+      rm -rf "${TMPDIR_UMR}"
+      echo "${DESIRED_VERSION}" > .ums-version || true
+      git add -A "${MAKEFILE_SYSTEM_DIR}" .ums-version
+      git commit -m "Vendor snapshot: ${GITHUB_REPO} → ${MAKEFILE_SYSTEM_DIR} @ ${DESIRED_VERSION} (git-subtree-fallback)"
+
+      log_success "Vendor snapshot added at '${MAKEFILE_SYSTEM_DIR}' (ref: ${DESIRED_VERSION})."
+    fi
+
+    if [ -n "${OLDPWD_SUBTREE:-}" ]; then cd "${OLDPWD_SUBTREE}"; fi
+    log_info "Local mode complete. To initialize project files, run './install.sh install'."
+    exit 0
     ;;
+
   auto)
-    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if has_cmd git && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       if [ -f ".gitmodules" ] && grep -q "path = ${MAKEFILE_SYSTEM_DIR}" .gitmodules; then
         if [ ! -f "${MAKEFILE_SYSTEM_DIR}/Makefile.universal" ]; then
           log_warn "Submodule is not initialized. Running 'git submodule update'..."
@@ -281,7 +543,10 @@ case "${SOURCE_MODE}" in
     fi
     SOURCE_MODE="bootstrap"
     ;;
-  *) : ;;
+
+  *)
+    :
+    ;;
 esac
 
   # -------------------------
@@ -435,4 +700,3 @@ esac
   )
 
   echo ""; log_info "Next steps:"; echo "1. cd ${GITHUB_REPO}"; echo "2. make help"
- 
