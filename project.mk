@@ -1,3 +1,3 @@
 REPO_HUB=jinwoo
 NAME=universal-makefile
-VERSION = v1.0.92
+VERSION = v1.0.93
