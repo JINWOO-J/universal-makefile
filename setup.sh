@@ -13,6 +13,52 @@
 
 set -euo pipefail
 
+# --- Robust error tracing ---
+set -E                                  # ERR trap이 함수/서브셸에도 전파되도록
+set -o errtrace                         # (동일의미, bash에서 안전)
+# set -o functrace                     # 필요시 DEBUG trap에도 전파 (보통 불필요)
+
+if [[ -t 2 ]] && command -v tput >/dev/null 2>&1; then
+  RED=$(tput setaf 1 || true); YELLOW=$(tput setaf 3 || true); RESET=$(tput sgr0 || true)
+else
+  RED=""; YELLOW=""; RESET=""
+fi
+
+_stacktrace() {
+  local i=1 depth=${#BASH_LINENO[@]}
+  while (( i < depth )); do
+    local line=${BASH_LINENO[i-1]}
+    local func=${FUNCNAME[i]:-MAIN}
+    local src=${BASH_SOURCE[i]:-n/a}
+    printf '  at %s(%s:%s)\n' "$func" "${src##*/}" "$line" >&2
+    ((i++))
+  done
+}
+
+# _on_error() {
+#   local code=$1
+#   local cmd=${BASH_COMMAND}
+#   local pipestatus_str=""
+#   if [[ -n ${PIPESTATUS[*]-} ]]; then
+#     pipestatus_str=" | PIPESTATUS=(${PIPESTATUS[*]})"
+#   fi
+#   echo -e "${RED}✖ Error: exit ${code}${RESET}" >&2
+#   echo -e "${YELLOW}↳ while executing:${RESET} ${cmd}" >&2
+#   _stacktrace
+# }
+
+_on_error(){ local code=$?; local cmd=$BASH_COMMAND; set +e
+  echo -e "${RED:-}✖ exit ${code}${RESET:-}" >&2
+  echo -e "${YELLOW:-}↳ cmd:${RESET:-} ${cmd}" >&2
+  local i=1; while (( i<${#BASH_LINENO[@]} )); do
+    printf '  at %s(%s:%s)\n' "${FUNCNAME[i]:-MAIN}" "${BASH_SOURCE[i]##*/}" "${BASH_LINENO[i-1]}" >&2
+    ((i++))
+  done
+}
+
+
+trap '_on_error $?; exit $?' ERR
+
 # --- Project settings ---
 GITHUB_OWNER="jinwoo-j"
 GITHUB_REPO="universal-makefile"
@@ -34,7 +80,28 @@ log_info()    { echo -e "${BLUE}ℹ️  $1${RESET}"; }
 log_success() { echo -e "${GREEN}✅ $1${RESET}"; }
 log_warn()    { echo -e "${YELLOW}⚠️  $1${RESET}"; }
 log_debug()   { if [ "${DEBUG:-false}" = "true" ]; then echo -e "${YELLOW}[debug] $1${RESET}"; fi; }
-enable_xtrace_if_debug() { if [ "${DEBUG:-false}" = "true" ]; then set -x; log_debug "xtrace enabled"; fi }
+enable_xtrace_if_debug() {
+  if [ "${DEBUG:-false}" = "true" ]; then
+    # xtrace를 파일로 분리
+    : "${UMS_XTRACE_LOG:=.ums-xtrace.log}"
+    exec {__xtrace_fd}>>"${UMS_XTRACE_LOG}"
+    export BASH_XTRACEFD=${__xtrace_fd}
+
+    # PS4: 시간/파일/라인/함수명 표시
+    # bash 4.2+ 에서 date 호출이 줄줄 나가도 실사용엔 충분히 빠름
+    export PS4='+ $(date "+%H:%M:%S") ${BASH_SOURCE##*/}:${LINENO}:${FUNCNAME[0]:-MAIN}: '
+
+    set -x
+    log_debug "xtrace enabled → ${UMS_XTRACE_LOG}"
+  fi
+}
+
+enable_xtrace_if_debug_once() {
+  case "$-" in *x*) return 0;; esac
+  enable_xtrace_if_debug
+}
+
+enable_xtrace_if_debug_once
 
 # Retry defaults (env-overridable)
 CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
