@@ -449,15 +449,26 @@ install_github_workflow() {
 
 show_status_installer() {
   log_info "Checking status of the installed Universal Makefile System..."; echo ""
-  # Submodule (MAKEFILE_DIR is a git repo)
-  if [[ -d "$MAKEFILE_DIR" ]] && (cd "$MAKEFILE_DIR" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
-    local git_dir="$MAKEFILE_DIR" remote branch commit status
-    remote=$(git -C "$git_dir" remote get-url origin 2>/dev/null || echo "N/A")
-    branch=$(git -C "$git_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "N/A")
-    commit=$(git -C "$git_dir" rev-parse --short HEAD 2>/dev/null || echo "N/A")
-    status=$(git -C "$git_dir" status --porcelain 2>/dev/null)
-    echo "  Installation Type : Submodule"; echo "  Path              : ${git_dir}"; echo "  Remote URL        : ${remote}"; echo "  Branch            : ${branch}"; echo "  Commit            : ${commit}"
-    if [[ -n "$status" ]]; then log_warn "Status            : Modified (Local changes detected in system files)"; else log_success "  Status            : Clean"; fi
+  
+  if [[ -f ".gitmodules" ]] && grep -q "path = ${MAKEFILE_DIR}" ".gitmodules" 2>/dev/null; then
+    # Submodule 확실한 경우
+    if [[ -d "$MAKEFILE_DIR" ]] && (cd "$MAKEFILE_DIR" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
+      local git_dir="$MAKEFILE_DIR" remote branch commit status
+      remote=$(git -C "$git_dir" remote get-url origin 2>/dev/null || echo "N/A")
+      branch=$(git -C "$git_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "N/A")
+      commit=$(git -C "$git_dir" rev-parse --short HEAD 2>/dev/null || echo "N/A")
+      status=$(git -C "$git_dir" status --porcelain 2>/dev/null)
+      echo "  Installation Type : Submodule"
+      echo "  Path              : ${git_dir}"
+      echo "  Remote URL        : ${remote}"
+      echo "  Branch            : ${branch}"
+      echo "  Commit            : ${commit}"
+      if [[ -n "$status" ]]; then 
+        log_warn "Status            : Modified (Local changes detected in system files)"
+      else 
+        log_success "  Status            : Clean"
+      fi
+    fi
   # Release archive install (MAKEFILE_DIR exists and contains makefiles/)
   elif [[ -d "$MAKEFILE_DIR/makefiles" ]]; then
     echo "  Installation Type : Release"
@@ -474,10 +485,16 @@ show_status_installer() {
   # Copy install (files copied into project root)
   elif [[ -d "makefiles" ]]; then
     echo "  Installation Type : Copied Files"
-    if [[ -f "VERSION" ]]; then local version; version=$(cat VERSION); echo "  Version File      : ${version}"; else echo "  Version File      : Not found"; fi
+    if [[ -f "VERSION" ]]; then 
+      local version; version=$(cat VERSION)
+      echo "  Version File      : ${version}"
+    else 
+      echo "  Version File      : Not found"
+    fi
     log_warn "  Cannot determine specific git commit for copied files."
   else
-    log_error "Universal Makefile System installation not found."; exit 1
+    log_error "Universal Makefile System installation not found."
+    exit 1
   fi
   echo ""
 }
