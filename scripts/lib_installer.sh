@@ -508,7 +508,6 @@ show_status_installer() {
   echo ""
 }
 
-# ---- Example app setup ----
 setup_app_example() {
   local app_type="${1:-}"
   local examples_dir="$MAKEFILE_DIR/examples"
