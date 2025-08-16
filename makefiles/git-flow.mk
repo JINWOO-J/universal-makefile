@@ -54,7 +54,6 @@ scan-secrets: ## 🔒 Lightweight secret scan (regex) — no deps
 	  -E '(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35}|xox[baprs]-[0-9A-Za-z-]{10,}|-----BEGIN (OPENSSH|RSA|EC) PRIVATE KEY-----)' . || true; \
 	echo "$(YELLOW)Heuristic only; consider dedicated tooling for CI (git-secrets/trufflehog)$(RESET)"
 
-
 compare-with-remote: ## 🔍 Compare content of BRANCH vs $(REMOTE)/REMOTE_BRANCH (tree equality + changed files)
 	@set -Eeuo pipefail; \
 	if ! git rev-parse --git-dir >/dev/null 2>&1; then \
