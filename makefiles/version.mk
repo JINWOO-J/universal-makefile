@@ -35,10 +35,6 @@ show-umf-version:
 	@$(call print_var, UMF Installed, $$(cat $(UM_VERSION_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none'))
 	@$(call print_var, UMF Pinned, $$(cat $(UMS_PIN_FILE) 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none'))
 	@$(call print_var, UMF Bootstrap Release, $$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || echo 'none'))
-	@$(call print_var, Installation Type, $$(if [ -f ".gitmodules" ] && grep -q "path = $(MAKEFILE_DIR)" ".gitmodules" 2>/dev/null; then echo "Submodule"; \
-		elif [ -d "$(MAKEFILE_DIR)/makefiles" ]; then echo "Release"; \
-		elif [ -d "makefiles" ]; then echo "Copy"; \
-		else echo "Unknown"; fi))	
 
 
 # show-version: version ## 🔧 Alias for version command
