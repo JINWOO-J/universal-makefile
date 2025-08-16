@@ -7,6 +7,7 @@ set -euo pipefail
 : "${TMPDIR:=/tmp}"
 TMPDIR="${TMPDIR%/}"
 UMF_TMP_DIR="$(mktemp -d "${TMPDIR}/umf-install.XXXXXX")"
+UMS_INSTALL_TYPE_FILE=".ums-install-type"
 _umf_cleanup_tmp() { rm -rf "${UMF_TMP_DIR}" >/dev/null 2>&1 || true; }
 trap _umf_cleanup_tmp EXIT INT TERM
 
@@ -27,6 +28,9 @@ GITHUB_REPO="universal-makefile"
 MAKEFILE_DIR="${GITHUB_REPO}"
 GITHUB_REPO_SLUG="${GITHUB_OWNER}/${GITHUB_REPO}"
 MAIN_BRANCH="main"
+
+# Installation type tracking
+UMS_INSTALL_TYPE_FILE=".ums-install-type"
 
 REPO_URL="https://github.com/${GITHUB_REPO_SLUG}"
 INSTALLER_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPO_SLUG}/${MAIN_BRANCH}/install.sh"
@@ -540,18 +544,22 @@ show_diff_installer() {
 update_makefile_system_installer() {
   log_info "Updating Universal Makefile System..."; log_info "Detecting installation type..."
   local installed_type=""
-  # Prefer explicit release/archive installs first to avoid unnecessary git checks
-  if [[ -f "${MAKEFILE_DIR}/.version" || -d "${MAKEFILE_DIR}/makefiles" ]]; then
-    installed_type="release"
-  elif grep -q "path = ${MAKEFILE_DIR}" .gitmodules 2>/dev/null; then
+  
+  # 설치 타입 감지 순서: submodule -> subtree -> release -> copy
+  if [[ -f ".gitmodules" ]] && grep -q "path = ${MAKEFILE_DIR}" ".gitmodules" 2>/dev/null && [[ -d "$MAKEFILE_DIR" ]] && (cd "$MAKEFILE_DIR" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
     installed_type="submodule"
   elif git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git log --grep="git-subtree-dir: ${MAKEFILE_DIR}" --oneline 2>/dev/null | grep -q .; then
     installed_type="subtree"
+  elif [[ -f "${MAKEFILE_DIR}/.version" || -d "${MAKEFILE_DIR}/makefiles" ]]; then
+    installed_type="release"
   elif [[ -d "makefiles" ]]; then
     installed_type="copy"
   else
     log_error "Universal Makefile System installation not found. Cannot update."; exit 1
   fi
+  
+  # 설치 타입 기록
+  echo "${installed_type}" > "${UMS_INSTALL_TYPE_FILE}"
   log_info "-> Installation type detected as: ${installed_type}"; echo ""
 
   case "$installed_type" in

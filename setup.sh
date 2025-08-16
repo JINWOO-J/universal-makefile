@@ -47,17 +47,83 @@ _stacktrace() {
 #   _stacktrace
 # }
 
-_on_error(){ local code=$?; local cmd=$BASH_COMMAND; set +e
-  echo -e "${RED:-}✖ exit ${code}${RESET:-}" >&2
-  echo -e "${YELLOW:-}↳ cmd:${RESET:-} ${cmd}" >&2
-  local i=1; while (( i<${#BASH_LINENO[@]} )); do
-    printf '  at %s(%s:%s)\n' "${FUNCNAME[i]:-MAIN}" "${BASH_SOURCE[i]##*/}" "${BASH_LINENO[i-1]}" >&2
-    ((i++))
-  done
+_on_error() {
+  # $1: exit code, $2: line, $3: failed cmd
+  local exit_code="${1:-1}"
+  local line_no="${2:-?}"
+  local cmd="${3:-?}"
+
+  # trap 재귀 방지 + 출력 중에는 errexit 끔
+  trap - ERR
+  set +e
+
+  # 파이프라인 상태 복사(파이프가 아니면 길이 1)
+  local -a pipe_status=( "${PIPESTATUS[@]}" )
+
+  # 헤더
+  {
+    printf '%s✖ exit %s%s\n' "$RED" "$exit_code" "$RESET"          # 종료 코드
+    printf '%s↳ cmd:%s %s\n' "$YELLOW" "$RESET" "$cmd"             # 실패 명령
+    printf '  file: %s\n' "${BASH_SOURCE[1]:-?}"                   # 파일
+    printf '  line: %s\n' "$line_no"                               # 줄
+    printf '  func: %s\n' "${FUNCNAME[2]:-MAIN}"                   # 함수
+    printf '   pwd: %s\n' "$PWD"                                   # 작업 디렉터리
+    printf '  time: %s\n' "$(date +'%Y-%m-%d %H:%M:%S%z' 2>/dev/null || printf '?')" # 시간
+    if (( ${#pipe_status[@]} > 1 )); then
+      printf '  pipe: ['
+      local i
+      for i in "${!pipe_status[@]}"; do
+        printf '%s' "${pipe_status[i]}"
+        [[ $i -lt $((${#pipe_status[@]}-1)) ]] && printf ', '
+      done
+      printf ']\n'
+    fi
+  } >&2
+
+  # 스택 트레이스 (호출자부터 위로)
+  {
+    local i=1 max="${STACK_MAX:-9999}" count=0
+    while (( i < ${#BASH_LINENO[@]} && count < max )); do
+      printf '  at %s(%s:%s)\n' \
+        "${FUNCNAME[i]:-MAIN}" "${BASH_SOURCE[i]##*/}" "${BASH_LINENO[i-1]}"
+      ((i++, count++))
+    done
+  } >&2
+
+  # 실패 지점 주변 컨텍스트
+  if [[ -n "${SHOW_CONTEXT:-}" ]]; then
+    local src="${BASH_SOURCE[1]}"
+    if [[ -r "$src" && "$line_no" =~ ^[0-9]+$ ]]; then
+      # 실패 줄 기준 ±2줄
+      awk -v n="$line_no" -v w=2 '
+        NR>=n-w && NR<=n+w {
+          mark = (NR==n ? "=>" : "  ");
+          printf("    %4d %s %s\n", NR, mark, $0);
+        }' "$src" >&2
+    fi
+  fi
+
+  # 기본은 즉시 종료, 원 코드 유지 원하면 HALT_ON_ERROR=0
+  if [[ "${HALT_ON_ERROR:-1}" != "0" ]]; then
+    exit "$exit_code"
+  fi
+
+  # 계속 진행할 거라면 ERR trap을 복구
+  trap '_on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 }
 
+# 비정상 종료를 마지막에 한 번 더 알려주고 싶다면(선택)
+_on_exit() {
+  local code=$?
+  # 정상 종료면 조용히
+  (( code == 0 )) && return
+  printf '%s✖ exited with status %s%s\n' "$RED" "$code" "$RESET" >&2
+}
 
-trap '_on_error $?; exit $?' ERR
+# 트랩 설치
+trap '_on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
+trap '_on_exit' EXIT
+
 
 # --- Project settings ---
 GITHUB_OWNER="jinwoo-j"
@@ -355,6 +421,8 @@ force_switch_mode_if_needed() {
   esac
 }
 
+
+
 # --- Entry ---
 parse_cli_args "$@"
 if [ "${DEBUG}" = "true" ]; then
@@ -375,11 +443,14 @@ if umr_is_true "${FORCE_UPDATE}"; then
   force_switch_mode_if_needed "${SOURCE_MODE}"
 fi
 
+
 case "${SOURCE_MODE}" in
   bootstrap)
     log_info "Bootstrap mode detected (forced)"
     ;;
-
+  release)
+    log_info "Bootstrap release mode detected (forced)"
+    ;;
   submodule)
     # --- prerequisites & move to repo root ---
     if ! has_cmd git; then log_warn "git not found on PATH"; exit 1; fi
@@ -555,6 +626,7 @@ esac
   # Bootstrap (default path)
   # -------------------------
   log_info "Bootstrap mode detected (${SOURCE_MODE} => bootstrap)"
+  echo "bootstrap release" > ${UMS_INSTALL_TYPE_FILE}
   DESIRED_VERSION=""
   if [ -f ".ums-version" ]; then
     DESIRED_VERSION="$(cat .ums-version)"; log_info "Found .ums-version: ${DESIRED_VERSION}"
@@ -614,7 +686,7 @@ esac
       pin|*) log_info "Pinned ${DESIRED_VERSION}; newer exists (${LATEST_TAG}). Use -f or UMS_BOOTSTRAP_POLICY=latest to override." ;;
     esac
   fi
-  echo "bootstap release" > "${UMS_INSTALL_TYPE_FILE}"
+
   if [ -e "${GITHUB_REPO}" ]; then
     current_bootstrap=""
     if [ -f ".ums-release-version" ]; then current_bootstrap="$(cat ".ums-release-version")"
