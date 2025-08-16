@@ -67,6 +67,7 @@ MAKEFILE_SYSTEM_DIR="${GITHUB_REPO}"
 
 # Bootstrap version selection policy: pin | prompt | latest
 UMS_BOOTSTRAP_POLICY="${UMS_BOOTSTRAP_POLICY:-prompt}"
+UMS_INSTALL_TYPE_FILE=".ums-install-type"
 # Source selection: bootstrap | submodule | subtree | auto (default: bootstrap)
 SOURCE_MODE="${UMS_SOURCE_MODE:-bootstrap}"
 
@@ -441,6 +442,7 @@ case "${SOURCE_MODE}" in
     fi
 
     if [ -n "${OLDPWD_SUBMODULE:-}" ]; then cd "${OLDPWD_SUBMODULE}"; fi
+    echo "submodule" > "${UMS_INSTALL_TYPE_FILE}"
     log_info "Local mode complete. To initialize project files, run './install.sh install'."
     exit 0
     ;;
@@ -471,10 +473,10 @@ case "${SOURCE_MODE}" in
         git fetch umf
         git subtree add --prefix="${MAKEFILE_SYSTEM_DIR}" umf "${MAIN_BRANCH}" --squash
         log_success "Subtree added successfully."
+        echo "subtree" > "${UMS_INSTALL_TYPE_FILE}"
       else
-    log_success "Subtree is present."
+        log_success "Subtree is present."
       fi
-
     else
       log_warn "'git subtree' is not available; using vendor-snapshot fallback (no history)."
 
@@ -612,7 +614,7 @@ esac
       pin|*) log_info "Pinned ${DESIRED_VERSION}; newer exists (${LATEST_TAG}). Use -f or UMS_BOOTSTRAP_POLICY=latest to override." ;;
     esac
   fi
-
+  echo "bootstap release" > "${UMS_INSTALL_TYPE_FILE}"
   if [ -e "${GITHUB_REPO}" ]; then
     current_bootstrap=""
     if [ -f ".ums-release-version" ]; then current_bootstrap="$(cat ".ums-release-version")"
