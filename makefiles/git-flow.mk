@@ -48,6 +48,13 @@ endef
 
 .PHONY: reset-branch reset-main reset-develop
 
+scan-secrets: ## 🔒 Lightweight secret scan (regex) — no deps
+	@set -Eeuo pipefail; echo "$(BLUE)🔍 Scanning for obvious secrets...$(RESET)"; \
+	grep -RIn --exclude-dir=.git --exclude-dir=node_modules --exclude=package-lock.json \
+	  -E '(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35}|xox[baprs]-[0-9A-Za-z-]{10,}|-----BEGIN (OPENSSH|RSA|EC) PRIVATE KEY-----)' . || true; \
+	echo "$(YELLOW)Heuristic only; consider dedicated tooling for CI (git-secrets/trufflehog)$(RESET)"
+
+
 compare-with-remote: ## 🔍 Compare content of BRANCH vs $(REMOTE)/REMOTE_BRANCH (tree equality + changed files)
 	@set -Eeuo pipefail; \
 	if ! git rev-parse --git-dir >/dev/null 2>&1; then \
@@ -96,6 +103,15 @@ diff-refs: ## 🔍 Compare content between two arbitrary refs (REF1, REF2)
 	fi; \
 	[ "$(FAIL_ON_DIFF)" = "1" ] && exit 2 || true
 
+diff-summary: ## 📊 Show summary stats between two refs: REF1, REF2 (lines/files/dirstat)
+	@if [ -z "$(REF1)" ] || [ -z "$(REF2)" ]; then \
+	  echo "$(RED)Usage: make diff-summary REF1=<ref> REF2=<ref>$(RESET)"; exit 1; \
+	fi
+	@echo "$(BLUE)🔢 Shortstat$(RESET)"; \
+	git diff --shortstat "$(REF1)" "$(REF2)" || true; \
+	echo ""; echo "$(BLUE)📁 Dirstat (by files)$(RESET)"; \
+	git diff --dirstat=files,0 "$(REF1)" "$(REF2)" || true
+	
 # Reset arbitrary branch by passing BRANCH=<name>
 reset-branch: check-git-repo ## 🔄 Reset BRANCH to origin/BRANCH
 	@if [ -z "$(BRANCH)" ]; then \
