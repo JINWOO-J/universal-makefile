@@ -189,11 +189,11 @@ if ! declare -F umr_build_tarball_urls >/dev/null 2>&1; then
         main|master|develop|*-branch|*-snapshot)
           echo "https://github.com/${owner}/${repo}/archive/refs/heads/${ref}.tar.gz"
           echo "https://codeload.github.com/${owner}/${repo}/tar.gz/refs/heads/${ref}"
-        ;;
+          ;;
         *)
           echo "https://github.com/${owner}/${repo}/archive/refs/tags/${ref}.tar.gz"
           echo "https://codeload.github.com/${owner}/${repo}/tar.gz/refs/tags/${ref}"
-        ;;
+          ;;
       esac
     fi
   }
@@ -472,7 +472,7 @@ case "${SOURCE_MODE}" in
         git subtree add --prefix="${MAKEFILE_SYSTEM_DIR}" umf "${MAIN_BRANCH}" --squash
         log_success "Subtree added successfully."
       else
-        log_success "Subtree is present."
+    log_success "Subtree is present."
       fi
 
     else
@@ -509,7 +509,7 @@ case "${SOURCE_MODE}" in
         log_warn "Extracted directory not found."; rm -rf "${TMPDIR_UMR}"; exit 1
       fi
       # 벤더 스냅샷 복사(최상위 디렉터리째 두는 방식)
-      mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
+          mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
       rm -rf "${TMPDIR_UMR}"
       echo "${DESIRED_VERSION}" > .ums-version || true
       git add -A "${MAKEFILE_SYSTEM_DIR}" .ums-version
@@ -631,7 +631,7 @@ esac
           exit 0
         fi
       else
-        log_success "Already up to date (installed: ${current_bootstrap})."; exit 0
+      log_success "Already up to date (installed: ${current_bootstrap})."; exit 0
       fi
     fi
 
