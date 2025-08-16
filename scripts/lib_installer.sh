@@ -535,12 +535,10 @@ setup_app_example() {
   log_success "$app_type example setup complete!"; echo "Try: make help"
 }
 
-# ---- Diff helper ----
 show_diff_installer() {
   echo ""; log_info "Debug mode enabled. Showing local changes that are blocking the update:"; git --no-pager -C "$MAKEFILE_DIR" diff --color=always; echo ""
 }
 
-# ---- Update logic (submodule/subtree/copy/release) ----
 update_makefile_system_installer() {
   log_info "Updating Universal Makefile System..."; log_info "Detecting installation type..."
   local installed_type=""
