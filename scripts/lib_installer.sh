@@ -358,7 +358,9 @@ install_submodule() {
   if ! git submodule add "$REPO_URL" "$MAKEFILE_DIR"; then
     if git config --file .gitmodules --get "submodule.$MAKEFILE_DIR.url" >/dev/null 2>&1; then log_info "Submodule already exists, continuing..."; else log_error "Failed to add submodule"; exit 1; fi
   fi
-  git submodule update --init --recursive; log_success "Submodule installation completed"
+  git submodule update --init --recursive; 
+  echo "submodule" > "${UMS_INSTALL_TYPE_FILE}"
+  log_success "Submodule installation completed"
 }
 
 install_copy() {
@@ -368,6 +370,7 @@ install_copy() {
   [[ "$FORCE_INSTALL" == true || ! -d "scripts" ]] && cp -r "$source_dir/scripts" . 2>/dev/null || true
   [[ "$FORCE_INSTALL" == true || ! -d "templates" ]] && cp -r "$source_dir/templates" . 2>/dev/null || true
   [[ -f "$source_dir/VERSION" ]] && cp "$source_dir/VERSION" .
+  echo "copy" > "${UMS_INSTALL_TYPE_FILE}"
   log_success "Copy installation completed"
 }
 
@@ -387,6 +390,7 @@ install_subtree() {
   else
     git subtree add --prefix="$prefix_dir" "$remote_name" "$remote_head" --squash || { log_error "git subtree add failed"; exit 1; }; log_success "Subtree installed at '$prefix_dir'"
   fi
+  echo "subtree" > "${UMS_INSTALL_TYPE_FILE}"
 }
 
 install_release() {
@@ -436,6 +440,7 @@ install_release() {
   if [[ "${missing}" -eq 1 ]]; then
     log_warn "Some expected files are missing. Archive layout may have changed."
   fi
+  echo "release" > "${UMS_INSTALL_TYPE_FILE}"
   return 0
 }
 
