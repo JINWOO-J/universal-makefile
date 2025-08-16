@@ -3,6 +3,8 @@ include $(MAKEFILE_DIR)/makefiles/colors.mk
 # Git Flow and Release Management
 # ================================================================
 
+SHOW_PATCH ?= 0     # 1이면 unified diff까지 출력
+FAIL_ON_DIFF ?= 0   # 1이면 내용 다르면 비정상 종료(Exit 2)
 REMOTE ?= origin
 AUTO_RELEASE_ALLOWED_BRANCH ?= $(DEVELOP_BRANCH)
 
@@ -45,6 +47,54 @@ define RESET_TO_REMOTE
 endef
 
 .PHONY: reset-branch reset-main reset-develop
+
+compare-with-remote: ## 🔍 Compare content of BRANCH vs $(REMOTE)/REMOTE_BRANCH (tree equality + changed files)
+	@set -Eeuo pipefail; \
+	if ! git rev-parse --git-dir >/dev/null 2>&1; then \
+	  echo "$(RED)Error: Not a git repository$(RESET)"; exit 1; \
+	fi; \
+	if ! git remote get-url $(REMOTE) >/dev/null 2>&1; then \
+	  echo "$(RED)Error: remote '$(REMOTE)' not found$(RESET)"; exit 1; \
+	fi; \
+	BRANCH="$(if $(BRANCH),$(BRANCH),$$(git rev-parse --abbrev-ref HEAD))"; \
+	RB="$${REMOTE_BRANCH:-$$BRANCH}"; \
+	echo "$(BLUE)🔎 Comparing content: $$BRANCH  ⇄  $(REMOTE)/$$RB$(RESET)"; \
+	git fetch $(REMOTE) "$$RB" >/dev/null 2>&1 || true; \
+	if ! git rev-parse --verify "$(REMOTE)/$$RB^{commit}" >/dev/null 2>&1; then \
+	  echo "$(RED)Error: $(REMOTE)/$$RB not found$(RESET)"; exit 1; \
+	fi; \
+	LT=$$(git rev-parse "$$BRANCH^{tree}" 2>/dev/null) || { echo "$(RED)Error: unknown local branch '$$BRANCH'$(RESET)"; exit 1; }; \
+	RT=$$(git rev-parse "$(REMOTE)/$$RB^{tree}" 2>/dev/null); \
+	if [ "$$LT" = "$$RT" ]; then \
+	  echo "$(GREEN)✔ No content differences (trees are identical)$(RESET)"; \
+	  exit 0; \
+	fi; \
+	echo "$(YELLOW)↕ Content differs. Changed files (remote → local):$(RESET)"; \
+	git diff --name-status --find-renames "$(REMOTE)/$$RB" "$$BRANCH"; \
+	if [ "$(SHOW_PATCH)" = "1" ]; then \
+	  echo ""; echo "$(BLUE)--- Unified diff ---$(RESET)"; \
+	  git diff --find-renames "$(REMOTE)/$$RB" "$$BRANCH"; \
+	fi; \
+	[ "$(FAIL_ON_DIFF)" = "1" ] && exit 2 || true
+
+diff-refs: ## 🔍 Compare content between two arbitrary refs (REF1, REF2)
+	@set -Eeuo pipefail; \
+	if [ -z "$(REF1)" ] || [ -z "$(REF2)" ]; then \
+	  echo "$(RED)Error: set REF1 and REF2 (e.g., make diff-refs REF1=main REF2=origin/main)$(RESET)"; exit 1; \
+	fi; \
+	LT=$$(git rev-parse "$(REF1)^{tree}" 2>/dev/null) || { echo "$(RED)Error: unknown ref '$(REF1)'$(RESET)"; exit 1; }; \
+	RT=$$(git rev-parse "$(REF2)^{tree}" 2>/dev/null) || { echo "$(RED)Error: unknown ref '$(REF2)'$(RESET)"; exit 1; }; \
+	if [ "$$LT" = "$$RT" ]; then \
+	  echo "$(GREEN)✔ No content differences (trees are identical)$(RESET)"; \
+	  exit 0; \
+	fi; \
+	echo "$(YELLOW)↕ Content differs between $(REF1) and $(REF2):$(RESET)"; \
+	git diff --name-status --find-renames "$(REF1)" "$(REF2)"; \
+	if [ "$(SHOW_PATCH)" = "1" ]; then \
+	  echo ""; echo "$(BLUE)--- Unified diff ---$(RESET)"; \
+	  git diff --find-renames "$(REF1)" "$(REF2)"; \
+	fi; \
+	[ "$(FAIL_ON_DIFF)" = "1" ] && exit 2 || true
 
 # Reset arbitrary branch by passing BRANCH=<name>
 reset-branch: check-git-repo ## 🔄 Reset BRANCH to origin/BRANCH
