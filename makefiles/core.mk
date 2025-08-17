@@ -144,7 +144,7 @@ endef
 # endef
 
 define task_echo
-	echo "\n$(YELLOW)🚀  $(1)$(RESET)"
+	$(ECHO_CMD) "\n$(YELLOW)🚀  $(1)$(RESET)"
 endef
 
 
