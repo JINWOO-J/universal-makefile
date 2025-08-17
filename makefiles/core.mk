@@ -99,54 +99,35 @@ export $(ENV_VARS_ALL)
 # 색상 출력 함수
 define colorecho
 @if [ -n "$(GREEN)" ]; then \
-    echo "$(GREEN)$(1)$(RESET)"; \
+    $(ECHO_CMD) "$(GREEN)$(1)$(RESET)"; \
 else \
-    echo "--- $(1) ---"; \
+    $(ECHO_CMD) "--- $(1) ---"; \
 fi
 endef
 
-# 경고 메시지 함수
-define warn
-@if [ -n "$(YELLOW)" ]; then \
-    echo "$(YELLOW)⚠️  $(1)$(RESET)"; \
-else \
-    echo "WARNING: $(1)"; \
-fi
-endef
 
 define warn_echo
 if [ -n "$(YELLOW)" ]; then \
-    echo "$(YELLOW)⚠️  $(1)$(RESET)"; \
+    $(ECHO_CMD) "$(YELLOW)⚠️  $(1)$(RESET)"; \
 else \
-    echo "WARNING: $(1)"; \
+    $(ECHO_CMD) "WARNING: $(1)"; \
 fi
 endef
 
-
-# 에러 메시지 함수
-define error
-@if [ -n "$(RED)" ]; then \
-    echo "$(RED)❌ $(1)$(RESET)" >&2; \
-else \
-    echo "ERROR: $(1)" >&2; \
-fi
-endef
 
 define error_echo
 if [ -n "$(RED)" ]; then \
-    echo "$(RED)❌ $(1)$(RESET)" >&2; \
+    $(ECHO_CMD) "$(RED)❌ $(1)$(RESET)" >&2; \
 else \
-    echo "ERROR: $(1)" >&2; \
+    ec$(ECHO_CMD)ho "ERROR: $(1)" >&2; \
 fi
 endef
 
-
-# 성공 메시지 함수
 define success_echo
 if [ -n "$(GREEN)" ]; then \
-    echo "$(GREEN)✅ $(1)$(RESET)"; \
+    $(ECHO_CMD) "$(GREEN)✅ $(1)$(RESET)"; \
 else \
-    echo "SUCCESS: $(1)"; \
+    $(ECHO_CMD) "SUCCESS: $(1)"; \
 fi
 endef
 
@@ -282,6 +263,21 @@ DEBUG_ARGS_CONTENT := $(BUILD_ARGS_CONTENT)
 
 # env-show: env ## 🔧 key=value 형식으로 환경 변수 출력 (VARS 또는 ENV_VARS로 키 선택 가능)
 # 	@$(foreach k,$(or $(strip $(VARS)),$(strip $(ENV_VARS)),$(ENV_VARS_DEFAULT)), printf "%s=%s\n" "$(k)" "$($(k))" ; )
+
+print-test:
+	@$(call print_color, $(BLUE), "print_color test")
+	@$(call colorecho, "🐚 colorecho test")
+	@$(call success_silent, "🐚 success_silent test")
+	@$(call warn_silent, "🐚 warn_silent test")
+	@$(call error_silent, "🐚 error_silent test")
+	@$(call blue_silent, "🐚 blue_silent test")
+	@$(call green_silent, "🐚 green_silent test")
+	@$(call yellow_silent, "🐚 yellow_silent test")
+	@$(call red_silent, "🐚 red_silent test")
+	@$(call success, "🐚 success test")
+	@$(call warn_echo, "🐚 warn test")
+	@$(call error_echo, 🐚 error test)
+	@$(call success_echo, 🐚 success_echo)
 
 
 env-keys: ## 🔧 env-show 기본/전체 키 목록 출력

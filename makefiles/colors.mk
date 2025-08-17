@@ -37,11 +37,11 @@ RESET := \033[0m
 # endef
 
 define print_color
-	echo "$(1)$(2)$(RESET)"
+	$(ECHO_CMD) " $(1)$(2)$(RESET)"
 endef
 
 define print_error
-	echo "$(RED) ❌ $(2)$(RESET)"
+	$(ECHO_CMD) " $(RED) ❌ $(2)$(RESET)"
 endef
 
 
@@ -89,51 +89,51 @@ endef
 # red = @echo "$(RED)$(1)$(RESET)"
 
 define colorecho
-	echo "$(BLUE)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+	$(ECHO_CMD) "$(BLUE)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define success_silent
-	@echo "$(GREEN)✅ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+	@$(ECHO_CMD) "$(GREEN)✅ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define warn_silent
-	@echo "$(YELLOW)⚠️  $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+	@$(ECHO_CMD) "$(YELLOW)⚠️  $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define error_silent
-	@echo "$(RED)❌ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)" >&2
+	@$(ECHO_CMD) "$(RED)❌ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)" >&2
 endef
 
 define blue_silent
-	@echo "$(BLUE)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+	@$(ECHO_CMD) "$(BLUE)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define green_silent
-	@echo "$(GREEN)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+	@$(ECHO_CMD) "$(GREEN)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define yellow_silent
-	@echo "$(YELLOW)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+	@$(ECHO_CMD) "$(YELLOW)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define red_silent
-	@echo "$(RED)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+	@$(ECHO_CMD) "$(RED)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define success
-	echo "$(GREEN)✅ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+	$(ECHO_CMD) "$(GREEN)✅ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define warn
-	echo "$(YELLOW)⚠️  $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+	$(ECHO_CMD) "$(YELLOW)⚠️  $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 define error
-	echo "$(RED)❌ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)" >&2
+	$(ECHO_CMD) "$(RED)❌ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)" >&2
 endef
 
 define blue
-	echo "$(BLUE)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
+	$(ECHO_CMD) "$(BLUE)$(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
 # Shell script 용 color 함수 export
