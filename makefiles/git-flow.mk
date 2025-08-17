@@ -199,7 +199,7 @@ push-all-branches: ## 🌿 Push all local branches to remote ($(REMOTE))
 
 start-release: ## 🌿 Start new release branch from develop
 ifneq ($(CURRENT_BRANCH),$(DEVELOP_BRANCH))
-	@$(call error, "You must be on the '$(DEVELOP_BRANCH)' branch to start a release")
+	@$(call error_echo, "You must be on the '$(DEVELOP_BRANCH)' branch to start a release")
 	@exit 1
 else
 	@$(call colorecho, "Creating new release branch 'release/$(VERSION)' from '$(DEVELOP_BRANCH)'...")
