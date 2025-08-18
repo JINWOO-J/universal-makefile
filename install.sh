@@ -7,7 +7,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 . "${SCRIPT_DIR}/scripts/lib_errtrace.sh"
 errtrace::enable
 # shellcheck disable=SC1091
-. "${SCRIPT_DIR}/scripts/lib_installer.sh"
+# . "${SCRIPT_DIR}/scripts/lib_installer.sh"
+safe_source "${SCRIPT_DIR}/scripts/lib_installer.sh"
 
 DEBUG="${DEBUG:-false}"
 for __arg in "$@"; do
