@@ -14,9 +14,8 @@
 set -euo pipefail
 
 # --- Robust error tracing ---
-set -E                                  # ERR trap이 함수/서브셸에도 전파되도록
-set -o errtrace                         # (동일의미, bash에서 안전)
-# set -o functrace                     # 필요시 DEBUG trap에도 전파 (보통 불필요)
+set -E
+set -o errtrace
 
 if [[ -t 2 ]] && command -v tput >/dev/null 2>&1; then
   RED=$(tput setaf 1 || true); YELLOW=$(tput setaf 3 || true); RESET=$(tput sgr0 || true)
@@ -35,32 +34,16 @@ _stacktrace() {
   done
 }
 
-# _on_error() {
-#   local code=$1
-#   local cmd=${BASH_COMMAND}
-#   local pipestatus_str=""
-#   if [[ -n ${PIPESTATUS[*]-} ]]; then
-#     pipestatus_str=" | PIPESTATUS=(${PIPESTATUS[*]})"
-#   fi
-#   echo -e "${RED}✖ Error: exit ${code}${RESET}" >&2
-#   echo -e "${YELLOW}↳ while executing:${RESET} ${cmd}" >&2
-#   _stacktrace
-# }
-
 _on_error() {
-  # $1: exit code, $2: line, $3: failed cmd
   local exit_code="${1:-1}"
   local line_no="${2:-?}"
   local cmd="${3:-?}"
 
-  # trap 재귀 방지 + 출력 중에는 errexit 끔
   trap - ERR
   set +e
 
-  # 파이프라인 상태 복사(파이프가 아니면 길이 1)
   local -a pipe_status=( "${PIPESTATUS[@]}" )
 
-  # 헤더
   {
     printf '%s✖ exit %s%s\n' "$RED" "$exit_code" "$RESET"          # 종료 코드
     printf '%s↳ cmd:%s %s\n' "$YELLOW" "$RESET" "$cmd"             # 실패 명령
@@ -80,7 +63,6 @@ _on_error() {
     fi
   } >&2
 
-  # 스택 트레이스 (호출자부터 위로)
   {
     local i=1 max="${STACK_MAX:-9999}" count=0
     while (( i < ${#BASH_LINENO[@]} && count < max )); do
@@ -90,11 +72,9 @@ _on_error() {
     done
   } >&2
 
-  # 실패 지점 주변 컨텍스트
   if [[ -n "${SHOW_CONTEXT:-}" ]]; then
     local src="${BASH_SOURCE[1]}"
     if [[ -r "$src" && "$line_no" =~ ^[0-9]+$ ]]; then
-      # 실패 줄 기준 ±2줄
       awk -v n="$line_no" -v w=2 '
         NR>=n-w && NR<=n+w {
           mark = (NR==n ? "=>" : "  ");
@@ -103,27 +83,20 @@ _on_error() {
     fi
   fi
 
-  # 기본은 즉시 종료, 원 코드 유지 원하면 HALT_ON_ERROR=0
-  if [[ "${HALT_ON_ERROR:-1}" != "0" ]]; then
-    exit "$exit_code"
-  fi
-
-  # 계속 진행할 거라면 ERR trap을 복구
+  [[ "${HALT_ON_ERROR:-1}" != "0" ]] && exit "$exit_code"
   trap '_on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 }
 
-# 비정상 종료를 마지막에 한 번 더 알려주고 싶다면(선택)
 _on_exit() {
   local code=$?
-  # 정상 종료면 조용히
   (( code == 0 )) && return
   printf '%s✖ exited with status %s%s\n' "$RED" "$code" "$RESET" >&2
 }
 
-# 트랩 설치
 trap '_on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 trap '_on_exit' EXIT
 
+# 미리 빈 배열 정의(안 써도 무방하지만 nounset 방지)
 declare -a auth_args=()
 declare -a headers=()
 
@@ -139,7 +112,7 @@ UMS_INSTALL_TYPE_FILE=".ums-install-type"
 # Source selection: bootstrap | submodule | subtree | auto (default: bootstrap)
 SOURCE_MODE="${UMS_SOURCE_MODE:-bootstrap}"
 
-# Colors
+# Colors/logging
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
   RED=$(tput setaf 1); GREEN=$(tput setaf 2); YELLOW=$(tput setaf 3); BLUE=$(tput setaf 4); RESET=$(tput sgr0)
 else
@@ -149,39 +122,28 @@ log_info()    { echo -e "${BLUE}ℹ️  $1${RESET}"; }
 log_success() { echo -e "${GREEN}✅ $1${RESET}"; }
 log_warn()    { echo -e "${YELLOW}⚠️  $1${RESET}"; }
 log_debug()   { if [ "${DEBUG:-false}" = "true" ]; then echo -e "${YELLOW}[debug] $1${RESET}"; fi; }
+
 enable_xtrace_if_debug() {
   if [ "${DEBUG:-false}" = "true" ]; then
-    # xtrace를 파일로 분리
     : "${UMS_XTRACE_LOG:=.ums-xtrace.log}"
     exec {__xtrace_fd}>>"${UMS_XTRACE_LOG}"
     export BASH_XTRACEFD=${__xtrace_fd}
-
-    # PS4: 시간/파일/라인/함수명 표시
-    # bash 4.2+ 에서 date 호출이 줄줄 나가도 실사용엔 충분히 빠름
     export PS4='+ $(date "+%H:%M:%S") ${BASH_SOURCE##*/}:${LINENO}:${FUNCNAME[0]:-MAIN}: '
-
     set -x
     log_debug "xtrace enabled → ${UMS_XTRACE_LOG}"
   fi
 }
-
-enable_xtrace_if_debug_once() {
-  case "$-" in *x*) return 0;; esac
-  enable_xtrace_if_debug
-}
-
+enable_xtrace_if_debug_once() { case "$-" in *x*) return 0;; esac; enable_xtrace_if_debug; }
 enable_xtrace_if_debug_once
 
-# Retry defaults (env-overridable)
+# Retry defaults
 CURL_RETRY_MAX=${CURL_RETRY_MAX:-3}
 CURL_RETRY_DELAY_SEC=${CURL_RETRY_DELAY_SEC:-2}
 
 FORCE_UPDATE=${FORCE_UPDATE:-false}
 CLI_VERSION=""
 DEBUG=${DEBUG:-false}
-# Allow running local mode explicitly (default false). Env override: UMS_SETUP_ALLOW_LOCAL=true
 ALLOW_LOCAL="${UMS_SETUP_ALLOW_LOCAL:-false}"
-# prompt 시도 여부의 set -u 안전성 확보
 USER_VERSION_CHOICE_MADE=false
 
 has_cmd() { command -v "$1" >/dev/null 2>&1; }
@@ -202,9 +164,7 @@ _umc_try_source_scaffold || true
 
 # --- Fallbacks for release lib ---
 if ! declare -F umr_is_true >/dev/null 2>&1; then
-  umr_is_true() {
-    case "${1:-}" in true|1|yes|on|Y|y) return 0 ;; *) return 1 ;; esac
-  }
+  umr_is_true() { case "${1:-}" in true|1|yes|on|Y|y) return 0 ;; *) return 1 ;; esac; }
 fi
 if ! declare -F umr_prompt_confirm >/dev/null 2>&1; then
   umr_prompt_confirm() {
@@ -231,18 +191,29 @@ if ! declare -F umr_verify_sha256 >/dev/null 2>&1; then
   }
 fi
 if ! declare -F umr_fetch_latest_release_tag >/dev/null 2>&1; then
-  umr_fetch_latest_release_tag() {
+    umr_fetch_latest_release_tag() {
     local owner="$1" repo="$2"
     local api_url="https://api.github.com/repos/${owner}/${repo}/releases/latest"
-    local tag; local auth=()
+    local tag
+    local -a auth=()   # ← 반드시 배열로
     [[ -n "${GITHUB_TOKEN:-}" ]] && auth=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
-    tag=$(curl -fsSL "${auth[@]}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^\"]*\)".*/\1/p' | head -n1 || true)
+
+    tag=$(
+        curl -fsSL \
+        "${auth[@]+"${auth[@]}"}" \
+        "$api_url" \
+        | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+        | head -n1 || true
+    )
+
     if [ -n "$tag" ]; then echo "$tag"; return 0; fi
+
     if command -v git >/dev/null 2>&1; then
-      git ls-remote --tags --refs "https://github.com/${owner}/${repo}.git" 2>/dev/null \
+        git ls-remote --tags --refs "https://github.com/${owner}/${repo}.git" 2>/dev/null \
         | awk '{print $2}' | sed 's@refs/tags/@@' | sort -Vr | head -n1
     fi
-  }
+    }
+
 fi
 if ! declare -F umr_build_tarball_urls >/dev/null 2>&1; then
   umr_build_tarball_urls() {
@@ -268,21 +239,26 @@ if ! declare -F umr_build_tarball_urls >/dev/null 2>&1; then
   }
 fi
 if ! declare -F umr_download_with_retries >/dev/null 2>&1; then
-  umr_download_with_retries() {
+    umr_download_with_retries() {
     local url="$1" out="$2"; shift 2
-    local -a headers=("$@"); local -a curl_headers=()
-    for h in "${headers[@]}"; do curl_headers+=( -H "$h" ); done
+    local -a cmd=( curl -fSL --connect-timeout 10 --max-time 300 )
+    while (($#)); do
+        cmd+=( -H "$1" )
+        shift
+    done
+    cmd+=( -o "$out" )
     for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
-      local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
-      if curl -fSL --connect-timeout 10 --max-time 300 "${curl_headers[@]}" -o "$out" "$url"; then
-        [ "$_had_xtrace" -eq 1 ] && set -x
-        [[ -s "$out" ]] && return 0
-      fi
-      [ "$_had_xtrace" -eq 1 ] && set -x
-      sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
+        local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
+        if "${cmd[@]}" "$url"; then
+        [[ -s "$out" ]] && { [[ $_had_xtrace -eq 1 ]] && set -x; return 0; }
+        fi
+
+        [[ $_had_xtrace -eq 1 ]] && set -x
+        sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
     done
     return 1
-  }
+    }
+
 fi
 if ! declare -F umr_download_tarball >/dev/null 2>&1; then
   umr_download_tarball() {
@@ -294,15 +270,19 @@ if ! declare -F umr_download_tarball >/dev/null 2>&1; then
         log_warn "GitHub token may not have access to ${owner}/${repo} (HTTP ${repo_code}). Falling back if possible."
       fi
     fi
-    local -a urls; readarray -t urls < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
+    local -a urls
+    readarray -t urls < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
     local primary="${urls[0]}"; local mirror="${urls[1]:-}"
     local -a headers=()
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
       headers+=("Authorization: Bearer ${GITHUB_TOKEN}" "X-GitHub-Api-Version: 2022-11-28" "Accept: application/vnd.github+json")
     fi
-    umr_download_with_retries "$primary" "$out_tar" "${headers[@]}" || {
-      [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" "${headers[@]}"
+    umr_download_with_retries "$primary" "$out_tar" \
+    "${headers[@]+"${headers[@]}"}" || {
+    [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" \
+        "${headers[@]+"${headers[@]}"}"
     }
+
   }
 fi
 if ! declare -F umr_tar_first_dir >/dev/null 2>&1; then
@@ -342,7 +322,7 @@ parse_cli_args() {
         if [ -z "${CLI_VERSION}" ]; then echo "--version requires a value" >&2; exit 2; fi
         shift ;;
       --) shift; break ;;
-      v[0-9]*|main|master|develop) CLI_VERSION="$1"; shift ;;  # positional version
+      v[0-9]*|main|master|develop) CLI_VERSION="$1"; shift ;;
       *) break ;;
     esac
   done
@@ -357,19 +337,16 @@ makefile_includes_universal() {
 
 # --- Detect current source mode (bootstrap | submodule | subtree | none) ---
 detect_current_source_mode() {
-  # submodule: .gitmodules에 path가 있고 메타가 존재하거나 .git 파일(링크)이 존재
   if [ -f ".gitmodules" ] && grep -q "path = ${MAKEFILE_SYSTEM_DIR}" .gitmodules; then
     if [ -d ".git/modules/${MAKEFILE_SYSTEM_DIR}" ] || [ -f "${MAKEFILE_SYSTEM_DIR}/.git" ]; then
       echo "submodule"; return 0
     fi
   fi
-  # subtree: 커밋 메시지에 git-subtree-dir 흔적
   if has_cmd git && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     if git log --grep="git-subtree-dir: ${MAKEFILE_SYSTEM_DIR}" --oneline -n 1 >/dev/null 2>&1; then
       echo "subtree"; return 0
     fi
   fi
-  # bootstrap: 디렉터리 + 릴리스 흔적 파일
   if [ -d "${MAKEFILE_SYSTEM_DIR}" ]; then
     if [ -f ".ums-release-version" ] || [ -f "${MAKEFILE_SYSTEM_DIR}/VERSION" ] || [ -f "${MAKEFILE_SYSTEM_DIR}/Makefile.universal" ]; then
       echo "bootstrap"; return 0
@@ -378,7 +355,6 @@ detect_current_source_mode() {
   echo "none"
 }
 
-# --- Cleanups for switching modes ---
 cleanup_submodule() {
   if ! has_cmd git; then return 0; fi
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then return 0; fi
@@ -390,7 +366,6 @@ cleanup_submodule() {
     if [ ! -s .gitmodules ]; then rm -f .gitmodules; fi
   fi
 }
-
 cleanup_subtree() {
   if [ -d "${MAKEFILE_SYSTEM_DIR}" ]; then
     if has_cmd git && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -400,14 +375,12 @@ cleanup_subtree() {
     fi
   fi
 }
-
 cleanup_bootstrap() {
   if has_cmd git && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git rm -r -f --cached "${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
   fi
   rm -rf "${MAKEFILE_SYSTEM_DIR}"
 }
-
 force_switch_mode_if_needed() {
   local target="$1"
   local current; current="$(detect_current_source_mode)"
@@ -423,8 +396,6 @@ force_switch_mode_if_needed() {
   esac
 }
 
-
-
 # --- Entry ---
 parse_cli_args "$@"
 if [ "${DEBUG}" = "true" ]; then
@@ -434,17 +405,16 @@ if [ "${DEBUG}" = "true" ]; then
   log_info "[debug] source: SOURCE_MODE=${SOURCE_MODE}"
 fi
 
-# Hard guard: prevent running inside UMF system directory itself
+# Hard guard
 if [[ -f "makefiles/core.mk" ]] && [[ "$(basename "${PWD}")" = "${GITHUB_REPO}" ]]; then
   log_warn "Detected UMF system directory (${GITHUB_REPO}). Use install.sh for maintenance."
   exit 1
 fi
 
-# --force 시 목표 모드로 수렴하도록 선제 정리
+# --force 모드시 목표 모드로 수렴
 if umr_is_true "${FORCE_UPDATE}"; then
   force_switch_mode_if_needed "${SOURCE_MODE}"
 fi
-
 
 case "${SOURCE_MODE}" in
   bootstrap)
@@ -454,7 +424,6 @@ case "${SOURCE_MODE}" in
     log_info "Bootstrap release mode detected (forced)"
     ;;
   submodule)
-    # --- prerequisites & move to repo root ---
     if ! has_cmd git; then log_warn "git not found on PATH"; exit 1; fi
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       log_warn "Not in a git repository. Initializing git..."; git init; log_success "Git repository initialized."
@@ -464,7 +433,6 @@ case "${SOURCE_MODE}" in
       log_info "Switching to repo root: ${REPO_ROOT}"; OLDPWD_SUBMODULE="$PWD"; cd "${REPO_ROOT}"
     fi
 
-    # --- robust sparse handling (temporarily disable if needed) ---
     SPARSE_ACTIVE=false; SPARSE_BACKUP=""
     if git sparse-checkout list >/dev/null 2>&1; then
       if git config --bool core.sparseCheckout 2>/dev/null | grep -qi true; then SPARSE_ACTIVE=true; fi
@@ -475,28 +443,23 @@ case "${SOURCE_MODE}" in
       fi
     fi
 
-    # --- ensure .gitmodules exists & is not skipped ---
     : > .gitmodules
     git update-index --no-assume-unchanged .gitmodules 2>/dev/null || true
     git update-index --no-skip-worktree    .gitmodules 2>/dev/null || true
 
-    # --- HARD RESET of path (index + working tree) ---
     git ls-files -z -- "${MAKEFILE_SYSTEM_DIR}" "${MAKEFILE_SYSTEM_DIR}/*" 2>/dev/null \
       | git update-index -z --force-remove --stdin 2>/dev/null || true
     git rm -r -f --cached --ignore-unmatch -- "${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
     rm -rf -- "${MAKEFILE_SYSTEM_DIR}"
 
-    # --- ALSO nuke any stale submodule metadata/config ---
     rm -rf ".git/modules/${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
     git config -f .gitmodules --remove-section "submodule.${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
     git config --remove-section "submodule.${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
 
-    # --- add submodule ---
     log_warn "Submodule not found. Adding submodule..."
     git submodule add "https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git" "${MAKEFILE_SYSTEM_DIR}"
     log_success "Submodule added successfully."
 
-    # --- init submodule ---
     if [ ! -f "${MAKEFILE_SYSTEM_DIR}/Makefile.universal" ]; then
       log_warn "Submodule is not initialized. Running 'git submodule update'..."
       git submodule update --init --recursive
@@ -505,7 +468,6 @@ case "${SOURCE_MODE}" in
       log_success "Submodule is already initialized."
     fi
 
-    # --- restore sparse-checkout if it was active ---
     if [ "${SPARSE_ACTIVE}" = "true" ]; then
       if [ -s "${SPARSE_BACKUP}" ]; then
         log_info "Restoring previous sparse-checkout patterns..."
@@ -523,7 +485,6 @@ case "${SOURCE_MODE}" in
   subtree)
     if ! has_cmd git; then log_warn "git not found"; exit 1; fi
 
-    # git repo 체크 및 루트로 이동
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       log_warn "Not in a git repository. Initializing git..."
       git init
@@ -536,7 +497,6 @@ case "${SOURCE_MODE}" in
       cd "${REPO_ROOT}"
     fi
 
-    # git subtree 명령 가용성 확인
     if git help -a | grep -q '\bsubtree\b'; then
       if ! git log --grep="git-subtree-dir: ${MAKEFILE_SYSTEM_DIR}" --oneline 2>/dev/null | grep -q .; then
         log_warn "Subtree not detected. Adding subtree with 'git subtree'..."
@@ -553,7 +513,6 @@ case "${SOURCE_MODE}" in
     else
       log_warn "'git subtree' is not available; using vendor-snapshot fallback (no history)."
 
-      # 사용할 ref 결정: CLI > .ums-version > MAIN_BRANCH
       DESIRED_VERSION=""
       if [ -n "${CLI_VERSION:-}" ]; then
         DESIRED_VERSION="${CLI_VERSION}"
@@ -564,13 +523,11 @@ case "${SOURCE_MODE}" in
       fi
       log_info "Vendor snapshot ref: ${DESIRED_VERSION}"
 
-      # 경로를 인덱스/워킹트리에서 반드시 비움 (충돌 방지)
       git ls-files -z -- "${MAKEFILE_SYSTEM_DIR}" "${MAKEFILE_SYSTEM_DIR}/*" 2>/dev/null \
         | git update-index -z --force-remove --stdin 2>/dev/null || true
       git rm -r -f --cached --ignore-unmatch -- "${MAKEFILE_SYSTEM_DIR}" 2>/dev/null || true
       rm -rf -- "${MAKEFILE_SYSTEM_DIR}"
 
-      # tarball 다운로드 → 추출 → 디렉터리로 이동
       TMPDIR_UMR="$(mktemp -d)"; TARBALL_PATH="${TMPDIR_UMR}/repo.tar.gz"
       EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"
       if ! umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}"; then
@@ -583,8 +540,7 @@ case "${SOURCE_MODE}" in
       if [ -z "${ROOT_DIR_NAME}" ]; then
         log_warn "Extracted directory not found."; rm -rf "${TMPDIR_UMR}"; exit 1
       fi
-      # 벤더 스냅샷 복사(최상위 디렉터리째 두는 방식)
-          mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
+      mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${MAKEFILE_SYSTEM_DIR}"
       rm -rf "${TMPDIR_UMR}"
       echo "${DESIRED_VERSION}" > .ums-version || true
       git add -A "${MAKEFILE_SYSTEM_DIR}" .ums-version
@@ -624,155 +580,155 @@ case "${SOURCE_MODE}" in
     ;;
 esac
 
-  # -------------------------
-  # Bootstrap (default path)
-  # -------------------------
-  log_info "Bootstrap mode detected (${SOURCE_MODE} => bootstrap)"
-  echo "bootstrap release" > ${UMS_INSTALL_TYPE_FILE}
-  DESIRED_VERSION=""
-  if [ -f ".ums-version" ]; then
-    DESIRED_VERSION="$(cat .ums-version)"; log_info "Found .ums-version: ${DESIRED_VERSION}"
+# -------------------------
+# Bootstrap (default path)
+# -------------------------
+log_info "Bootstrap mode detected (${SOURCE_MODE} => bootstrap)"
+echo "bootstrap release" > ${UMS_INSTALL_TYPE_FILE}
+
+DESIRED_VERSION=""
+if [ -f ".ums-version" ]; then
+  DESIRED_VERSION="$(cat .ums-version)"; log_info "Found .ums-version: ${DESIRED_VERSION}"
+else
+  DESIRED_VERSION="$(umr_fetch_latest_release_tag "${GITHUB_OWNER}" "${GITHUB_REPO}" || true)"
+  if [ -z "${DESIRED_VERSION}" ]; then
+    log_warn "Could not resolve latest release via API. Falling back to main branch archive."
+    DESIRED_VERSION="${MAIN_BRANCH}"
   else
-    DESIRED_VERSION="$(umr_fetch_latest_release_tag "${GITHUB_OWNER}" "${GITHUB_REPO}" || true)"
-    if [ -z "${DESIRED_VERSION}" ]; then
-      log_warn "Could not resolve latest release via API. Falling back to main branch archive."
-      DESIRED_VERSION="${MAIN_BRANCH}"
-    else
-      log_info "Resolved latest release tag: ${DESIRED_VERSION}"
-    fi
+    log_info "Resolved latest release tag: ${DESIRED_VERSION}"
   fi
-  if [ -n "${CLI_VERSION}" ]; then DESIRED_VERSION="${CLI_VERSION}"; log_info "CLI version specified: ${DESIRED_VERSION}"; fi
+fi
+[ -n "${CLI_VERSION}" ] && { DESIRED_VERSION="${CLI_VERSION}"; log_info "CLI version specified: ${DESIRED_VERSION}"; }
 
-  LATEST_TAG="$(umr_fetch_latest_release_tag "${GITHUB_OWNER}" "${GITHUB_REPO}" || true)"
-  if [ -n "${LATEST_TAG}" ]; then
-    log_info "Latest available release: ${LATEST_TAG}"
-    if [ -f .ums-version ] && [ "${DESIRED_VERSION}" != "${LATEST_TAG}" ]; then
-      log_warn "Pinned version differs from latest (pinned: ${DESIRED_VERSION}, latest: ${LATEST_TAG})"
-    fi
+LATEST_TAG="$(umr_fetch_latest_release_tag "${GITHUB_OWNER}" "${GITHUB_REPO}" || true)"
+if [ -n "${LATEST_TAG}" ]; then
+  log_info "Latest available release: ${LATEST_TAG}"
+  if [ -f .ums-version ] && [ "${DESIRED_VERSION}" != "${LATEST_TAG}" ]; then
+    log_warn "Pinned version differs from latest (pinned: ${DESIRED_VERSION}, latest: ${LATEST_TAG})"
   fi
+fi
 
-  UPDATE_PIN=false
+UPDATE_PIN=false
 
-  if umr_is_true "${FORCE_UPDATE}" && [ -z "${CLI_VERSION}" ] && [ -n "${LATEST_TAG}" ]; then
-    if [ "${DESIRED_VERSION}" != "${LATEST_TAG}" ]; then
-      log_info "--force specified: overriding desired (${DESIRED_VERSION}) -> ${LATEST_TAG}"
-      DESIRED_VERSION="${LATEST_TAG}"
-      UPDATE_PIN=true
-    else
-      log_info "--force specified: reinstalling latest ${LATEST_TAG}"
-    fi
+if umr_is_true "${FORCE_UPDATE}" && [ -z "${CLI_VERSION}" ] && [ -n "${LATEST_TAG}" ]; then
+  if [ "${DESIRED_VERSION}" != "${LATEST_TAG}" ]; then
+    log_info "--force specified: overriding desired (${DESIRED_VERSION}) -> ${LATEST_TAG}"
+    DESIRED_VERSION="${LATEST_TAG}"
+    UPDATE_PIN=true
+  else
+    log_info "--force specified: reinstalling latest ${LATEST_TAG}"
   fi
+fi
 
-  # 정책 적용: FORCE가 아닐 때만 프롬프트/정책 수행
-  if ! umr_is_true "${FORCE_UPDATE}" && [ -z "${CLI_VERSION}" ] && [ -n "${LATEST_TAG}" ] && [ "${DESIRED_VERSION}" != "${LATEST_TAG}" ]; then
-    case "${UMS_BOOTSTRAP_POLICY}" in
-      latest)
-        log_info "Policy=latest: overriding pin (${DESIRED_VERSION}) -> ${LATEST_TAG}"
-        DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true ;;
-      prompt)
-        if [ -t 0 ]; then
-          echo ""; echo "A newer release is available."
-          echo "  pinned : ${DESIRED_VERSION}"
-          echo "  latest : ${LATEST_TAG}"
-          read -r -p "Choose [P]inned / [L]atest / [C]ustom / [S]kip (default P): " ans
-          USER_VERSION_CHOICE_MADE=true
-          case "${ans}" in
-            [lL]*) DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true ;;
-            [cC]*) read -r -p "Enter tag/branch: " custom; if [ -n "$custom" ]; then DESIRED_VERSION="$custom"; UPDATE_PIN=true; fi ;;
-            [sS]*) log_info "Skipped by user choice."; exit 1 ;;
-            *)     : ;; # keep pinned
-          esac
-        else
-          log_info "Non-interactive: sticking to pinned ${DESIRED_VERSION} (set UMS_BOOTSTRAP_POLICY=latest to override)."
-        fi ;;
-      pin|*) log_info "Pinned ${DESIRED_VERSION}; newer exists (${LATEST_TAG}). Use -f or UMS_BOOTSTRAP_POLICY=latest to override." ;;
-    esac
-  fi
-
-  if [ -e "${GITHUB_REPO}" ]; then
-    current_bootstrap=""
-    if [ -f ".ums-release-version" ]; then current_bootstrap="$(cat ".ums-release-version")"
-    elif [ -f "${GITHUB_REPO}/VERSION" ]; then current_bootstrap="$(tr -d '\n\r' < "${GITHUB_REPO}/VERSION")"; fi
-    log_warn "Target directory '${GITHUB_REPO}' already exists."
-    [ -n "${current_bootstrap}" ] && log_info "Current installed release: ${current_bootstrap}"
-    log_info "Desired release: ${DESIRED_VERSION}"
-
-    # 이미 원하는 버전과 동일 & 강제 아님 → 최신이 있고 policy=prompt 이면 제안
-    if [ -n "${current_bootstrap}" ] && [ "${current_bootstrap}" = "${DESIRED_VERSION}" ] && ! umr_is_true "${FORCE_UPDATE}"; then
-      if [ -n "${LATEST_TAG}" ] && [ "${LATEST_TAG}" != "${DESIRED_VERSION}" ] && [ "${UMS_BOOTSTRAP_POLICY}" = "prompt" ] && [ -t 0 ]  && [ "${USER_VERSION_CHOICE_MADE}" != "true" ]; then
-        if umr_prompt_confirm "A newer release is available (${DESIRED_VERSION} → ${LATEST_TAG}). Update now?"; then
-          DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true
-        else
-          log_success "Pinned version is installed (installed: ${current_bootstrap}). Newer release available: ${LATEST_TAG}"
-          exit 0
-        fi
+if ! umr_is_true "${FORCE_UPDATE}" && [ -z "${CLI_VERSION}" ] && [ -n "${LATEST_TAG}" ] && [ "${DESIRED_VERSION}" != "${LATEST_TAG}" ]; then
+  case "${UMS_BOOTSTRAP_POLICY}" in
+    latest)
+      log_info "Policy=latest: overriding pin (${DESIRED_VERSION}) -> ${LATEST_TAG}"
+      DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true ;;
+    prompt)
+      if [ -t 0 ]; then
+        echo ""; echo "A newer release is available."
+        echo "  pinned : ${DESIRED_VERSION}"
+        echo "  latest : ${LATEST_TAG}"
+        read -r -p "Choose [P]inned / [L]atest / [C]ustom / [S]kip (default P): " ans
+        USER_VERSION_CHOICE_MADE=true
+        case "${ans}" in
+          [lL]*) DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true ;;
+          [cC]*) read -r -p "Enter tag/branch: " custom; if [ -n "$custom" ]; then DESIRED_VERSION="$custom"; UPDATE_PIN=true; fi ;;
+          [sS]*) log_info "Skipped by user choice."; exit 1 ;;
+          *)     : ;;
+        esac
       else
+        log_info "Non-interactive: sticking to pinned ${DESIRED_VERSION} (set UMS_BOOTSTRAP_POLICY=latest to override)."
+      fi ;;
+    pin|*) log_info "Pinned ${DESIRED_VERSION}; newer exists (${LATEST_TAG}). Use -f or UMS_BOOTSTRAP_POLICY=latest to override." ;;
+  esac
+fi
+
+if [ -e "${GITHUB_REPO}" ]; then
+  current_bootstrap=""
+  if [ -f ".ums-release-version" ]; then current_bootstrap="$(cat ".ums-release-version")"
+  elif [ -f "${GITHUB_REPO}/VERSION" ]; then current_bootstrap="$(tr -d '\n\r' < "${GITHUB_REPO}/VERSION")"; fi
+  log_warn "Target directory '${GITHUB_REPO}' already exists."
+  [ -n "${current_bootstrap}" ] && log_info "Current installed release: ${current_bootstrap}"
+  log_info "Desired release: ${DESIRED_VERSION}"
+
+  if [ -n "${current_bootstrap}" ] && [ "${current_bootstrap}" = "${DESIRED_VERSION}" ] && ! umr_is_true "${FORCE_UPDATE}"; then
+    if [ -n "${LATEST_TAG}" ] && [ "${LATEST_TAG}" != "${DESIRED_VERSION}" ] && [ "${UMS_BOOTSTRAP_POLICY}" = "prompt" ] && [ -t 0 ]  && [ "${USER_VERSION_CHOICE_MADE}" != "true" ]; then
+      if umr_prompt_confirm "A newer release is available (${DESIRED_VERSION} → ${LATEST_TAG}). Update now?"; then
+        DESIRED_VERSION="${LATEST_TAG}"; UPDATE_PIN=true
+      else
+        log_success "Pinned version is installed (installed: ${current_bootstrap}). Newer release available: ${LATEST_TAG}"
+        exit 0
+      fi
+    else
       log_success "Already up to date (installed: ${current_bootstrap})."; exit 0
-      fi
-    fi
-
-    # 업데이트 실행 여부
-    DO_UPDATE=false
-    if umr_is_true "${FORCE_UPDATE}"; then
-      DO_UPDATE=true; log_info "--force specified: updating in place..."
-    else
-      if umr_prompt_confirm "New release available (${current_bootstrap:-none} → ${DESIRED_VERSION}). Update now?"; then
-        DO_UPDATE=true
-      else
-        log_info "Skipped update by user choice."; exit 1
-      fi
-    fi
-
-    if umr_is_true "${DO_UPDATE}"; then
-      TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
-      TARBALL_PATH="${TMPDIR_UMR}/repo.tar.gz"
-      umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}" || { log_warn "Download failed"; exit 1; }
-      EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"
-      umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed"; exit 1; }
-      ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"; [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
-      rm -rf "${GITHUB_REPO}" && mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"
-      echo "${DESIRED_VERSION}" > .ums-release-version || true
-      if [ "${UPDATE_PIN}" = "true" ]; then echo "${DESIRED_VERSION}" > .ums-version || true; else [ -f ".ums-version" ] || echo "${DESIRED_VERSION}" > .ums-version || true; fi
-      log_debug "bootstrap updated: wrote $(pwd)/.ums-release-version and ensured $(pwd)/.ums-version"
-      log_success "Project updated to '${DESIRED_VERSION}'."
-      exit 0
     fi
   fi
 
-  # Fresh bootstrap
-  TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
-  TARBALL_PATH="${TMPDIR_UMR}/repo.tar.gz"
-  umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}" || { log_warn "Failed to download repository release tarball for ${DESIRED_VERSION}."; exit 1; }
-  EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"
-  umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed."; exit 1; }
-  ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"; [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
-  mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"
-  echo "${DESIRED_VERSION}" > .ums-release-version || true
-  if [ "${UPDATE_PIN}" = "true" ]; then echo "${DESIRED_VERSION}" > .ums-version || true; else [ -f ".ums-version" ] || echo "${DESIRED_VERSION}" > .ums-version || true; fi
-  log_debug "bootstrap created: $(pwd)/.ums-release-version and $(pwd)/.ums-version"
-  log_success "Project downloaded to '${GITHUB_REPO}' from release ${DESIRED_VERSION}."
-
-  (
-    log_info "Running installer..."
-    if [ -f "${GITHUB_REPO}/install.sh" ]; then
-      log_info "Using install.sh (release-aware)"
-      # Forward debug flag to installer so DEBUG_MODE propagates to lib_installer/lib_scaffold
-      if [ "${DEBUG}" = "true" ]; then
-        MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.sh" init --debug || { log_warn "install.sh init failed."; exit 0; }
-      else
-        MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.sh" init || { log_warn "install.sh init failed."; exit 0; }
-      fi
-    elif [ -f "${GITHUB_REPO}/install.legacy.sh" ]; then
-      log_info "Using legacy install.sh"
-      if [ "${DEBUG}" = "true" ]; then
-        MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.legacy.sh" install --debug || { log_warn "install.legacy.sh install failed."; exit 0; }
-      else
-        MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.legacy.sh" install || { log_warn "install.legacy.sh install failed."; exit 0; }
-      fi
+  DO_UPDATE=false
+  if umr_is_true "${FORCE_UPDATE}"; then
+    DO_UPDATE=true; log_info "--force specified: updating in place..."
+  else
+    if umr_prompt_confirm "New release available (${current_bootstrap:-none} → ${DESIRED_VERSION}). Update now?"; then
+      DO_UPDATE=true
     else
-      log_warn "No installer found. Running scaffold fallback."
-      umc_scaffold_project_files "${MAKEFILE_SYSTEM_DIR}"
+      log_info "Skipped update by user choice."; exit 1
     fi
-  )
+  fi
 
-  echo ""; log_info "Next steps:"; echo "1. cd ${GITHUB_REPO}"; echo "2. make help"
+  if umr_is_true "${DO_UPDATE}"; then
+    TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
+    TARBALL_PATH="${TMPDIR_UMR}/repo.tar.gz"
+    umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}" || { log_warn "Download failed"; exit 1; }
+    EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"
+    umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed"; exit 1; }
+    ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"; [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
+    rm -rf "${GITHUB_REPO}" && mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"
+    echo "${DESIRED_VERSION}" > .ums-release-version || true
+    if [ "${UPDATE_PIN}" = "true" ]; then echo "${DESIRED_VERSION}" > .ums-version || true; else [ -f ".ums-version" ] || echo "${DESIRED_VERSION}" > .ums-version || true; fi
+    log_debug "bootstrap updated: wrote $(pwd)/.ums-release-version and ensured $(pwd)/.ums-version"
+    log_success "Project updated to '${DESIRED_VERSION}'."
+    exit 0
+  fi
+fi
+
+# Fresh bootstrap
+TMPDIR_UMR="$(mktemp -d)"; trap 'rm -rf "${TMPDIR_UMR}" >/dev/null 2>&1 || true' EXIT INT TERM
+TARBALL_PATH="${TMPDIR_UMR}/repo.tar.gz"
+umr_download_tarball "${GITHUB_OWNER}" "${GITHUB_REPO}" "${DESIRED_VERSION}" "${TARBALL_PATH}" || { log_warn "Failed to download repository release tarball for ${DESIRED_VERSION}."; exit 1; }
+EXTRACT_DIR="${TMPDIR_UMR}/extract"; mkdir -p "${EXTRACT_DIR}"
+umr_extract_tarball "${TARBALL_PATH}" "${EXTRACT_DIR}" || { log_warn "Extraction failed."; exit 1; }
+ROOT_DIR_NAME="$(umr_tar_first_dir "${TARBALL_PATH}" || true)"; [ -z "${ROOT_DIR_NAME}" ] && log_warn "Extracted directory not found." && exit 1
+mv "${EXTRACT_DIR}/${ROOT_DIR_NAME}" "${GITHUB_REPO}"
+echo "${DESIRED_VERSION}" > .ums-release-version || true
+if [ "${UPDATE_PIN}" = "true" ]; then echo "${DESIRED_VERSION}" > .ums-version || true; else [ -f ".ums-version" ] || echo "${DESIRED_VERSION}" > .ums-version || true; fi
+log_debug "bootstrap created: $(pwd)/.ums-release-version and $(pwd)/.ums-version"
+log_success "Project downloaded to '${GITHUB_REPO}' from release ${DESIRED_VERSION}."
+
+(
+  log_info "Running installer..."
+  if [ -f "${GITHUB_REPO}/install.sh" ]; then
+    log_info "Using install.sh (release-aware)"
+    if [ "${DEBUG}" = "true" ]; then
+      MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.sh" init --debug || { log_warn "install.sh init failed."; exit 0; }
+    else
+      MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.sh" init || { log_warn "install.sh init failed."; exit 0; }
+    fi
+  elif [ -f "${GITHUB_REPO}/install.legacy.sh" ]; then
+    log_info "Using legacy install.sh"
+    if [ "${DEBUG}" = "true" ]; then
+      MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.legacy.sh" install --debug || { log_warn "install.legacy.sh install failed."; exit 0; }
+    else
+      MAKEFILE_DIR="${GITHUB_REPO}" bash "${GITHUB_REPO}/install.legacy.sh" install || { log_warn "install.legacy.sh install failed."; exit 0; }
+    fi
+  else
+    log_warn "No installer found. Running scaffold fallback."
+    umc_scaffold_project_files "${MAKEFILE_SYSTEM_DIR}"
+  fi
+)
+
+echo ""
+log_info "Next steps:"
+echo "1. cd ${GITHUB_REPO}"
+echo "2. make help"
