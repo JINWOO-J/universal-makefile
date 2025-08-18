@@ -122,25 +122,30 @@ umr_build_tarball_urls() {
   echo "$mirror"
 }
 
-# ----- Download a URL with retries (Bash 4.2 + set -u safe) -----
+# ----- Download a URL with retries -----
 umr_download_with_retries() {
   # usage: umr_download_with_retries URL OUT_FILE [HEADER1] [HEADER2] ...
   local url="$1" out="$2"; shift 2
 
-  # set -u 안전: 선언 + 기본값 확장
+  # 헤더를 먼저 배열로 수집
   local -a curl_headers=()
   local h
   for h in "$@"; do
-    curl_headers+=( -H "$h" )
+    # 빈 문자열이 섞이지 않게 필터
+    [[ -n "$h" ]] && curl_headers+=( -H "$h" )
   done
 
   local attempt=1
   while [[ $attempt -le ${CURL_RETRY_MAX} ]]; do
     if command -v curl >/dev/null 2>&1; then
+      # ←← 여기: 한 줄 커맨드 대신 배열을 조립해서 실행
+      local -a cmd=( curl -fSL --connect-timeout 10 --max-time 300 )
+      ((${#curl_headers[@]:-0})) && cmd+=( "${curl_headers[@]}" )
+      cmd+=( -o "$out" "$url" )
+
+      # xtrace 감춤/복원
       local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
-      if curl -fSL --connect-timeout 10 --max-time 300 \
-           "${curl_headers[@]:-}" \   # <-- 여기!
-           -o "$out" "$url"; then
+      if "${cmd[@]}"; then
         ((_had_xtrace)) && set -x
         [[ -s "$out" ]] && return 0
       fi
@@ -148,8 +153,11 @@ umr_download_with_retries() {
 
     elif command -v wget >/dev/null 2>&1; then
       local -a wget_hdr=()
-      for h in "$@"; do wget_hdr+=( --header "$h" ); done
-      if wget -q "${wget_hdr[@]:-}" -O "$out" "$url"; then   # <-- 여기도 기본값 확장
+      for h in "$@"; do [[ -n "$h" ]] && wget_hdr+=( --header "$h" ); done
+      local -a wcmd=( wget -q -O "$out" )
+      ((${#wget_hdr[@]:-0})) && wcmd+=( "${wget_hdr[@]}" )
+      wcmd+=( "$url" )
+      if "${wcmd[@]}"; then
         [[ -s "$out" ]] && return 0
       fi
 
@@ -162,6 +170,7 @@ umr_download_with_retries() {
   done
   return 1
 }
+
 
 # ----- High-level tarball download (Bash 4.2 + set -u safe) -----
 umr_download_tarball() {
