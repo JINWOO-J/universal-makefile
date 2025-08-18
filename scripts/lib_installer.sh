@@ -166,20 +166,22 @@ type umr_build_tarball_urls >/dev/null 2>&1 || umr_build_tarball_urls() {
   esac
 }
 
-# ----- Download a URL with retries -----
+# ----- Download a URL with retries (Bash 4.2 + set -u safe) -----
 type umr_download_with_retries >/dev/null 2>&1 || umr_download_with_retries() {
   # usage: umr_download_with_retries URL OUT_FILE [HEADER1] [HEADER2] ...
   local url="$1" out="$2"; shift 2
 
+  # set -u 안전: 항상 배열 선언 후 "$@"로 채움
   local -a curl_headers=()
   local h
   for h in "$@"; do
     curl_headers+=( -H "$h" )
   done
 
-  local attempt=1
-  while [[ $attempt -le ${CURL_RETRY_MAX} ]]; do
-    if command -v curl >/dev/null 2>&1; then
+  if command -v curl >/dev/null 2>&1; then
+    local attempt
+    for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
+      # xtrace에 헤더가 노출되지 않도록 잠시 비활성
       local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
       if curl -fSL --connect-timeout 10 --max-time 300 \
            "${curl_headers[@]}" \
@@ -188,36 +190,42 @@ type umr_download_with_retries >/dev/null 2>&1 || umr_download_with_retries() {
         [[ -s "$out" ]] && return 0
       fi
       ((_had_xtrace)) && set -x
+      sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
+    done
+    return 1
 
-    elif command -v wget >/dev/null 2>&1; then
+  elif command -v wget >/dev/null 2>&1; then
+    local attempt
+    for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
       local -a wget_hdr=()
       for h in "$@"; do wget_hdr+=( --header "$h" ); done
-      if wget -q "${wget_hdr[@]}" -O "$out" "$url"; then
+      if wget -q -O "$out" "${wget_hdr[@]}" "$url"; then
         [[ -s "$out" ]] && return 0
       fi
+      sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
+    done
+    return 1
 
-    else
-      return 127
-    fi
-    sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep "${CURL_RETRY_DELAY_SEC}"
-    attempt=$((attempt + 1))
-  done
-  return 1
+  else
+    return 127
+  fi
 }
 
 
+# ----- High-level tarball download (Bash 4.2 + set -u safe) -----
 type umr_download_tarball >/dev/null 2>&1 || umr_download_tarball() {
+  # usage: umr_download_tarball OWNER REPO REF OUT_TAR
   local owner="$1" repo="$2" ref="$3" out_tar="$4"
 
-  local primary mirror
-  read -r primary < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
-  read -r mirror  < <(umr_build_tarball_urls "$owner" "$repo" "$ref" | sed -n '2p')
+  # URL 두 줄 읽기
+  local -a urls
+  readarray -t urls < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
+  local primary="${urls[0]}"
+  local mirror="${urls[1]:-}"
 
   local -a headers=()
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    headers+=("Authorization: Bearer ${GITHUB_TOKEN}")
-    headers+=("X-GitHub-Api-Version: 2022-11-28")
-    headers+=("Accept: application/vnd.github+json")
+    headers+=( "Authorization: Bearer ${GITHUB_TOKEN}" "X-GitHub-Api-Version: 2022-11-28" "Accept: application/vnd.github+json" )
   fi
 
   if ((${#headers[@]})); then
