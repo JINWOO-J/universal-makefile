@@ -172,14 +172,17 @@ umr_download_with_retries() {
 }
 
 
-# ----- High-level tarball download (Bash 4.2 + set -u safe) -----
+# ----- High-level tarball download (select URLs and apply auth) -----
 umr_download_tarball() {
+  # usage: umr_download_tarball OWNER REPO REF OUT_TAR
   local owner="$1" repo="$2" ref="$3" out_tar="$4"
 
+  # Build URLs (two lines: primary, mirror)
   local primary mirror
   read -r primary < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
   read -r mirror  < <(umr_build_tarball_urls "$owner" "$repo" "$ref" | sed -n '2p')
 
+  # Optional auth headers (array is always initialized → safe with `set -u`)
   local -a headers=()
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     headers+=("Authorization: Bearer ${GITHUB_TOKEN}")
@@ -187,11 +190,12 @@ umr_download_tarball() {
     headers+=("X-GitHub-Api-Version: 2022-11-28")
   fi
 
-  if ((${#headers[@]:-0})); then    # <-- 길이 체크도 안전하게
-    if umr_download_with_retries "$primary" "$out_tar" "${headers[@]:-}"; then   # <-- 안전 확장
+  # Try primary then mirror. Bash 4.2-safe length check (no :- default).
+  if ((${#headers[@]})); then
+    if umr_download_with_retries "$primary" "$out_tar" "${headers[@]}"; then
       [[ -s "$out_tar" ]] && return 0
     fi
-    if [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" "${headers[@]:-}"; then
+    if [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" "${headers[@]}"; then
       [[ -s "$out_tar" ]] && return 0
     fi
   else
