@@ -208,10 +208,10 @@ type umr_download_with_retries >/dev/null 2>&1 || umr_download_with_retries() {
 
 type umr_download_tarball >/dev/null 2>&1 || umr_download_tarball() {
   local owner="$1" repo="$2" ref="$3" out_tar="$4"
-  local -a urls=()
-  readarray -t urls < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
-  local primary="${urls[0]}"
-  local mirror="${urls[1]:-}"
+
+  local primary mirror
+  read -r primary < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
+  read -r mirror  < <(umr_build_tarball_urls "$owner" "$repo" "$ref" | sed -n '2p')
 
   local -a headers=()
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
@@ -220,7 +220,7 @@ type umr_download_tarball >/dev/null 2>&1 || umr_download_tarball() {
     headers+=("Accept: application/vnd.github+json")
   fi
 
-  if ((${#headers[@]} > 0)); then
+  if ((${#headers[@]})); then
     if umr_download_with_retries "$primary" "$out_tar" "${headers[@]}"; then
       [[ -s "$out_tar" ]] && return 0
     fi
@@ -238,6 +238,7 @@ type umr_download_tarball >/dev/null 2>&1 || umr_download_tarball() {
 
   return 1
 }
+
 
 type umr_tar_first_dir   >/dev/null 2>&1 || umr_tar_first_dir()   { local tarfile="$1"; tar -tzf "$tarfile" >/dev/null 2>&1 || return 2; tar -tzf "$tarfile" 2>/dev/null | head -n1 | cut -d/ -f1; }
 type umr_extract_tarball >/dev/null 2>&1 || umr_extract_tarball() { local tarfile="$1" dest="$2"; mkdir -p "$dest" && tar -xzf "$tarfile" -C "$dest" 2>/dev/null; }
