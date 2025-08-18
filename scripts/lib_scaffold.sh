@@ -11,15 +11,19 @@
 set -euo pipefail
 
 # log_* should be provided by caller; define no-op fallbacks
-type log_info >/dev/null 2>&1 || log_info() { echo "$*"; }
+type log_info    >/dev/null 2>&1 || log_info()    { echo "$*"; }
 type log_success >/dev/null 2>&1 || log_success() { echo "$*"; }
-type log_warn >/dev/null 2>&1 || log_warn() { echo "$*"; }
+type log_warn    >/dev/null 2>&1 || log_warn()    { echo "$*"; }
 
 # debug helper (enabled when DEBUG_MODE=true)
-umc_debug() { if [[ "${DEBUG_MODE:-false}" == "true" ]]; then log_info "[scaffold][debug] $*"; fi }
+umc_debug() {
+  if [[ "${DEBUG_MODE:-false}" == "true" ]]; then
+    log_info "[scaffold][debug] $*"
+  fi
+}
 
 umc_scaffold_project_files() {
-  umc_debug "begin: MAKEFILE_DIR=${MAKEFILE_DIR:-n/a} PWD=$(pwd)"
+  umc_debug "begin: MAKEFILE_DIR=${MAKEFILE_DIR:-universal-makefile} PWD=$(pwd)"
   umc_create_main_makefile "$@"
   umc_create_project_config "$@"
   umc_update_gitignore "$@"
@@ -33,19 +37,22 @@ umc_create_main_makefile() {
   umc_debug "umc_create_main_makefile: makefile_dir_var=${makefile_dir_var}"
 
   local universal_makefile="Makefile.universal"
-  if [[ ! -f "$universal_makefile" ]]; then
+  if [[ ! -f "${universal_makefile}" ]]; then
     log_info "Creating ${universal_makefile}..."
     umc_debug "writing ${universal_makefile}"
-    # Write header comments first (literal)
-    cat > "$universal_makefile" << 'EOF_HEAD'
+
+    # header (literal)
+    cat > "${universal_makefile}" << 'EOF_HEAD'
 # === Created by Universal Makefile System Installer ===
 # This file is the entry point for the universal makefile system.
 # It should be included by the project's main Makefile.
 EOF_HEAD
-    # Provide a safe default for MAKEFILE_DIR only when not already defined
-    echo "MAKEFILE_DIR ?= ${makefile_dir_var}" >> "$universal_makefile"
-    # Append the rest of the content (literal)
-    cat >> "$universal_makefile" << 'EOF_BODY'
+
+    # MAKEFILE_DIR 기본값 (이미 정의되어 있으면 그대로 사용)
+    echo "MAKEFILE_DIR ?= ${makefile_dir_var}" >> "${universal_makefile}"
+
+    # body (literal)
+    cat >> "${universal_makefile}" << 'EOF_BODY'
 
 .DEFAULT_GOAL := help
 
@@ -74,7 +81,7 @@ EOF_BODY
   fi
 
   local main_makefile="Makefile"
-  if [[ ! -f ${main_makefile} ]]; then
+  if [[ ! -f "${main_makefile}" ]]; then
     log_info "Creating ${main_makefile}..."
     umc_debug "writing ${main_makefile} (MAKEFILE_SYSTEM_DIR=${makefile_dir_var})"
     cat > "${main_makefile}" << EOF
@@ -88,15 +95,25 @@ EOF
 }
 
 umc_create_project_config() {
-  if [[ -f "project.mk" ]]; then return 0; fi
-  log_info "Creating project.mk..."
-  local default_name; default_name=$(basename "$(pwd)")
-  local default_repo_hub="mycompany"
-  if git remote get-url origin >/dev/null 2>&1; then
-    local url; url=$(git remote get-url origin)
-    [[ "$url" =~ github.com[:/]([^/]+) ]] && default_repo_hub="${BASH_REMATCH[1]}"
+  if [[ -f "project.mk" ]]; then
+    umc_debug "project.mk already exists; skipping"
+    return 0
   fi
+
+  log_info "Creating project.mk..."
+  local default_name default_repo_hub url
+  default_name="$(basename "$(pwd)")"
+  default_repo_hub="mycompany"
+
+  if git remote get-url origin >/dev/null 2>&1; then
+    url="$(git remote get-url origin || true)"
+    if [[ "${url:-}" =~ github\.com[:/]([^/]+) ]]; then
+      default_repo_hub="${BASH_REMATCH[1]}"
+    fi
+  fi
+
   umc_debug "umc_create_project_config: NAME=${default_name} REPO_HUB=${default_repo_hub} MAKEFILE_DIR=${MAKEFILE_DIR:-universal-makefile}"
+
   cat > "project.mk" << EOF
 # === Created by Universal Makefile System Installer ===
 REPO_HUB = ${default_repo_hub}
@@ -120,6 +137,7 @@ EOF
 umc_update_gitignore() {
   log_info "Updating .gitignore..."
   umc_debug "ensuring common entries in .gitignore"
+
   local entries=(
     "# Universal Makefile System"
     ".project.local.mk"
@@ -127,44 +145,56 @@ umc_update_gitignore() {
     ".env"
     "environments/*.local.mk"
   )
-  [[ ! -f .gitignore ]] && touch .gitignore
+
+  [[ -f ".gitignore" ]] || : > .gitignore
+
   local e
   for e in "${entries[@]}"; do
-    grep -qxF "$e" .gitignore || echo "$e" >> .gitignore
+    # 중복 방지(정확히 같은 줄이 없을 때만 추가)
+    if ! grep -qxF "$e" .gitignore 2>/dev/null; then
+      echo "$e" >> .gitignore
+    fi
   done
   log_success ".gitignore updated"
 }
 
 umc_create_environments() {
-  [[ -d "environments" ]] || mkdir -p environments
-  if [[ ! -f environments/development.mk ]]; then
+  [[ -d "environments" ]] || mkdir -p "environments"
+
+  if [[ ! -f "environments/development.mk" ]]; then
     log_info "Creating environments/development.mk..."
     umc_debug "writing environments/development.mk"
-    cat > environments/development.mk << 'EOF'
+    cat > "environments/development.mk" << 'EOF'
 # === Created by Universal Makefile System Installer ===
 DEBUG = true
 DOCKER_BUILD_OPTION += --progress=plain
 COMPOSE_FILE = docker-compose.dev.yml
 EOF
   fi
-  if [[ ! -f environments/production.mk ]]; then
+
+  if [[ ! -f "environments/production.mk" ]]; then
     log_info "Creating environments/production.mk..."
     umc_debug "writing environments/production.mk"
-    cat > environments/production.mk << 'EOF'
+    cat > "environments/production.mk" << 'EOF'
 # === Created by Universal Makefile System Installer ===
 DEBUG = false
 DOCKER_BUILD_OPTION += --no-cache
 COMPOSE_FILE = docker-compose.prod.yml
 EOF
   fi
+
   log_success "Environment configs ensured"
 }
 
 umc_create_sample_compose() {
-  if [[ -f "docker-compose.dev.yml" ]]; then return 0; fi
+  if [[ -f "docker-compose.dev.yml" ]]; then
+    umc_debug "docker-compose.dev.yml already exists; skipping"
+    return 0
+  fi
+
   log_info "Creating docker-compose.dev.yml..."
   umc_debug "writing docker-compose.dev.yml"
-  cat > docker-compose.dev.yml << 'EOF'
+  cat > "docker-compose.dev.yml" << 'EOF'
 # === Created by Universal Makefile System Installer ===
 #version: '3.8'
 services:
@@ -178,4 +208,3 @@ services:
 EOF
   log_success "Sample docker-compose.dev.yml created"
 }
-
