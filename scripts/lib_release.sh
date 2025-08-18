@@ -140,7 +140,9 @@ umr_download_with_retries() {
     if command -v curl >/dev/null 2>&1; then
       # ←← 여기: 한 줄 커맨드 대신 배열을 조립해서 실행
       local -a cmd=( curl -fSL --connect-timeout 10 --max-time 300 )
-      ((${#curl_headers[@]:-0})) && cmd+=( "${curl_headers[@]}" )
+      if ((${#curl_headers[@]})); then
+        cmd+=("${curl_headers[@]}")
+      fi
       cmd+=( -o "$out" "$url" )
 
       # xtrace 감춤/복원
