@@ -127,6 +127,7 @@ umr_build_tarball_urls() {
 umr_download_with_retries() {
   local url="$1" out="$2"; shift 2
 
+  # 안전: 비어 있어도 '정의된' 배열이 되도록 초기화
   local -a curl_headers=()
   local h
   for h in "$@"; do
@@ -136,11 +137,11 @@ umr_download_with_retries() {
   if command -v curl >/dev/null 2>&1; then
     local attempt
     for attempt in $(seq 1 "${CURL_RETRY_MAX}"); do
-      local _had_xtrace=0
-      case "$-" in *x*) _had_xtrace=1; set +x ;; esac
+      # xtrace 보존
+      local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
 
       if curl -fSL --connect-timeout 10 --max-time 300 \
-           "${curl_headers[@]}" \
+           ${curl_headers[@]+"${curl_headers[@]}"} \
            -o "$out" "$url"; then
         ((_had_xtrace)) && set -x
         [[ -s "$out" ]] && return 0
@@ -158,7 +159,9 @@ umr_download_with_retries() {
       local -a wget_hdr=()
       for h in "$@"; do wget_hdr+=( --header "$h" ); done
 
-      if wget -q -O "$out" "${wget_hdr[@]}" "$url"; then
+      if wget -q -O "$out" \
+           ${wget_hdr[@]+"${wget_hdr[@]}"} \
+           "$url"; then
         [[ -s "$out" ]] && return 0
       fi
 
@@ -171,6 +174,7 @@ umr_download_with_retries() {
     return 127
   fi
 }
+
 
 
 # ----- High-level tarball download (select URLs and apply auth) -----
