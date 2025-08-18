@@ -94,8 +94,15 @@ type umr_fetch_latest_release_tag >/dev/null 2>&1 || umr_fetch_latest_release_ta
   local tag
   local -a auth=()
   [[ -n "${GITHUB_TOKEN:-}" ]] && auth=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+
   if command -v curl >/dev/null 2>&1; then
-    tag=$(curl -fsSL "${auth[@]}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+    tag=$(
+      curl -fsSL \
+        "${auth[@]+"${auth[@]}"}" \
+        "$api_url" \
+      | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+      | head -n1 || true
+    )
   elif command -v wget >/dev/null 2>&1; then
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
       tag=$(wget -qO- --header="Authorization: Bearer ${GITHUB_TOKEN}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
@@ -103,15 +110,18 @@ type umr_fetch_latest_release_tag >/dev/null 2>&1 || umr_fetch_latest_release_ta
       tag=$(wget -qO- "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
     fi
   fi
+
   if [[ -n "$tag" ]]; then
     echo "$tag"; return 0
   fi
   if command -v git >/dev/null 2>&1; then
-    tag=$(git ls-remote --tags --refs "https://github.com/${owner}/${repo}.git" 2>/dev/null | awk '{print $2}' | sed 's@refs/tags/@@' | sort -Vr | head -n1)
-    [[ -n "$tag" ]] && echo "$tag" && return 0
+    git ls-remote --tags --refs "https://github.com/${owner}/${repo}.git" 2>/dev/null \
+      | awk '{print $2}' | sed 's@refs/tags/@@' | sort -Vr | head -n1
+    return $?
   fi
   return 1
 }
+
 
 type umr_build_tarball_urls >/dev/null 2>&1 || umr_build_tarball_urls() {
   local owner="$1" repo="$2" ref="$3"
@@ -140,37 +150,42 @@ type umr_build_tarball_urls >/dev/null 2>&1 || umr_build_tarball_urls() {
 }
 
 type umr_download_with_retries >/dev/null 2>&1 || umr_download_with_retries() {
-  local url="$1" out="$2"
-  shift 2
-  local -a headers=("$@")
-  local -a curl_headers=()
-  for h in "${headers[@]}"; do
-    curl_headers+=( -H "$h" )
-  done
-  local attempt
-  for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
-    if command -v curl >/dev/null 2>&1; then
+  local url="$1" out="$2"; shift 2
+
+  if command -v curl >/dev/null 2>&1; then
+    local -a cmd=( curl -fSL --connect-timeout 10 --max-time 300 )
+    while (($#)); do cmd+=( -H "$1" ); shift; done
+    cmd+=( -o "$out" )
+
+    for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
       local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
-      if curl -fSL --connect-timeout 10 --max-time 300 "${curl_headers[@]}" -o "$out" "$url"; then
-        [ "$_had_xtrace" -eq 1 ] && set -x
+      if "${cmd[@]}" "$url"; then
+        [[ -s "$out" ]] && { [[ $_had_xtrace -eq 1 ]] && set -x; return 0; }
+      fi
+      [[ $_had_xtrace -eq 1 ]] && set -x
+      sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
+    done
+    return 1
+
+  elif command -v wget >/dev/null 2>&1; then
+    for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
+      local -a wget_cmd=( wget -q -O "$out" )
+      while (($#)); do wget_cmd+=( --header "$1" ); shift; done
+      if "${wget_cmd[@]}" "$url"; then
         [[ -s "$out" ]] && return 0
       fi
-      [ "$_had_xtrace" -eq 1 ] && set -x
-    elif command -v wget >/dev/null 2>&1; then
-      local -a wget_hdr=()
-      for h in "${headers[@]}"; do wget_hdr+=(--header "$h"); done
-      if wget -q "${wget_hdr[@]}" -O "$out" "$url"; then [[ -s "$out" ]] && return 0; fi
-    else
-      return 127
-    fi
-    sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
-  done
-  return 1
+      sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
+    done
+    return 1
+
+  else
+    return 127
+  fi
 }
 
 type umr_download_tarball >/dev/null 2>&1 || umr_download_tarball() {
   local owner="$1" repo="$2" ref="$3" out_tar="$4"
-  local primary mirror
+
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     local repo_code
     repo_code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${GITHUB_TOKEN}" "https://api.github.com/repos/${owner}/${repo}") || repo_code="000"
@@ -178,14 +193,20 @@ type umr_download_tarball >/dev/null 2>&1 || umr_download_tarball() {
       log_warn "GitHub token may not have access to ${owner}/${repo} (HTTP ${repo_code}). Falling back if possible."
     fi
   fi
-  read -r primary < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
-  read -r mirror < <(umr_build_tarball_urls "$owner" "$repo" "$ref" | sed -n '2p')
+
+  local -a urls
+  readarray -t urls < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
+  local primary="${urls[0]}"; local mirror="${urls[1]:-}"
+
   local -a headers=()
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     headers+=("Authorization: Bearer ${GITHUB_TOKEN}" "X-GitHub-Api-Version: 2022-11-28" "Accept: application/vnd.github+json")
   fi
-  umr_download_with_retries "$primary" "$out_tar" "${headers[@]}" \
-    || umr_download_with_retries "$mirror" "$out_tar" "${headers[@]}"
+
+  umr_download_with_retries "$primary" "$out_tar" \
+    "${headers[@]+"${headers[@]}"}" \
+  || { [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" \
+       "${headers[@]+"${headers[@]}"}"; }
 }
 
 type umr_tar_first_dir >/dev/null 2>&1 || umr_tar_first_dir() { local tarfile="$1"; tar -tzf "$tarfile" >/dev/null 2>&1 || return 2; tar -tzf "$tarfile" 2>/dev/null | head -n1 | cut -d/ -f1; }
