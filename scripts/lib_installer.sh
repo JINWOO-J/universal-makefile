@@ -15,7 +15,9 @@ TMPDIR="${TMPDIR%/}"
 UMF_TMP_DIR="$(mktemp -d "${TMPDIR}/umf-install.XXXXXX")"
 UMS_INSTALL_TYPE_FILE=".ums-install-type"
 _umf_cleanup_tmp() { rm -rf "${UMF_TMP_DIR}" >/dev/null 2>&1 || true; }
-trap _umf_cleanup_tmp EXIT INT TERM
+errtrace::chain_trap EXIT _umf_cleanup_tmp
+errtrace::chain_trap INT  _umf_cleanup_tmp
+errtrace::chain_trap TERM _umf_cleanup_tmp
 
 # Colors
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then

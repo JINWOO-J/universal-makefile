@@ -65,20 +65,42 @@ errtrace::_on_error() {
   return "$code"
 }
 
-# ---------- enable/disable ----------
+# --- chain trap helper (기존 트랩 보존 + 새 핸들러 추가)
+errtrace::chain_trap() {
+  local sig=$1; shift
+  local new="$*"
+  local old
+  old=$(trap -p "$sig" | sed -n "s/.*'\(.*\)'.*/\1/p")
+  if [[ -n "$old" ]]; then
+    trap "$old; $new" "$sig"
+  else
+    trap "$new" "$sig"
+  fi
+}
+
+# --- fatal exit bridge: ERR를 못 탄 비정상 종료도 요약 출력
+errtrace::_on_exit() {
+  local code=$?
+  (( code == 0 )) && return 0
+  set +e
+  # DEBUG에서 저장한 마지막 커맨드 문맥 사용
+  local src="${__ERRTRACE_SRC:-${BASH_SOURCE[1]:-n/a}}"
+  local line="${__ERRTRACE_LINE:-${BASH_LINENO[0]:-0}}"
+  local cmd="${__ERRTRACE_CMD:-${BASH_COMMAND}}"
+  echo -e "${ERRTRACE_RED}✖ fatal exit ${code}${ERRTRACE_RST}" >&2
+  echo -e "${ERRTRACE_YEL}↳ at ${src}:${line}${ERRTRACE_RST}" >&2
+  echo -e "${ERRTRACE_YEL}↳ last:${ERRTRACE_RST} ${cmd}" >&2
+  errtrace::stacktrace
+}
+
+# --- enable에서 EXIT도 체인하도록 변경
 errtrace::enable() {
-  # 함수/서브셸까지 ERR/DEBUG 전파
   set -E -o errtrace
   set -o functrace
-
-  # 중복 설치 방지
   [[ "${ERRTRACE_INSTALLED:-}" == "1" ]] && return 0
-
-  # 실행 직전 항상 문맥 저장
   trap 'errtrace::__debug_capture' DEBUG
-  # 실패 시 에러 출력
   trap 'errtrace::_on_error' ERR
-
+  errtrace::chain_trap EXIT errtrace::_on_exit   # ← 추가
   ERRTRACE_INSTALLED=1
 }
 
