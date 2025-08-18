@@ -202,32 +202,37 @@ type umr_download_with_retries >/dev/null 2>&1 || umr_download_with_retries() {
   fi
 }
 
-# Tarball downloader — headers/urls 배열 가드
 type umr_download_tarball >/dev/null 2>&1 || umr_download_tarball() {
   local owner="$1" repo="$2" ref="$3" out_tar="$4"
-
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    local repo_code
-    repo_code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${GITHUB_TOKEN}" "https://api.github.com/repos/${owner}/${repo}") || repo_code="000"
-    if [[ "$repo_code" != "200" ]]; then
-      log_warn "GitHub token may not have access to ${owner}/${repo} (HTTP ${repo_code}). Falling back if possible."
-    fi
-  fi
-
   local -a urls=()
-  # readarray는 위에서 mapfile로 폴백됨
   readarray -t urls < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
-  local primary="${urls[0]:-}"; local mirror="${urls[1]:-}"
+  local primary="${urls[0]}"
+  local mirror="${urls[1]:-}"
 
   local -a headers=()
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    headers+=("Authorization: Bearer ${GITHUB_TOKEN}" "X-GitHub-Api-Version: 2022-11-28" "Accept: application/vnd.github+json")
+    headers+=("Authorization: Bearer ${GITHUB_TOKEN}")
+    headers+=("X-GitHub-Api-Version: 2022-11-28")
+    headers+=("Accept: application/vnd.github+json")
   fi
 
-  umr_download_with_retries "$primary" "$out_tar" \
-    ${headers[@]+"${headers[@]}"} \
-  || { [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" \
-       ${headers[@]+"${headers[@]}"}; }
+  if ((${#headers[@]} > 0)); then
+    if umr_download_with_retries "$primary" "$out_tar" "${headers[@]}"; then
+      [[ -s "$out_tar" ]] && return 0
+    fi
+    if [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" "${headers[@]}"; then
+      [[ -s "$out_tar" ]] && return 0
+    fi
+  else
+    if umr_download_with_retries "$primary" "$out_tar"; then
+      [[ -s "$out_tar" ]] && return 0
+    fi
+    if [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar"; then
+      [[ -s "$out_tar" ]] && return 0
+    fi
+  fi
+
+  return 1
 }
 
 type umr_tar_first_dir   >/dev/null 2>&1 || umr_tar_first_dir()   { local tarfile="$1"; tar -tzf "$tarfile" >/dev/null 2>&1 || return 2; tar -tzf "$tarfile" 2>/dev/null | head -n1 | cut -d/ -f1; }
