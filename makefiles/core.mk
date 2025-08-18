@@ -72,12 +72,12 @@ endif
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 	SED = sed -E -i ''
-	ECHO_OPTION = ""
+	ECHO_OPTION = 
 	ECHO_CMD = echo $(ECHO_OPTION)
 	GET_NANO_CMD := if command -v gdate >/dev/null; then gdate +%s%N; else python -c 'import time; print(int(time.time() * 10**9))'; fi
 else
 	SED = sed -i
-	ECHO_OPTION = "-e"
+	ECHO_OPTION = -e
 	ECHO_CMD = echo $(ECHO_OPTION)
 	GET_NANO_CMD := date +%s%N
 
