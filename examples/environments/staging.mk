@@ -23,19 +23,19 @@ STAGING_NAMESPACE = staging
 # ================================================================
 
 staging-deploy: check-git-clean build test ## 🚀 Deploy to staging environment
-	@$(call colorecho, "🚀 Deploying to staging environment...")
+	@$(call colorecho, 🚀 Deploying to staging environment...)
 	@# 스테이징 배포 로직
 	@if command -v kubectl >/dev/null 2>&1; then \
 		kubectl apply -f k8s/staging/ --namespace=$(STAGING_NAMESPACE); \
 	elif [ -f "docker-compose.staging.yml" ]; then \
 		docker-compose -f docker-compose.staging.yml up -d; \
 	else \
-		$(call warn, "No staging deployment configuration found"); \
+		$(call warn, No staging deployment configuration found); \
 	fi
-	@$(call success, "Deployed to staging")
+	@$(call success, Deployed to staging)
 
 staging-status: ## 📊 Show staging deployment status
-	@$(call colorecho, "📊 Checking staging status...")
+	@$(call colorecho, 📊 Checking staging status...)
 	@if command -v kubectl >/dev/null 2>&1; then \
 		kubectl get pods --namespace=$(STAGING_NAMESPACE); \
 		kubectl get services --namespace=$(STAGING_NAMESPACE); \
@@ -44,7 +44,7 @@ staging-status: ## 📊 Show staging deployment status
 	fi
 
 staging-logs: ## 📋 Show staging application logs
-	@$(call colorecho, "📋 Showing staging logs...")
+	@$(call colorecho, 📋 Showing staging logs...)
 	@if command -v kubectl >/dev/null 2>&1; then \
 		kubectl logs -f deployment/$(NAME) --namespace=$(STAGING_NAMESPACE); \
 	elif [ -f "docker-compose.staging.yml" ]; then \
@@ -52,32 +52,32 @@ staging-logs: ## 📋 Show staging application logs
 	fi
 
 staging-rollback: ## 🔄 Rollback staging deployment
-	@$(call warn, "Rolling back staging deployment")
+	@$(call warn, Rolling back staging deployment)
 	@echo "Continue? [y/N] " && read ans && [ $${ans:-N} = y ]
-	@$(call colorecho, "🔄 Rolling back staging...")
+	@$(call colorecho, 🔄 Rolling back staging...)
 	@if command -v kubectl >/dev/null 2>&1; then \
 		kubectl rollout undo deployment/$(NAME) --namespace=$(STAGING_NAMESPACE); \
 	else \
-		$(call warn, "Rollback only supported for Kubernetes deployments"); \
+		$(call warn, Rollback only supported for Kubernetes deployments); \
 	fi
 
 staging-test: ## 🧪 Run integration tests against staging
-	@$(call colorecho, "🧪 Running staging integration tests...")
+	@$(call colorecho, 🧪 Running staging integration tests...)
 	@# 스테이징 환경에 대한 통합 테스트 실행
 	@if [ -f "tests/staging.test.js" ]; then \
 		npm run test:staging; \
 	elif [ -f "tests/test_staging.py" ]; then \
 		pytest tests/test_staging.py; \
 	else \
-		$(call warn, "No staging tests found"); \
+		$(call warn, No staging tests found); \
 	fi
 
 staging-health-check: ## 🩺 Check staging environment health
-	@$(call colorecho, "🩺 Checking staging health...")
+	@$(call colorecho, 🩺 Checking staging health...)
 	@if [ -n "$(STAGING_URL)" ]; then \
 		curl -f $(STAGING_URL)/health || $(call error, "Staging health check failed"); \
 	else \
-		$(call warn, "STAGING_URL not configured"); \
+		$(call warn, STAGING_URL not configured); \
 	fi
 
 # ================================================================
@@ -85,18 +85,18 @@ staging-health-check: ## 🩺 Check staging environment health
 # ================================================================
 
 staging-backup: ## 💾 Backup staging data
-	@$(call colorecho, "💾 Backing up staging data...")
+	@$(call colorecho, 💾 Backing up staging data...)
 	@# 스테이징 데이터 백업 로직
 	@if command -v kubectl >/dev/null 2>&1; then \
 		kubectl exec deployment/$(NAME)-db --namespace=$(STAGING_NAMESPACE) -- \
 			pg_dump -U postgres $(NAME) > staging-backup-$(shell date +%Y%m%d_%H%M%S).sql; \
 	fi
-	@$(call success, "Staging backup completed")
+	@$(call success, Staging backup completed)
 
 staging-restore: ## 🔄 Restore staging from backup
-	@$(call warn, "This will restore staging data from backup")
+	@$(call warn, This will restore staging data from backup)
 	@echo "Backup file: " && read backup_file
 	@echo "Continue? [y/N] " && read ans && [ $${ans:-N} = y ]
-	@$(call colorecho, "🔄 Restoring staging data...")
+	@$(call colorecho, 🔄 Restoring staging data...)
 	@# 스테이징 데이터 복원 로직
-	@$(call success, "Staging restore completed")
+	@$(call success, Staging restore completed)

@@ -48,11 +48,11 @@ release: all push tag-latest ## 🚀 Full release process (build + push + tag la
 # 시스템 관리 타겟들
 update-makefile-system: ## 🔧 Update makefile system
 ifeq ($(MAKEFILE_TYPE),submodule)
-	@$(call colorecho, "🔄 Updating makefile system via git submodule...")
+	@$(call colorecho, 🔄 Updating makefile system via git submodule...)
 	@git submodule update --remote $(MAKEFILE_DIR)
-	@$(call colorecho, "✅ Makefile system updated successfully")
+	@$(call colorecho, ✅ Makefile system updated successfully)
 else
-	@$(call colorecho, "⚠️  Script installation detected. Please run install.sh manually to update")
+	@$(call colorecho, ⚠️  Script installation detected. Please run install.sh manually to update)
 endif
 
 show-makefile-info: ## 🔧 Show makefile system information

@@ -50,7 +50,7 @@ define print_color
 endef
 
 define print_error
-	$(ECHO_CMD) " $(RED) ❌ $(2)$(RESET)"
+	$(ECHO_CMD) "$(RED) ❌ $(1)$(RESET)"
 endef
 
 

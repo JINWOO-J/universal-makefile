@@ -118,7 +118,7 @@ custom-deploy: ## 🚀 Deploy to custom infrastructure
 	@# 여기에 배포 로직 추가
 	@# 예: kubectl apply -f k8s/
 	@# 예: aws ecs update-service --service $(NAME) --force-new-deployment
-	@$(call success, "Custom deployment completed")
+	@$(call success, Custom deployment completed)
 
 # 예시: 프로젝트별 테스트
 custom-test: ## 🧪 Run project-specific tests
@@ -126,7 +126,7 @@ custom-test: ## 🧪 Run project-specific tests
 	@# 여기에 테스트 로직 추가
 	@# 예: npm run test:e2e
 	@# 예: pytest tests/integration/
-	@$(call success, "Custom tests completed")
+	@$(call success, Custom tests completed)
 
 # 예시: 데이터베이스 마이그레이션
 db-migrate: ## 🗄️ Run database migrations
@@ -134,7 +134,7 @@ db-migrate: ## 🗄️ Run database migrations
 	@# 여기에 마이그레이션 로직 추가
 	@# 예: npm run migrate
 	@# 예: python manage.py migrate
-	@$(call success, "Database migrations completed")
+	@$(call success, Database migrations completed)
 
 # 예시: 정적 파일 처리
 build-assets: ## 🎨 Build static assets
@@ -142,7 +142,7 @@ build-assets: ## 🎨 Build static assets
 	@# 여기에 에셋 빌드 로직 추가
 	@# 예: npm run build
 	@# 예: yarn build
-	@$(call success, "Static assets built")
+	@$(call success, Static assets built)
 
 # 예시: 보안 스캔
 security-audit: ## 🔒 Run security audit
@@ -151,7 +151,7 @@ security-audit: ## 🔒 Run security audit
 	@# 예: npm audit
 	@# 예: cargo audit
 	@# 예: safety check
-	@$(call success, "Security audit completed")
+	@$(call success, Security audit completed)
 
 # 예시: 성능 테스트
 performance-test: ## ⚡ Run performance tests
@@ -159,7 +159,7 @@ performance-test: ## ⚡ Run performance tests
 	@# 여기에 성능 테스트 로직 추가
 	@# 예: artillery run artillery.yml
 	@# 예: k6 run performance-test.js
-	@$(call success, "Performance tests completed")
+	@$(call success, Performance tests completed)
 
 # ================================================================
 # 환경별 커스터마이징 (선택사항)
@@ -170,7 +170,7 @@ ifeq ($(ENV),development)
 dev-seed: ## 🌱 Seed development database
 	@echo "Seeding development database..."
 	@# 개발 데이터 시딩 로직
-	@$(call success, "Development database seeded")
+	@$(call success, Development database seeded)
 endif
 
 # 프로덕션 환경에서만 실행되는 타겟
@@ -178,7 +178,7 @@ ifeq ($(ENV),production)
 prod-backup: ## 💾 Backup production data
 	@echo "Backing up production data..."
 	@# 프로덕션 백업 로직
-	@$(call success, "Production backup completed")
+	@$(call success, Production backup completed)
 endif
 
 # ================================================================

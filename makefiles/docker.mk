@@ -38,32 +38,32 @@ build: check-docker make-build-args ## 🎯 Build the Docker image
 
 
 push: build ## 🚀 Push image to registry
-	@$(call colorecho, "📦 Pushing images to registry...")
+	@$(call colorecho, 📦 Pushing images to registry...)
 	@$(call timed_command, "Docker push", \
 		docker push $(FULL_TAG))
-	@$(call success, "Successfully pushed '$(FULL_TAG)'")
+	@$(call success, Successfully pushed '$(FULL_TAG)')
 
 tag-latest: build ## 🚀 Tag image as 'latest' and push
-	@$(call colorecho, "🏷️  Tagging images as 'latest'...")
+	@$(call colorecho, 🏷️  Tagging images as 'latest'...)
 	@docker tag $(FULL_TAG) $(LATEST_TAG)
 	@$(call timed_command, "Push latest tag", \
 		docker push $(LATEST_TAG))
-	@$(call success, "Tagged and pushed as 'latest'")
+	@$(call success, Tagged and pushed as 'latest')
 
 # ================================================================
 # 개발 및 디버깅 타겟들
 # ================================================================
 
 bash: build ## 🔧 Run bash in the container
-	@$(call colorecho, "🐚 Starting bash in container...")
+	@$(call colorecho, 🐚 Starting bash in container...)
 	@docker run -it --rm --name $(NAME)-debug $(FULL_TAG) sh
 
 run: build ## 🔧 Run the container interactively
-	@$(call colorecho, "🚀 Running container interactively...")
+	@$(call colorecho, 🚀 Running container interactively...)
 	@docker run -it --rm --name $(NAME)-run $(FULL_TAG)
 
 exec: ## 🔧 Execute command in running container
-	@$(call colorecho, "🔧 Executing in running container...")
+	@$(call colorecho, 🔧 Executing in running container...)
 	@docker exec -it $(NAME) sh
 
 # ================================================================
@@ -71,7 +71,7 @@ exec: ## 🔧 Execute command in running container
 # ================================================================
 
 build-multi: check-docker ## 🎯 Build multi-platform image (amd64, arm64)
-	@$(call colorecho, "🏗️  Building multi-platform image...")
+	@$(call colorecho, 🏗️  Building multi-platform image...)
 	@docker buildx create --use --name multi-builder 2>/dev/null || docker buildx use multi-builder
 	@$(call timed_command, "Multi-platform build", \
 		docker buildx build $(DOCKER_BUILD_OPTION) \
@@ -80,7 +80,7 @@ build-multi: check-docker ## 🎯 Build multi-platform image (amd64, arm64)
 		-f $(DOCKERFILE_PATH) \
 		-t $(FULL_TAG) \
 		--push .)
-	@$(call success, "Multi-platform build completed")
+	@$(call success, Multi-platform build completed)
 
 # ================================================================
 # Docker 정보 및 관리
@@ -101,7 +101,7 @@ docker-info: ## 🔧 Show Docker and image information
 	@docker ps | grep $(NAME) || echo "  No running containers for $(NAME)"
 
 docker-clean: ## 🧹 Clean Docker resources (containers, images, volumes)
-	@$(call colorecho, "🧹 Cleaning Docker resources...")
+	@$(call colorecho, 🧹 Cleaning Docker resources...)
 	@echo "Stopping containers..."
 	@docker ps -q --filter "name=$(NAME)" | xargs -r docker stop
 	@echo "Removing containers..."
@@ -110,15 +110,15 @@ docker-clean: ## 🧹 Clean Docker resources (containers, images, volumes)
 	@docker images -q $(APP_IMAGE_NAME) | xargs -r docker rmi -f
 	@echo "Pruning system..."
 	@docker system prune -f
-	@$(call success, "Docker cleanup completed")
+	@$(call success, Docker cleanup completed)
 
 docker-deep-clean: ## 🧹 Deep clean Docker (DANGEROUS - removes all unused resources)
-	@$(call warn, "This will remove ALL unused Docker resources")
+	@$(call warn, This will remove ALL unused Docker resources)
 	@echo "Continue? [y/N] " && read ans && [ $${ans:-N} = y ]
-	@$(call colorecho, "🧹 Performing deep Docker cleanup...")
+	@$(call colorecho, 🧹 Performing deep Docker cleanup...)
 	@docker system prune -af --volumes
 	@docker builder prune -af
-	@$(call success, "Deep Docker cleanup completed")
+	@$(call success, Deep Docker cleanup completed)
 
 # ================================================================
 # Docker Compose 통합 (compose.mk와 연동)
@@ -134,13 +134,13 @@ docker-logs: ## 🔧 Show Docker container logs
 # ================================================================
 
 security-scan: build ## 🔒 Run security scan on the image
-	@$(call colorecho, "🔒 Running security scan...")
+	@$(call colorecho, 🔒 Running security scan...)
 	@if command -v trivy >/dev/null 2>&1; then \
 		trivy image $(FULL_TAG); \
 	elif command -v docker-security-scan >/dev/null 2>&1; then \
 		docker-security-scan $(FULL_TAG); \
 	else \
-		$(call warn, "No security scanner found. Install trivy or docker-security-scan"); \
+		$(call warn, No security scanner found. Install trivy or docker-security-scan); \
 	fi
 
 # ================================================================
@@ -148,7 +148,7 @@ security-scan: build ## 🔒 Run security scan on the image
 # ================================================================
 
 login: ## 🔑 Login to Docker registry
-	@$(call colorecho, "🔑 Logging in to Docker registry...")
+	@$(call colorecho, 🔑 Logging in to Docker registry...)
 	@if [ -n "$(DOCKER_REGISTRY_USER)" ] && [ -n "$(DOCKER_REGISTRY_PASS)" ]; then \
 		echo "$(DOCKER_REGISTRY_PASS)" | docker login -u "$(DOCKER_REGISTRY_USER)" --password-stdin $(DOCKER_REGISTRY_URL); \
 	else \
@@ -156,7 +156,7 @@ login: ## 🔑 Login to Docker registry
 	fi
 
 logout: ## 🔓 Logout from Docker registry
-	@$(call colorecho, "🔓 Logging out from Docker registry...")
+	@$(call colorecho, 🔓 Logging out from Docker registry...)
 	@docker logout $(DOCKER_REGISTRY_URL)
 
 # ================================================================
@@ -168,10 +168,10 @@ image-size: build ## 📊 Show image size information
 	@docker images $(FULL_TAG) --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
 	@echo ""
 	@if command -v dive >/dev/null 2>&1; then \
-		$(call colorecho, "🔍 Running dive analysis..."); \
+		$(call colorecho, 🔍 Running dive analysis...); \
 		dive $(FULL_TAG); \
 	else \
-		$(call warn, "Install 'dive' for detailed layer analysis: https://github.com/wagoodman/dive"); \
+		$(call warn, Install 'dive' for detailed layer analysis: https://github.com/wagoodman/dive); \
 	fi
 
 image-history: build ## 📈 Show image build history
@@ -186,6 +186,6 @@ build-no-cache: check-docker ## 🎯 Build without cache
 	@$(MAKE) build FORCE_REBUILD=true
 
 clear-build-cache: ## 🧹 Clear Docker build cache
-	@$(call colorecho, "🧹 Clearing Docker build cache...")
+	@$(call colorecho, 🧹 Clearing Docker build cache...)
 	@docker builder prune -f
-	@$(call success, "Build cache cleared")
+	@$(call success, Build cache cleared)
