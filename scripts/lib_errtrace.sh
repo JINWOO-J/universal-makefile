@@ -88,6 +88,20 @@ errtrace::disable() {
   unset ERRTRACE_INSTALLED
 }
 
+errtrace::guard() {
+  # 사용법: errtrace::guard some_command arg1 arg2...
+  # 실패하면 반드시 ERR 핸들러를 태우고 원코드로 반환
+  "$@"
+  local rc=$?
+  if (( rc != 0 )); then
+    # DEBUG에서 직전 커맨드가 캡처되도록 한 번 찍어주고
+    errtrace::__debug_capture
+    errtrace::_on_error  # 표준 핸들러 호출
+    return "$rc"
+  fi
+}
+
+
 # ---------- xtrace (디버그 -x) ----------
 xtrace::enable() {
   # 사용법: xtrace::enable [logfile]
