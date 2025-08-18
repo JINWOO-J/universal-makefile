@@ -58,33 +58,45 @@ CURL_RETRY_DELAY_SEC=${CURL_RETRY_DELAY_SEC:-2}
 log_debug() { if [[ "${DEBUG_MODE:-false}" == "true" ]]; then echo "${YELLOW}🔎 $*${RESET}"; fi; return 0; }
 enable_xtrace_if_debug() { if [[ "${DEBUG_MODE:-false}" == "true" ]]; then set -x; log_debug "xtrace enabled"; fi; }
 
-# --- Source shared libs (optional) ---
+_try_safe_source_one() {
+  local f="$1"
+  log_info "[lib] sourcing: $f"
+  if declare -F safe_source >/dev/null 2>&1; then
+    errtrace::guard safe_source "$f"
+  else
+    # fallback: 파싱 에러는 못 잡지만 실행 에러는 guard 로 캡처
+    # shellcheck disable=SC1090
+    errtrace::guard . "$f"
+  fi
+}
+
 _umr_try_source() {
   local cands=("./scripts/lib_release.sh" "${MAKEFILE_DIR}/scripts/lib_release.sh")
-  local f
+  local f found=0
   for f in "${cands[@]}"; do
     if [[ -f "$f" ]]; then
-      log_info "[lib] sourcing: $f"
-      . "$f"
-      return 0
+      found=1
+      _try_safe_source_one "$f" || return $?   # ← 소스 중 에러는 즉시 비정상 반환
+      return 0                                  # 성공 소스
     fi
   done
   log_warn "[lib] lib_release.sh not found; using internal fallbacks"
-  return 1
+  return 0  # ← '파일 없음'은 정상(0)으로 처리
 }
+
 _umc_try_source() {
   local cands=("./scripts/lib_scaffold.sh" "${MAKEFILE_DIR}/scripts/lib_scaffold.sh")
   local f
   for f in "${cands[@]}"; do
     if [[ -f "$f" ]]; then
-      log_info "[lib] sourcing: $f"
-      . "$f"
+      _try_safe_source_one "$f" || return $?
       return 0
     fi
   done
   log_warn "[lib] lib_scaffold.sh not found; using internal scaffold fallbacks"
-  return 1
+  return 0
 }
+
 _umr_try_source || true
 _umc_try_source || true
 
