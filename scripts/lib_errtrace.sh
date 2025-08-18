@@ -134,3 +134,24 @@ xtrace::disable() {
     unset BASH_XTRACEFD
   fi
 }
+
+safe_source() {
+  # 사용법: safe_source "path/to/file.sh"
+  local f=$1
+  # 1) 파싱 검사 (파싱에러는 여기서 감지)
+  if ! bash -n "$f" 2> >(while IFS= read -r line; do
+        # 파싱 에러 메시지도 우리 포맷으로 남김
+        __ERRTRACE_CMD="source $f (parse)"
+        __ERRTRACE_SRC="$f"
+        __ERRTRACE_LINE=0
+        printf '%s\n' "$line" >&2
+      done); then
+    # 의도적으로 ERR 핸들러 호출
+    errtrace::__debug_capture
+    errtrace::_on_error
+    return 2
+  fi
+  # 2) 실제 로드 (여기부터는 실행 단계 → 기존 ERR 트랩이 잡음)
+  # shellcheck disable=SC1090
+  . "$f"
+}
