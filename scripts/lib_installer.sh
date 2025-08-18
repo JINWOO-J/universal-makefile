@@ -97,8 +97,8 @@ _umc_try_source() {
   return 0
 }
 
-_umr_try_source || true
-_umc_try_source || true
+_umr_try_source
+_umc_try_source
 
 # # ---- Fallbacks (lib_release.sh 미존재 시) ----
 # type umr_verify_sha256 >/dev/null 2>&1 || umr_verify_sha256() {
