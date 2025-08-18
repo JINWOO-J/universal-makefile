@@ -82,8 +82,8 @@ else
 	GET_NANO_CMD := date +%s%N
 endif
 
-ECHO_CMD = printf '%b\n'   # escape 해석
-SAY      = printf '%s\n'   # 리터럴 그대로
+# ECHO_CMD = printf '%b\n'   # escape 해석
+# SAY      = printf '%s\n'   # 리터럴 그대로
 
 
 ENV_VARS_BASE := REPO_HUB NAME ROLE VERSION TAGNAME ENV IMAGE_NAME APP_IMAGE_NAME FULL_TAG LATEST_TAG
