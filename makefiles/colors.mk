@@ -1,11 +1,20 @@
 # ANSI Color codes
-RED := \033[0;31m
-GREEN := \033[0;32m
-YELLOW := \033[0;33m
-BLUE := \033[0;34m
-MAGENTA := \033[0;35m
-CYAN := \033[0;36m
-RESET := \033[0m
+# RED := \033[0;31m
+# GREEN := \033[0;32m
+# YELLOW := \033[0;33m
+# BLUE := \033[0;34m
+# MAGENTA := \033[0;35m
+# CYAN := \033[0;36m
+# RESET := \033[0m
+
+ESC    := $(shell printf '\033')
+BLUE   := $(ESC)[34m
+GREEN  := $(ESC)[32m
+YELLOW := $(ESC)[33m
+RED    := $(ESC)[31m
+MAGENTA := $(ESC)[35m
+CYAN := $(ESC)[36m
+RESET  := $(ESC)[0m
 
 # define colorecho
 # 	@echo "$(BLUE)$(1)$(RESET)"
