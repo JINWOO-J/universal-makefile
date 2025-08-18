@@ -3,6 +3,11 @@
 # Shared utility functions for release download/extract logic and common helpers.
 # Safe to source from any shell script. Does not exit on errors; returns status codes instead.
 
+# ---- Bash 4.2 호환 보강: readarray가 없으면 mapfile로 폴백 ----
+if ! declare -F readarray >/dev/null 2>&1 && declare -F mapfile >/dev/null 2>&1; then
+  readarray() { mapfile "$@"; }
+fi
+
 # ----- Boolean helper -----
 umr_is_true() { case "${1:-}" in true|1|yes|on|Y|y) return 0;; *) return 1;; esac; }
 
@@ -52,25 +57,34 @@ umr_fetch_latest_release_tag() {
   [[ -n "${GITHUB_TOKEN:-}" ]] && auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
 
   if command -v curl >/dev/null 2>&1; then
-    tag=$(curl -fsSL "${auth_args[@]}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+    tag=$(
+      curl -fsSL \
+        ${auth_args[@]+"${auth_args[@]}"} \
+        "$api_url" \
+      | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+      | head -n1 || true
+    )
   elif command -v wget >/dev/null 2>&1; then
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-      tag=$(wget -qO- --header="Authorization: Bearer ${GITHUB_TOKEN}" "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+      tag=$(wget -qO- --header="Authorization: Bearer ${GITHUB_TOKEN}" "$api_url" \
+            | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+            | head -n1 || true)
     else
-      tag=$(wget -qO- "$api_url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+      tag=$(wget -qO- "$api_url" \
+            | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+            | head -n1 || true)
     fi
   fi
+
   if [[ -n "$tag" ]]; then
-    echo "$tag"
-    return 0
+    echo "$tag"; return 0
   fi
 
   if command -v git >/dev/null 2>&1; then
     tag=$(git ls-remote --tags --refs "https://github.com/${owner}/${repo}.git" 2>/dev/null \
       | awk '{print $2}' | sed 's@refs/tags/@@' | sort -Vr | head -n1)
     if [[ -n "$tag" ]]; then
-      echo "$tag"
-      return 0
+      echo "$tag"; return 0
     fi
   fi
   return 1
@@ -112,33 +126,40 @@ umr_build_tarball_urls() {
 umr_download_with_retries() {
   # usage: umr_download_with_retries URL OUT_FILE [HEADER1] [HEADER2] ...
   local url="$1" out="$2"; shift 2
-  local -a headers=("$@")
+  # 남은 인자는 헤더 (없을 수도 있음)
+  local -a headers=()
+  # "$@"는 항상 정의되어 있음 (함수 인자), 바로 복사
+  headers=( "$@" )
+
   local -a curl_headers=()
   local h
   for h in "${headers[@]}"; do
     curl_headers+=( -H "$h" )
   done
+
   local attempt=1
   while [[ $attempt -le ${CURL_RETRY_MAX} ]]; do
     if command -v curl >/dev/null 2>&1; then
-      # Do not leak headers in xtrace
+      # 헤더 노출 방지 위해 xtrace 잠시 해제
       local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
-      if curl -fSL --connect-timeout 10 --max-time 300 "${curl_headers[@]}" -o "$out" "$url"; then
+      if curl -fSL --connect-timeout 10 --max-time 300 \
+           ${curl_headers[@]+"${curl_headers[@]}"} \
+           -o "$out" "$url"; then
         [ "$_had_xtrace" -eq 1 ] && set -x
         [[ -s "$out" ]] && return 0
       fi
       [ "$_had_xtrace" -eq 1 ] && set -x
     elif command -v wget >/dev/null 2>&1; then
       local -a wget_hdr=()
-      for h in "${headers[@]}"; do wget_hdr+=(--header "$h"); done
-      if wget -q "${wget_hdr[@]}" -O "$out" "$url"; then
+      for h in "${headers[@]}"; do wget_hdr+=( --header "$h" ); done
+      if wget -q ${wget_hdr[@]+"${wget_hdr[@]}"} -O "$out" "$url"; then
         [[ -s "$out" ]] && return 0
       fi
     else
       return 127
     fi
-    # backoff
-    sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep ${CURL_RETRY_DELAY_SEC}
+    # backoff (4.2에서 동작)
+    sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep "${CURL_RETRY_DELAY_SEC}"
     attempt=$((attempt + 1))
   done
   return 1
@@ -148,22 +169,24 @@ umr_download_with_retries() {
 umr_download_tarball() {
   # usage: umr_download_tarball OWNER REPO REF OUT_TAR
   local owner="$1" repo="$2" ref="$3" out_tar="$4"
+
+  # URL 두 줄 읽기
   local primary mirror
   read -r primary < <(umr_build_tarball_urls "$owner" "$repo" "$ref")
-  read -r mirror < <(umr_build_tarball_urls "$owner" "$repo" "$ref" | sed -n '2p')
+  read -r mirror  < <(umr_build_tarball_urls "$owner" "$repo" "$ref" | sed -n '2p')
 
   local -a headers=()
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    headers+=("Authorization: token ${GITHUB_TOKEN}")  # CHANGED
-    headers+=("Accept: application/vnd.github+json")   # CHANGED
+    headers+=("Authorization: Bearer ${GITHUB_TOKEN}")
+    headers+=("Accept: application/vnd.github+json")
     headers+=("X-GitHub-Api-Version: 2022-11-28")
   fi
 
   # try primary then mirror
-  if umr_download_with_retries "$primary" "$out_tar" "${headers[@]}"; then
+  if umr_download_with_retries "$primary" "$out_tar" ${headers[@]+"${headers[@]}"}; then
     [[ -s "$out_tar" ]] && return 0
   fi
-  if [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar"; then
+  if [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" ${headers[@]+"${headers[@]}"}; then
     [[ -s "$out_tar" ]] && return 0
   fi
   return 1
@@ -177,7 +200,6 @@ umr_tar_first_dir() {
     return 2
   fi
   local first
-  # shellcheck disable=SC2010
   first=$(tar -tzf "$tarfile" 2>/dev/null | head -n1 | cut -d/ -f1 || true)
   [[ -n "$first" ]] || return 3
   echo "$first"
