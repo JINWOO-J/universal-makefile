@@ -123,54 +123,53 @@ umr_build_tarball_urls() {
 }
 
 # ----- Download a URL with retries -----
+# ----- Download a URL with retries (Bash 4.2 + set -u safe) -----
 umr_download_with_retries() {
-  # usage: umr_download_with_retries URL OUT_FILE [HEADER1] [HEADER2] ...
   local url="$1" out="$2"; shift 2
 
-  # 헤더를 먼저 배열로 수집
   local -a curl_headers=()
   local h
   for h in "$@"; do
-    # 빈 문자열이 섞이지 않게 필터
-    [[ -n "$h" ]] && curl_headers+=( -H "$h" )
+    curl_headers+=( -H "$h" )
   done
 
-  local attempt=1
-  while [[ $attempt -le ${CURL_RETRY_MAX} ]]; do
-    if command -v curl >/dev/null 2>&1; then
-      # ←← 여기: 한 줄 커맨드 대신 배열을 조립해서 실행
-      local -a cmd=( curl -fSL --connect-timeout 10 --max-time 300 )
-      if ((${#curl_headers[@]})); then
-        cmd+=("${curl_headers[@]}")
-      fi
-      cmd+=( -o "$out" "$url" )
+  if command -v curl >/dev/null 2>&1; then
+    local attempt
+    for attempt in $(seq 1 "${CURL_RETRY_MAX}"); do
+      local _had_xtrace=0
+      case "$-" in *x*) _had_xtrace=1; set +x ;; esac
 
-      # xtrace 감춤/복원
-      local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
-      if "${cmd[@]}"; then
+      if curl -fSL --connect-timeout 10 --max-time 300 \
+           "${curl_headers[@]}" \
+           -o "$out" "$url"; then
         ((_had_xtrace)) && set -x
         [[ -s "$out" ]] && return 0
       fi
       ((_had_xtrace)) && set -x
 
-    elif command -v wget >/dev/null 2>&1; then
+      local _delay=$(( CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)) ))
+      sleep "$_delay" || sleep "${CURL_RETRY_DELAY_SEC}"
+    done
+    return 1
+
+  elif command -v wget >/dev/null 2>&1; then
+    local attempt
+    for attempt in $(seq 1 "${CURL_RETRY_MAX}"); do
       local -a wget_hdr=()
-      for h in "$@"; do [[ -n "$h" ]] && wget_hdr+=( --header "$h" ); done
-      local -a wcmd=( wget -q -O "$out" )
-      ((${#wget_hdr[@]:-0})) && wcmd+=( "${wget_hdr[@]}" )
-      wcmd+=( "$url" )
-      if "${wcmd[@]}"; then
+      for h in "$@"; do wget_hdr+=( --header "$h" ); done
+
+      if wget -q -O "$out" "${wget_hdr[@]}" "$url"; then
         [[ -s "$out" ]] && return 0
       fi
 
-    else
-      return 127
-    fi
+      local _delay=$(( CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)) ))
+      sleep "$_delay" || sleep "${CURL_RETRY_DELAY_SEC}"
+    done
+    return 1
 
-    sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep "${CURL_RETRY_DELAY_SEC}"
-    attempt=$((attempt + 1))
-  done
-  return 1
+  else
+    return 127
+  fi
 }
 
 
