@@ -124,6 +124,8 @@ _on_exit() {
 trap '_on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 trap '_on_exit' EXIT
 
+declare -a auth_args=()
+declare -a headers=()
 
 # --- Project settings ---
 GITHUB_OWNER="jinwoo-j"
