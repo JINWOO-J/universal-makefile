@@ -20,7 +20,7 @@
 # 	@docker images $(FULL_TAG)
 
 build: check-docker make-build-args ## 🎯 Build the Docker image
-	@$(call print_color, $(BLUE),"🔨Building Docker image with tag: $(TAGNAME)")
+	@$(call print_color, $(BLUE),🔨Building Docker image with tag: $(TAGNAME))
 	# Use the 'timed_command' macro to measure execution time.
 	# The BUILD_ARGS file is no longer needed; pass the make variable directly.
 	$(call timed_command, Image Build $(FULL_TAG), \
@@ -33,7 +33,7 @@ build: check-docker make-build-args ## 🎯 Build the Docker image
 	)
 
 	@echo ""
-	@$(call print_color, $(BLUE),"--- Image Details ---")
+	@$(call print_color, $(BLUE),--- Image Details ---)
 	@docker images $(FULL_TAG)
 
 
@@ -46,7 +46,7 @@ push: build ## 🚀 Push image to registry
 tag-latest: build ## 🚀 Tag image as 'latest' and push
 	@$(call colorecho, 🏷️  Tagging images as 'latest'...)
 	@docker tag $(FULL_TAG) $(LATEST_TAG)
-	@$(call timed_command, "Push latest tag", \
+	@$(call timed_command, Push latest tag, \
 		docker push $(LATEST_TAG))
 	@$(call success, Tagged and pushed as 'latest')
 
