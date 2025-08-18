@@ -37,17 +37,17 @@ BUILD_DIR = dist
 
 # 가상환경 및 의존성 설치
 install: ## 📦 Install Python dependencies
-	@$(call colorecho, "📦 Installing Python dependencies...")
+	@$(call colorecho, 📦 Installing Python dependencies...)
 	@if command -v poetry >/dev/null 2>&1; then \
 		poetry install; \
 	else \
 		pip install -r requirements.txt; \
 	fi
-	@$(call success, "Dependencies installed")
+	@$(call success, Dependencies installed)
 
 # 개발 서버 시작
 dev-server: ## 🚀 Start development server
-	@$(call colorecho, "🚀 Starting development server...")
+	@$(call colorecho, 🚀 Starting development server...)
 	@if command -v poetry >/dev/null 2>&1; then \
 		poetry run python app/main.py; \
 	else \
@@ -56,7 +56,7 @@ dev-server: ## 🚀 Start development server
 
 # 테스트 실행
 test-unit: ## 🧪 Run unit tests with pytest
-	@$(call colorecho, "🧪 Running unit tests...")
+	@$(call colorecho, 🧪 Running unit tests...)
 	@if command -v poetry >/dev/null 2>&1; then \
 		poetry run pytest tests/ -v; \
 	else \
@@ -64,7 +64,7 @@ test-unit: ## 🧪 Run unit tests with pytest
 	fi
 
 test-coverage: ## 🧪 Run tests with coverage report
-	@$(call colorecho, "🧪 Running tests with coverage...")
+	@$(call colorecho, 🧪 Running tests with coverage...)
 	@if command -v poetry >/dev/null 2>&1; then \
 		poetry run pytest --cov=app tests/ --cov-report=html; \
 	else \
@@ -73,7 +73,7 @@ test-coverage: ## 🧪 Run tests with coverage report
 
 # 코드 품질 검사
 lint: ## 🔧 Run code linting
-	@$(call colorecho, "🔧 Running linter...")
+	@$(call colorecho, 🔧 Running linter...)
 	@if command -v poetry >/dev/null 2>&1; then \
 		poetry run flake8 app/ tests/; \
 		poetry run black --check app/ tests/; \
@@ -85,7 +85,7 @@ lint: ## 🔧 Run code linting
 	fi
 
 lint-fix: ## 🔧 Run linter and fix issues
-	@$(call colorecho, "🔧 Running linter with auto-fix...")
+	@$(call colorecho, 🔧 Running linter with auto-fix...)
 	@if command -v poetry >/dev/null 2>&1; then \
 		poetry run black app/ tests/; \
 		poetry run isort app/ tests/; \
@@ -96,7 +96,7 @@ lint-fix: ## 🔧 Run linter and fix issues
 
 # 타입 체크
 type-check: ## 🔍 Run type checking with mypy
-	@$(call colorecho, "🔍 Running type checker...")
+	@$(call colorecho, 🔍 Running type checker...)
 	@if command -v poetry >/dev/null 2>&1; then \
 		poetry run mypy app/; \
 	else \
@@ -105,7 +105,7 @@ type-check: ## 🔍 Run type checking with mypy
 
 # 보안 검사
 security-audit: ## 🔒 Run security audit
-	@$(call colorecho, "🔒 Running security audit...")
+	@$(call colorecho, 🔒 Running security audit...)
 	@if command -v poetry >/dev/null 2>&1; then \
 		poetry run safety check; \
 		poetry run bandit -r app/; \
@@ -116,7 +116,7 @@ security-audit: ## 🔒 Run security audit
 
 # 의존성 업데이트
 update-deps: ## 📦 Update dependencies
-	@$(call colorecho, "📦 Updating dependencies...")
+	@$(call colorecho, 📦 Updating dependencies...)
 	@if command -v poetry >/dev/null 2>&1; then \
 		poetry update; \
 	else \
@@ -125,7 +125,7 @@ update-deps: ## 📦 Update dependencies
 
 # 데이터베이스 마이그레이션 (예시 - FastAPI/Django)
 migrate: ## 🗄️ Run database migrations
-	@$(call colorecho, "🗄️ Running database migrations...")
+	@$(call colorecho, 🗄️ Running database migrations...)
 	@if command -v poetry >/dev/null 2>&1; then \
 		poetry run alembic upgrade head; \
 	else \
@@ -134,7 +134,7 @@ migrate: ## 🗄️ Run database migrations
 
 # 프로덕션 배포
 deploy-prod: lint test-unit build ## 🚀 Deploy to production
-	@$(call colorecho, "🚀 Deploying to production...")
+	@$(call colorecho, 🚀 Deploying to production...)
 	@# 여기에 실제 배포 로직 추가
 	@# 예: docker push $(FULL_TAG) && kubectl apply -f k8s/
-	@$(call success, "Deployed to production")
+	@$(call success, Deployed to production)

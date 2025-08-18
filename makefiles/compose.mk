@@ -47,27 +47,27 @@ endef
 # ================================================================
 
 up: env ## 🚀 Start services for the current ENV
-	@$(call colorecho, "🚀 Starting services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...")
+	@$(call colorecho, 🚀 Starting services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...)
 	@$(COMPOSE_COMMAND) up -d
-	@$(call success, "✅ Services started successfully.")
+	@$(call success, ✅ Services started successfully.)
 	@$(MAKE) status
 
 
 down: ## 🛑 Stop services for the current ENV
-	@$(call colorecho, "🛑 Stopping services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...")
+	@$(call colorecho, 🛑 Stopping services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...)
 	@$(COMPOSE_COMMAND) down --remove-orphans
-	@$(call success, "✅ Services stopped successfully.")
+	@$(call success, ✅ Services stopped successfully.)
 
 restart: ## 🔧 Restart services for the current ENV
-	@$(call colorecho, "🔄 Restarting services...")
+	@$(call colorecho, 🔄 Restarting services...)
 	@$(MAKE) down
 	@$(MAKE) up
 
 
 rebuild: ## 🔧 Rebuild services for the current ENV
-	@$(call colorecho, "🔨 Rebuilding services for [$(ENV)] environment with no-cache...")
+	@$(call colorecho, 🔨 Rebuilding services for [$(ENV)] environment with no-cache...)
 	@$(COMPOSE_COMMAND) build --no-cache
-	$(call colorecho, "🚀 Services started successfully with $(COMPOSE_COMMAND)")
+	$(call colorecho, 🚀 Services started successfully with $(COMPOSE_COMMAND))
 	@$(MAKE) status
 
 # ================================================================
@@ -75,31 +75,31 @@ rebuild: ## 🔧 Rebuild services for the current ENV
 # ================================================================
 
 dev-up: ## 🔧 Start development environment
-	@$(call colorecho, "🚀 Starting development environment...")
+	@$(call colorecho, 🚀 Starting development environment...)
 	@if [ ! -f $(DEV_COMPOSE_FILE) ]; then \
-		$(call warn, "Development compose file $(DEV_COMPOSE_FILE) not found"); \
-		$(call colorecho, "Using default compose file: $(COMPOSE_FILE)"); \
+		$(call warn, Development compose file $(DEV_COMPOSE_FILE) not found); \
+		$(call colorecho, Using default compose file: $(COMPOSE_FILE)); \
 		COMPOSE_FILE_TO_USE=$(COMPOSE_FILE); \
 	else \
 		COMPOSE_FILE_TO_USE=$(DEV_COMPOSE_FILE); \
 	fi; \
 	$(call timed_command, "Development environment startup", \
 		docker-compose -f $$COMPOSE_FILE_TO_USE up -d)
-	@$(call success, "Development environment started")
+	@$(call success, Development environment started)
 	@$(MAKE) dev-status
 
 dev-down: ## 🔧 Stop development environment
-	@$(call colorecho, "🛑 Stopping development environment...")
+	@$(call colorecho, 🛑 Stopping development environment...)
 	@docker-compose -f $(DEV_COMPOSE_FILE) down 2>/dev/null || \
 		docker-compose -f $(COMPOSE_FILE) down
-	@$(call success, "Development environment stopped")
+	@$(call success, Development environment stopped)
 
 dev-restart: ## 🔧 Restart development environment
 	@$(MAKE) dev-down
 	@$(MAKE) dev-up
 
 dev-logs: ## 🔧 Show development environment logs
-	@$(call colorecho, "📋 Showing development logs...")
+	@$(call colorecho, 📋 Showing development logs...)
 	@docker-compose -f $(DEV_COMPOSE_FILE) logs -f 2>/dev/null || \
 		docker-compose -f $(COMPOSE_FILE) logs -f
 
@@ -108,15 +108,15 @@ dev-logs: ## 🔧 Show development environment logs
 # ================================================================
 
 logs: ## 🔧 Show service logs
-	@$(call colorecho, "📋 Showing service logs...")
+	@$(call colorecho, 📋 Showing service logs...)
 	@$(COMPOSE_COMMAND) logs -f
 
 logs-tail: ## 🔧 Show last 100 lines of logs
-	@$(call colorecho, "📋 Showing last 100 lines of logs...")
+	@$(call colorecho, 📋 Showing last 100 lines of logs...)
 	@$(COMPOSE_COMMAND) logs -f --tail=100
 
 status: ## 📊 Show status of services
-	@$(call colorecho, "📊 Status for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]:")
+	@$(call colorecho, 📊 Status for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]:)
 	@$(COMPOSE_COMMAND) ps
 
 dev-status: ## 🔧 Show development services status
@@ -159,7 +159,7 @@ logs-service: ## 🔧 특정 서비스 로그 보기 (사용법: make logs-servi
 # 환경 관리
 # ================================================================
 # env: ## 🔧 Create .env file from current configuration
-# 	@$(call colorecho, "📝 Creating .env file...")
+# 	@$(call colorecho, 📝 Creating .env file...)
 # 	@echo "# Generated .env file - $(shell date)" > .env
 # 	@echo "REPO_HUB=$(REPO_HUB)" >> .env
 # 	@echo "NAME=$(NAME)" >> .env
@@ -171,7 +171,7 @@ logs-service: ## 🔧 특정 서비스 로그 보기 (사용법: make logs-servi
 # 	@echo "CURRENT_COMMIT_SHORT=$(CURRENT_COMMIT_SHORT)" >> .env
 # 	@echo "CURRENT_BRANCH=$(CURRENT_BRANCH)" >> .env
 # 	@echo "BUILD_REVISION=$(BUILD_REVISION)" >> .env
-# 	@$(call success, ".env file created successfully")
+# 	@$(call success, .env file created successfully)
 
 # env-show: env ## 🧐 Show current environment variables
 # 	@echo "$(BLUE)Current Environment Configuration:$(RESET)"

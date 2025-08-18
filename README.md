@@ -639,12 +639,12 @@ make up
 # 프로젝트별 배포
 deploy-to-k8s: ## 🚀 Deploy to Kubernetes
 	kubectl apply -f k8s/
-	$(call success, "Deployed to Kubernetes")
+	$(call success, Deployed to Kubernetes)
 
 # 프로젝트별 테스트
 integration-test: ## 🧪 Run integration tests
 	docker-compose -f docker-compose.test.yml up --abort-on-container-exit
-	$(call success, "Integration tests completed")
+	$(call success, Integration tests completed)
 ```
 
 ## 🏭 CI/CD 통합

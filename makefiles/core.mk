@@ -72,15 +72,18 @@ endif
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 	SED = sed -E -i ''
-	ECHO_OPTION = 
-	ECHO_CMD = echo $(ECHO_OPTION)
+	# ECHO_OPTION = 
+# ECHO_CMD = echo $(ECHO_OPTION)
 	GET_NANO_CMD := if command -v gdate >/dev/null; then gdate +%s%N; else python -c 'import time; print(int(time.time() * 10**9))'; fi
 else
 	SED = sed -i
-	ECHO_OPTION = -e
+# ECHO_OPTION = -e
 	ECHO_CMD = echo $(ECHO_OPTION)
 	GET_NANO_CMD := date +%s%N
 endif
+
+PRINTF_B := printf '%b\n'  # \n 같은 이스케이프 해석
+ECHO_CMD := $(PRINTF_B)
 
 # ECHO_CMD = printf '%b\n'   # escape 해석
 # SAY      = printf '%s\n'   # 리터럴 그대로
@@ -122,7 +125,7 @@ define error_echo
 if [ -n "$(RED)" ]; then \
     $(ECHO_CMD) "$(RED)❌ $(1)$(RESET)" >&2; \
 else \
-    ec$(ECHO_CMD)ho "ERROR: $(1)" >&2; \
+    $(ECHO_CMD) "ERROR: $(1)" >&2; \
 fi
 endef
 
@@ -207,29 +210,29 @@ endef
 
 # 필수 명령어 확인 함수
 define check_command
-@command -v $(1) >/dev/null 2>&1 || ($(call error_echo, "$(1) is required but not installed") && exit 1)
+@command -v $(1) >/dev/null 2>&1 || ($(call error_echo, $(1) is required but not installed) && exit 1)
 endef
 
 # Docker 실행 상태 확인
 define check_docker
-@docker info >/dev/null 2>&1 || ($(call error_echo, "Docker is not running") && exit 1)
+@docker info >/dev/null 2>&1 || ($(call error_echo, Docker is not running) && exit 1)
 endef
 
 define check_docker_command
-@docker info >/dev/null 2>&1 || ( $(call error_echo, "Docker is not running") ; exit 1 )
+@docker info >/dev/null 2>&1 || ( $(call error_echo, Docker is not running) ; exit 1 )
 endef
 
 
 # Git 작업 디렉토리 정리 상태 확인
 define check_git_clean
-@git diff --quiet || ( $(call warn_echo, "Working directory has uncommitted changes") && exit 1 )
+@git diff --quiet || ( $(call warn_echo, Working directory has uncommitted changes) && exit 1 )
 endef
 
 # Git 브랜치 확인
 define check_branch
 @CURRENT=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null); \
 if [ "$$CURRENT" != "$(1)" ]; then \
-    $(call error_echo, "You must be on '$(1)' branch (currently on '$$CURRENT')"); \
+    $(call error_echo, You must be on '$(1)' branch (currently on '$$CURRENT')); \
     exit 1; \
 fi
 endef
@@ -268,21 +271,26 @@ DEBUG_ARGS_CONTENT := $(BUILD_ARGS_CONTENT)
 # 	@$(foreach k,$(or $(strip $(VARS)),$(strip $(ENV_VARS)),$(ENV_VARS_DEFAULT)), printf "%s=%s\n" "$(k)" "$($(k))" ; )
 
 print-test:
-	@$(call print_color, $(BLUE), "print_color test")
-	@$(call colorecho, "🐚 colorecho test")
-	@$(call success_silent, "🐚 success_silent test")
-	@$(call warn_silent, "🐚 warn_silent test")
-	@$(call error_silent, "🐚 error_silent test")
-	@$(call blue_silent, "🐚 blue_silent test")
-	@$(call green_silent, "🐚 green_silent test")
-	@$(call yellow_silent, "🐚 yellow_silent test")
-	@$(call red_silent, "🐚 red_silent test")
-	@$(call success, "🐚 success test")
-	@$(call warn_echo, "🐚 warn test")
+	@$(call print_color, $(BLUE), print_color test)
+	@$(call colorecho, 🐚 colorecho test)
+	@$(call success_silent, 🐚 success_silent test)
+	@$(call warn_silent, 🐚 warn_silent test)
+	@$(call error_silent, 🐚 error_silent test)
+	@$(call blue_silent, 🐚 blue_silent test)
+	@$(call green_silent, 🐚 green_silent test)
+	@$(call yellow_silent, 🐚 yellow_silent test)
+	@$(call red_silent, 🐚 red_silent test)
+	@$(call success, 🐚 success test)
+	@$(call warn_echo, 🐚 warn test)
 	@$(call error_echo, 🐚 error test)
 	@$(call success_echo, 🐚 success_echo)
-
-
+	@$(call task_echo, 🐚 task_echo completed)
+	@$(call print_color, $(BLUE), print_color)
+	@$(call print_error, print_error)
+	@$(call success, success)
+	@$(call warn, warn)
+	@$(call blue, blue)
+	
 env-keys: ## 🔧 env-show 기본/전체 키 목록 출력
 	@echo "DEFAULT: $(ENV_VARS_DEFAULT)"
 	@echo "ALL:     $(ENV_VARS_ALL)"
@@ -332,7 +340,7 @@ env-file: ## 🔧 선택한 환경 변수를 .env 파일로 저장 (FILE=.env, V
 		one=$$(printf '%s' "$$v" | tr '\n' ' ' | sed 's/"/\\"/g'); \
 		printf '%s="%s"\n' "$$k" "$$one" >> "$$FILE"; \
 	done; \
-	$(call success_echo, "Wrote $$FILE")
+	$(call success_echo, Wrote $$FILE)
 
 # 간단 별칭: 디폴트로 .env 저장. 필요 시 FILE=path로 변경
 env: ## 🔧 현재 환경 변수를 .env로 저장 (별칭: env-file)
@@ -359,22 +367,22 @@ env-github: ## 🔧 GitHub Actions용 형식으로 출력 (VARS/ENV_VARS/PREFIX/
 	@$(MAKE) --no-print-directory -f $(firstword $(MAKEFILE_LIST)) env-show FORMAT=github VARS='$(VARS)' ENV_VARS='$(ENV_VARS)' PREFIX='$(PREFIX)' ALL='$(ALL)' SKIP_EMPTY='$(SKIP_EMPTY)' SHOW_SECRETS='$(SHOW_SECRETS)'
 
 check-check:
-	$(call success, "All required tools are available")
+	$(call success, All required tools are available)
 	$(call check_docker_command)
-	$(call success, "All required tools are available")
+	$(call success, All required tools are available)
 
 check-deps: ## 🔧 Check if required tools are installed
 	$(call check_command, docker)
 	$(call check_command, git)
-	@$(call success, "All required tools are available")
+	@$(call success, All required tools are available)
 
 check-docker: ## 🔧 Check if Docker is running
 	$(call check_docker)
-	@$(call success, "Docker is running")
+	@$(call success, Docker is running)
 
 check-git-clean: ## 🔧 Check if working directory is clean
 	$(call check_git_clean)
-	@$(call success, "Working directory is clean")
+	@$(call success, Working directory is clean)
 
 
 make-debug-mode:
@@ -386,7 +394,7 @@ make-debug-mode:
 	@echo ""
 	@# 미리 생성된 내용을 DEBUG_ARGS 파일에 한 번에 씁니다.
 	@echo '$(DEBUG_ARGS_CONTENT)' > DEBUG_ARGS
-	@$(call success, "DEBUG_ARGS file generated successfully.")
+	@$(call success, DEBUG_ARGS file generated successfully.)
 	@echo "Content of DEBUG_ARGS:"
 	@cat DEBUG_ARGS
 
@@ -394,7 +402,7 @@ make-build-args:
 	@$(call success, ----- Generating Docker Build Arguments (using foreach) -----)
 	@$(call yellow, BUILD_ARGS = $(BUILD_ARGS_CONTENT) \n)
 	@printf '%s' '$(BUILD_ARGS_CONTENT)' > BUILD_ARGS
-	@$(call success, "BUILD_ARGS file generated successfully.")
+	@$(call success, BUILD_ARGS file generated successfully.)
 
 
 # ================================================================
