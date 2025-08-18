@@ -40,9 +40,18 @@ _on_error() {
   local cmd="${3:-?}"
 
   trap - ERR
-  set +e
+  # 에러 처리 중 2차 오류 방지
+  set +eu
 
-  local -a pipe_status=( "${PIPESTATUS[@]}" )
+  # PIPESTATUS/BASH_LINENO/BASH_SOURCE 안전 복사
+  local -a pipe_status=()
+  if [[ ${PIPESTATUS+set} ]]; then
+    pipe_status=("${PIPESTATUS[@]}")
+  fi
+  local depth=0
+  if [[ ${BASH_LINENO+set} ]]; then
+    depth=${#BASH_LINENO[@]}
+  fi
 
   {
     printf '%s✖ exit %s%s\n' "$RED" "$exit_code" "$RESET"          # 종료 코드
@@ -52,7 +61,7 @@ _on_error() {
     printf '  func: %s\n' "${FUNCNAME[2]:-MAIN}"                   # 함수
     printf '   pwd: %s\n' "$PWD"                                   # 작업 디렉터리
     printf '  time: %s\n' "$(date +'%Y-%m-%d %H:%M:%S%z' 2>/dev/null || printf '?')" # 시간
-    if (( ${#pipe_status[@]} > 1 )); then
+    if (( ${#pipe_status[@]:-0} > 1 )); then
       printf '  pipe: ['
       local i
       for i in "${!pipe_status[@]}"; do
@@ -65,16 +74,19 @@ _on_error() {
 
   {
     local i=1 max="${STACK_MAX:-9999}" count=0
-    while (( i < ${#BASH_LINENO[@]} && count < max )); do
+    while (( i < depth && count < max )); do
+      local _func="${FUNCNAME[i]:-MAIN}"
+      local _src="${BASH_SOURCE[i]:-unknown}"
+      local _line="${BASH_LINENO[i-1]:-?}"
       printf '  at %s(%s:%s)\n' \
-        "${FUNCNAME[i]:-MAIN}" "${BASH_SOURCE[i]##*/}" "${BASH_LINENO[i-1]}"
+        "${_func}" "${_src##*/}" "${_line}"
       ((i++, count++))
     done
   } >&2
 
   if [[ -n "${SHOW_CONTEXT:-}" ]]; then
-    local src="${BASH_SOURCE[1]}"
-    if [[ -r "$src" && "$line_no" =~ ^[0-9]+$ ]]; then
+    local src="${BASH_SOURCE[1]:-}"
+    if [[ -n "$src" && -r "$src" && "$line_no" =~ ^[0-9]+$ ]]; then
       awk -v n="$line_no" -v w=2 '
         NR>=n-w && NR<=n+w {
           mark = (NR==n ? "=>" : "  ");
@@ -200,7 +212,7 @@ if ! declare -F umr_fetch_latest_release_tag >/dev/null 2>&1; then
 
     tag=$(
         curl -fsSL \
-        "${auth[@]+"${auth[@]}"}" \
+        ${auth[@]+"${auth[@]}"} \
         "$api_url" \
         | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
         | head -n1 || true
@@ -278,9 +290,9 @@ if ! declare -F umr_download_tarball >/dev/null 2>&1; then
       headers+=("Authorization: Bearer ${GITHUB_TOKEN}" "X-GitHub-Api-Version: 2022-11-28" "Accept: application/vnd.github+json")
     fi
     umr_download_with_retries "$primary" "$out_tar" \
-    "${headers[@]+"${headers[@]}"}" || {
+    ${headers[@]+"${headers[@]}"} || {
     [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" \
-        "${headers[@]+"${headers[@]}"}"
+        ${headers[@]+"${headers[@]}"} 
     }
 
   }
