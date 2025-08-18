@@ -126,44 +126,44 @@ umr_build_tarball_urls() {
 umr_download_with_retries() {
   # usage: umr_download_with_retries URL OUT_FILE [HEADER1] [HEADER2] ...
   local url="$1" out="$2"; shift 2
-  # 남은 인자는 헤더 (없을 수도 있음)
-  local -a headers=()
-  # "$@"는 항상 정의되어 있음 (함수 인자), 바로 복사
-  headers=( "$@" )
 
+  # Bash 4.2 + set -u 안전: 배열을 만들지 말고 "$@" 직접 사용
   local -a curl_headers=()
   local h
-  for h in "${headers[@]}"; do
+  for h in "$@"; do
     curl_headers+=( -H "$h" )
   done
 
   local attempt=1
   while [[ $attempt -le ${CURL_RETRY_MAX} ]]; do
     if command -v curl >/dev/null 2>&1; then
-      # 헤더 노출 방지 위해 xtrace 잠시 해제
       local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
       if curl -fSL --connect-timeout 10 --max-time 300 \
-           ${curl_headers[@]+"${curl_headers[@]}"} \
+           "${curl_headers[@]}" \
            -o "$out" "$url"; then
-        [ "$_had_xtrace" -eq 1 ] && set -x
+        ((_had_xtrace)) && set -x
         [[ -s "$out" ]] && return 0
       fi
-      [ "$_had_xtrace" -eq 1 ] && set -x
+      ((_had_xtrace)) && set -x
+
     elif command -v wget >/dev/null 2>&1; then
       local -a wget_hdr=()
-      for h in "${headers[@]}"; do wget_hdr+=( --header "$h" ); done
-      if wget -q ${wget_hdr[@]+"${wget_hdr[@]}"} -O "$out" "$url"; then
+      for h in "$@"; do wget_hdr+=( --header "$h" ); done
+      if wget -q "${wget_hdr[@]}" -O "$out" "$url"; then
         [[ -s "$out" ]] && return 0
       fi
+
     else
       return 127
     fi
-    # backoff (4.2에서 동작)
+
     sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep "${CURL_RETRY_DELAY_SEC}"
     attempt=$((attempt + 1))
   done
   return 1
 }
+
+
 
 # ----- High-level tarball download (select URLs and apply auth) -----
 umr_download_tarball() {
@@ -183,12 +183,22 @@ umr_download_tarball() {
   fi
 
   # try primary then mirror
-  if umr_download_with_retries "$primary" "$out_tar" ${headers[@]+"${headers[@]}"}; then
-    [[ -s "$out_tar" ]] && return 0
+  if ((${#headers[@]})); then
+    if umr_download_with_retries "$primary" "$out_tar" "${headers[@]}"; then
+      [[ -s "$out_tar" ]] && return 0
+    fi
+    if [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" "${headers[@]}"; then
+      [[ -s "$out_tar" ]] && return 0
+    fi
+  else
+    if umr_download_with_retries "$primary" "$out_tar"; then
+      [[ -s "$out_tar" ]] && return 0
+    fi
+    if [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar"; then
+      [[ -s "$out_tar" ]] && return 0
+    fi
   fi
-  if [[ -n "$mirror" ]] && umr_download_with_retries "$mirror" "$out_tar" ${headers[@]+"${headers[@]}"}; then
-    [[ -s "$out_tar" ]] && return 0
-  fi
+
   return 1
 }
 
