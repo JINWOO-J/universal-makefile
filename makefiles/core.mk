@@ -82,7 +82,7 @@ else
 	GET_NANO_CMD := date +%s%N
 endif
 
-ECHO_CMD = printf '%b\n'   # escape 해석
+ECHO_CMD = printf '%s\n'   # escape 해석
 SAY      = printf '%s\n'   # 리터럴 그대로
 
 
