@@ -166,41 +166,45 @@ type umr_build_tarball_urls >/dev/null 2>&1 || umr_build_tarball_urls() {
   esac
 }
 
-# Robust downloader with retries — 헤더 배열 가드
+# ----- Download a URL with retries -----
 type umr_download_with_retries >/dev/null 2>&1 || umr_download_with_retries() {
+  # usage: umr_download_with_retries URL OUT_FILE [HEADER1] [HEADER2] ...
   local url="$1" out="$2"; shift 2
 
-  if command -v curl >/dev/null 2>&1; then
-    local -a cmd=( curl -fSL --connect-timeout 10 --max-time 300 )
-    while (($#)); do cmd+=( -H "$1" ); shift; done
-    cmd+=( -o "$out" )
+  local -a curl_headers=()
+  local h
+  for h in "$@"; do
+    curl_headers+=( -H "$h" )
+  done
 
-    for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
+  local attempt=1
+  while [[ $attempt -le ${CURL_RETRY_MAX} ]]; do
+    if command -v curl >/dev/null 2>&1; then
       local _had_xtrace=0; case "$-" in *x*) _had_xtrace=1; set +x ;; esac
-      if "${cmd[@]}" "$url"; then
-        [[ -s "$out" ]] && { [[ $_had_xtrace -eq 1 ]] && set -x; return 0; }
-      fi
-      [[ $_had_xtrace -eq 1 ]] && set -x
-      # 지수 백오프 (Bash 4.2 OK), 실패시 고정 대기
-      sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep "${CURL_RETRY_DELAY_SEC}"
-    done
-    return 1
-
-  elif command -v wget >/dev/null 2>&1; then
-    for attempt in $(seq 1 ${CURL_RETRY_MAX}); do
-      local -a wget_cmd=( wget -q -O "$out" )
-      while (($#)); do wget_cmd+=( --header "$1" ); shift; done
-      if "${wget_cmd[@]}" "$url"; then
+      if curl -fSL --connect-timeout 10 --max-time 300 \
+           "${curl_headers[@]}" \
+           -o "$out" "$url"; then
+        ((_had_xtrace)) && set -x
         [[ -s "$out" ]] && return 0
       fi
-      sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep "${CURL_RETRY_DELAY_SEC}"
-    done
-    return 1
+      ((_had_xtrace)) && set -x
 
-  else
-    return 127
-  fi
+    elif command -v wget >/dev/null 2>&1; then
+      local -a wget_hdr=()
+      for h in "$@"; do wget_hdr+=( --header "$h" ); done
+      if wget -q "${wget_hdr[@]}" -O "$out" "$url"; then
+        [[ -s "$out" ]] && return 0
+      fi
+
+    else
+      return 127
+    fi
+    sleep $((CURL_RETRY_DELAY_SEC * (2 ** (attempt - 1)))) || sleep "${CURL_RETRY_DELAY_SEC}"
+    attempt=$((attempt + 1))
+  done
+  return 1
 }
+
 
 type umr_download_tarball >/dev/null 2>&1 || umr_download_tarball() {
   local owner="$1" repo="$2" ref="$3" out_tar="$4"
