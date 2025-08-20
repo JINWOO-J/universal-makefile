@@ -24,15 +24,15 @@ umc_debug() {
 
 umc_scaffold_project_files() {
   umc_debug "begin: MAKEFILE_DIR=${MAKEFILE_DIR:-universal-makefile} PWD=$(pwd) $*"
-  umc_create_main_makefile "$@"
-  umc_create_project_config "$@"
+  umc_create_main_makefile "${makefile_dir}"
+  umc_create_project_config "${makefile_dir}"
   umc_update_gitignore "$@"
   umc_create_environments "$@"
   umc_debug "end"
 }
 
 umc_create_main_makefile() {
-  local makefile_dir_var
+  local makefile_dir_var="${1:-${MAKEFILE_DIR:-universal-makefile}}" # CHANGED: 첫 번째 인자 우선 사용
   makefile_dir_var="${MAKEFILE_DIR:-universal-makefile}"
   umc_debug "umc_create_main_makefile: makefile_dir_var=${makefile_dir_var}"
 
