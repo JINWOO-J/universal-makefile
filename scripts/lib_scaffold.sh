@@ -95,6 +95,8 @@ EOF
 }
 
 umc_create_project_config() {
+  local makefile_dir="${1:-${MAKEFILE_DIR:-universal-makefile}}" # CHANGED: 첫 번째 인자 사용
+
   if [[ -f "project.mk" ]]; then
     umc_debug "project.mk already exists; skipping"
     return 0
@@ -129,7 +131,7 @@ DOCKER_BUILD_ARGS =
 COMPOSE_FILE = docker-compose.yml
 DEV_COMPOSE_FILE = docker-compose.dev.yml
 PROD_COMPOSE_FILE = docker-compose.prod.yml
-MAKEFILE_DIR = ${MAKEFILE_DIR:-universal-makefile}
+MAKEFILE_DIR = ${makefile_dir}
 EOF
   log_success "project.mk created"
 }
