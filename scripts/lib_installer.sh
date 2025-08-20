@@ -32,7 +32,7 @@ log_error()   { echo "${RED}❌ $1${RESET}" >&2; }
 
 GITHUB_OWNER="jinwoo-j"
 GITHUB_REPO="universal-makefile"
-MAKEFILE_DIR="${GITHUB_REPO}"
+MAKEFILE_DIR="${MAKEFILE_DIR:-"${GITHUB_REPO}"}"
 GITHUB_REPO_SLUG="${GITHUB_OWNER}/${GITHUB_REPO}"
 MAIN_BRANCH="main"
 
