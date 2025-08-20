@@ -23,7 +23,7 @@ umc_debug() {
 }
 
 umc_scaffold_project_files() {
-  umc_debug "begin: MAKEFILE_DIR=${MAKEFILE_DIR:-universal-makefile} PWD=$(pwd)"
+  umc_debug "begin: MAKEFILE_DIR=${MAKEFILE_DIR:-universal-makefile} PWD=$(pwd) $*"
   umc_create_main_makefile "$@"
   umc_create_project_config "$@"
   umc_update_gitignore "$@"
