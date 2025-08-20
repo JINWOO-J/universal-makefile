@@ -155,7 +155,7 @@ endef
 
 
 define timed_command
-	@$(call task_echo, Starting task: $(1)); \
+	@$(call task_echo,Starting task: $(1)); \
 	echo "----------------------------------------------------------------------------"; \
 	start_time_ns=$$( $(GET_NANO_CMD) ); \
 	if $(2); then \
@@ -178,7 +178,7 @@ define timed_command
 		fi; \
 		\
 		echo "----------------------------------------------------------------------------"; \
-		printf "$(GREEN)✅ Task '$(1)' completed $(BLUE)(⏱️  Elapsed time: $(YELLOW)%s$(BLUE))$(RESET)\n" "$$time_str"; \
+		printf "$(GREEN)✅ Task completed: $(1) $(BLUE)(⏱️  Elapsed time: $(YELLOW)%s$(BLUE))$(RESET)\n" "$$time_str"; \
 	else \
 		end_time_ns=$$( $(GET_NANO_CMD) ); \
 		duration_ns=$$((end_time_ns - start_time_ns)); \
@@ -199,7 +199,7 @@ define timed_command
 		fi; \
 		\
 		echo "----------------------------------------------------------------------------"; \
-		printf "$(RED)❌ Task '$(1)' failed $(BLUE)(⏱️  after $(YELLOW)%s$(BLUE))$(RESET)\n" "$$time_str"; \
+		printf "$(RED)❌ Task failed: $(1) $(BLUE)(⏱️  after $(YELLOW)%s$(BLUE))$(RESET)\n" "$$time_str"; \
 		exit 1; \
 	fi
 endef
