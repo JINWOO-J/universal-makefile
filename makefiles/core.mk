@@ -11,6 +11,7 @@ TAGNAME ?= $(VERSION)
 # Git 브랜치 설정 (project.mk에서 오버라이드 가능)
 MAIN_BRANCH ?= main
 DEVELOP_BRANCH ?= develop
+FORCE ?= false
 
 # 계산된 변수들
 CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
@@ -74,13 +75,14 @@ ifeq ($(UNAME_S),Darwin)
 	SED = sed -E -i ''
 	# ECHO_OPTION = 
 # ECHO_CMD = echo $(ECHO_OPTION)
-	GET_NANO_CMD := if command -v gdate >/dev/null; then gdate +%s%N; else python -c 'import time; print(int(time.time() * 10**9))'; fi
 else
 	SED = sed -i
 # ECHO_OPTION = -e
 	ECHO_CMD = echo $(ECHO_OPTION)
-	GET_NANO_CMD := date +%s%N
 endif
+
+PYTHON_GET_NANO_CMD := python -c '\''import time; print(int(time.time() * 10**9))'\''
+GET_NANO_CMD := if command -v gdate >/dev/null; then gdate +%s%N; else $(PYTHON_GET_NANO_CMD); fi
 
 PRINTF_B := printf '%b\n'  # \n 같은 이스케이프 해석
 ECHO_CMD := $(PRINTF_B)
@@ -94,9 +96,10 @@ ENV_VARS_GIT  := CURRENT_BRANCH MAIN_BRANCH DEVELOP_BRANCH CURRENT_COMMIT_SHORT 
 ENV_VARS_DKR  := DOCKERFILE_PATH DOCKER_BUILD_OPTION DOCKER_BUILDKIT BUILDKIT_INLINE_CACHE
 ENV_VARS_DEFAULT := $(ENV_VARS_BASE) $(ENV_VARS_GIT)
 ENV_VARS_ALL     := $(ENV_VARS_BASE) $(ENV_VARS_GIT) $(ENV_VARS_DKR)
+ENV_VARS_PASSTHROUGH := DEBUG FORCE FORCE ARGS MAKEFILE_DIR BACKUP DRY_RUN
 
 # export variables so shell recipes can read them via printenv
-export $(ENV_VARS_ALL)
+export $(ENV_VARS_ALL) $(ENV_VARS_PASSTHROUGH)
 
 # ================================================================
 # 공통 함수들
@@ -137,72 +140,152 @@ else \
 fi
 endef
 
-# 시간 측정 함수
-# define timed_command
-# @echo "⏰ Starting: $(1) -> $(2)"; \
-# echo "------------------------------------------------------------";\
-# start_time=$$(date +%s); \
-# $(2); \
-# end_time=$$(date +%s); \
-# duration=$$((end_time - start_time)); \
-# echo "------------------------------------------------------------";\
-# $(call success_echo, Completed '$(1)' in $$duration s)
-# endef
 
 define task_echo
 	$(ECHO_CMD) "\n$(YELLOW)🚀  $(1)$(RESET)"
 endef
 
 
-define timed_command
-	@$(call task_echo,Starting task: $(1)); \
-	echo "----------------------------------------------------------------------------"; \
-	start_time_ns=$$( $(GET_NANO_CMD) ); \
-	if $(2); then \
-		end_time_ns=$$( $(GET_NANO_CMD) ); \
-		duration_ns=$$((end_time_ns - start_time_ns)); \
-		time_str=""; \
+
+# PYTHON_GET_NANO_CMD := python -c 'import time; print(int(time.time() * 10**9))'
+# GET_NANO_CMD := if command -v gdate >/dev/null 2>&1; then gdate +%s%N; else $(PYTHON_GET_NANO_CMD); fi
+
+# ================================================================
+# 안전한 통합 timed_run 함수
+# ================================================================
+# 사용법:
+#   $(call timed_run, 작업명, 명령어)                    # 기본 (자동 감지)
+#   $(call timed_run, 작업명, 명령어, interactive)       # 강제 대화식 모드
+#   $(call timed_run, 작업명, 명령어, piped)            # 강제 파이프 모드
+#   $(call timed_run, 작업명, 명령어, quiet)            # 조용한 모드 (박스 없음)
+# ================================================================
+define timed_run
+	@export TIMED_MODE='$(3)'; \
+	export TIMED_CMD_NAME='$(1)'; \
+	bash -c ' \
+		set -o pipefail; \
+		_MODE="$$TIMED_MODE"; \
+		_CMD_NAME="$$TIMED_CMD_NAME"; \
 		\
-		if [ $$duration_ns -lt 1000000000 ]; then \
-			duration_ms=$$((duration_ns / 1000000)); \
-			time_str=$$(printf "%dms" $$duration_ms); \
-		else \
-			duration_s=$$((duration_ns / 1000000000)); \
-			minutes=$$((duration_s / 60)); \
-			seconds=$$((duration_s % 60)); \
-			if [ $$minutes -gt 0 ]; then \
-				time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
+		format_duration() { \
+			local duration_ns=$$1; \
+			if [ $$duration_ns -lt 1000000000 ]; then \
+				duration_ms=$$((duration_ns / 1000000)); \
+				printf "%dms" $$duration_ms; \
 			else \
-				time_str=$$(printf "%ds" $$seconds); \
+				duration_s=$$((duration_ns / 1000000000)); \
+				minutes=$$((duration_s / 60)); \
+				seconds=$$((duration_s % 60)); \
+				if [ $$minutes -gt 0 ]; then \
+					printf "%dm %ds" $$minutes $$seconds; \
+				else \
+					printf "%ds" $$seconds; \
+				fi; \
 			fi; \
-		fi; \
+		}; \
 		\
-		echo "----------------------------------------------------------------------------"; \
-		printf "$(GREEN)✅ Task completed: $(1) $(BLUE)(⏱️  Elapsed time: $(YELLOW)%s$(BLUE))$(RESET)\n" "$$time_str"; \
-	else \
-		end_time_ns=$$( $(GET_NANO_CMD) ); \
-		duration_ns=$$((end_time_ns - start_time_ns)); \
-		time_str=""; \
+		run_command() { \
+			$(2); \
+		}; \
 		\
-		if [ $$duration_ns -lt 1000000000 ]; then \
-			duration_ms=$$((duration_ns / 1000000)); \
-			time_str=$$(printf "%dms" $$duration_ms); \
-		else \
-			duration_s=$$((duration_ns / 1000000000)); \
-			minutes=$$((duration_s / 60)); \
-			seconds=$$((duration_s % 60)); \
-			if [ $$minutes -gt 0 ]; then \
-				time_str=$$(printf "%dm %ds" $$minutes $$seconds); \
+		if [ "$$_MODE" = "quiet" ]; then \
+			printf "$(YELLOW)⏱️  Starting: %s$(RESET)\n" "$$_CMD_NAME"; \
+			_START_TIME_NS=$$( $(GET_NANO_CMD) ); \
+			if run_command; then \
+				_END_TIME_NS=$$( $(GET_NANO_CMD) ); \
+				_DURATION_NS=$$((_END_TIME_NS - _START_TIME_NS)); \
+				_TIME_STR=$$(format_duration $$_DURATION_NS); \
+				printf "$(GREEN)✅ Completed in %s$(RESET)\n" "$$_TIME_STR"; \
 			else \
-				time_str=$$(printf "%ds" $$seconds); \
+				_EXIT_CODE=$$?; \
+				_END_TIME_NS=$$( $(GET_NANO_CMD) ); \
+				_DURATION_NS=$$((_END_TIME_NS - _START_TIME_NS)); \
+				_TIME_STR=$$(format_duration $$_DURATION_NS); \
+				printf "$(RED)❌ Failed after %s (exit code: %d)$(RESET)\n" "$$_TIME_STR" "$$_EXIT_CODE" >&2; \
+				exit $$_EXIT_CODE; \
 			fi; \
-		fi; \
-		\
-		echo "----------------------------------------------------------------------------"; \
-		printf "$(RED)❌ Task failed: $(1) $(BLUE)(⏱️  after $(YELLOW)%s$(BLUE))$(RESET)\n" "$$time_str"; \
-		exit 1; \
-	fi
+		else \
+			_START_MSG="🚀 Executing: $$_CMD_NAME"; \
+			_PADDING_LEN=$$(( 70 - $${#_START_MSG} )); \
+			[ $$_PADDING_LEN -lt 0 ] && _PADDING_LEN=0; \
+			_PADDING=$$(printf "─%.0s" $$(seq 1 $$_PADDING_LEN 2>/dev/null || :)); \
+			printf "\n$(YELLOW)┌── %s %s────┐$(RESET)\n" "$$_START_MSG" "$$_PADDING"; \
+			printf "$(YELLOW)│$(RESET)\n"; \
+			\
+			_START_TIME_NS=$$( $(GET_NANO_CMD) ); \
+			\
+			if [ "$$_MODE" = "interactive" ] || { [ -z "$$_MODE" ] && [ -t 0 ] && [ -t 1 ]; }; then \
+				if run_command; then \
+					_EXIT_CODE=0; \
+				else \
+					_EXIT_CODE=$$?; \
+				fi; \
+			else \
+				TEMP_FILE=$$(mktemp); \
+				trap "rm -f $$TEMP_FILE" EXIT; \
+				{ run_command 2>&1; echo $$? > $$TEMP_FILE; } | \
+				while IFS= read -r line; do \
+					printf "$(YELLOW)│$(RESET) %s\n" "$$line"; \
+				done; \
+				_EXIT_CODE=$$(cat $$TEMP_FILE 2>/dev/null || echo 1); \
+				rm -f $$TEMP_FILE; \
+			fi; \
+			\
+			_END_TIME_NS=$$( $(GET_NANO_CMD) ); \
+			_DURATION_NS=$$((_END_TIME_NS - _START_TIME_NS)); \
+			_TIME_STR=$$(format_duration $$_DURATION_NS); \
+			\
+			printf "$(YELLOW)│$(RESET)\n"; \
+			if [ "$$_EXIT_CODE" = "0" ] || [ "$$_EXIT_CODE" = "" ]; then \
+				_END_MSG="✅ SUCCESS (in $$_TIME_STR)"; \
+				_PADDING_LEN=$$(( 70 - $${#_END_MSG} )); \
+				[ $$_PADDING_LEN -lt 0 ] && _PADDING_LEN=0; \
+				_PADDING=$$(printf "─%.0s" $$(seq 1 $$_PADDING_LEN 2>/dev/null || :)); \
+				printf "$(GREEN)└── %s %s────┘$(RESET)\n" "$$_END_MSG" "$$_PADDING"; \
+			else \
+				_END_MSG="❌ FAILED (after $$_TIME_STR, code $$_EXIT_CODE)"; \
+				_PADDING_LEN=$$(( 70 - $${#_END_MSG} )); \
+				[ $$_PADDING_LEN -lt 0 ] && _PADDING_LEN=0; \
+				_PADDING=$$(printf "─%.0s" $$(seq 1 $$_PADDING_LEN 2>/dev/null || :)); \
+				printf "$(RED)└── %s %s────┘$(RESET)\n" "$$_END_MSG" "$$_PADDING" >&2; \
+				exit $$_EXIT_CODE; \
+			fi; \
+		fi \
+	'
 endef
+
+
+define timed_command
+	$(call timed_run,$(1),$(2))
+endef
+
+
+
+define timed_simple
+	$(call timed_run,$(1),$(2))
+endef
+
+
+# 명시적 대화식 모드 (install.sh 같은 대화식 스크립트용)
+define timed_interactive
+	$(call timed_run,$(1),$(2),interactive)
+endef
+
+# 파이프 모드 강제 (출력을 꾸미고 싶을 때)
+define timed_piped
+	$(call timed_run,$(1),$(2),piped)
+endef
+
+# 조용한 모드 (박스 없이 간단한 출력만)
+define timed_quiet
+	$(call timed_run,$(1),$(2),quiet)
+endef
+
+# 기존 timed_run_with_interactive 대체 (하위 호환성)
+define timed_run_with_interactive
+	$(call timed_run,$(1),$(2),interactive)
+endef
+
 
 define print_var
 	@printf "     $(BOLD)$(BLUE)%-20s$(RESET) : $(YELLOW)%s$(RESET)\n" "$(1)" "$(2)"
@@ -425,8 +508,10 @@ self-%:
 	#
 	@export DEBUG
 	@echo "DEBUG variable is: [$(DEBUG)]"
-	@$(call timed_command, Executing '$(MAKEFILE_DIR)/install.sh $(*) $(ARGS)', \
-		MAKEFILE_DIR="$(MAKEFILE_DIR)" $(MAKEFILE_DIR)/install.sh $(*) $(ARGS) \
+	@export FORCE
+	@echo "FORCE variable is: [$(FORCE)]"
+	@$(call timed_run_with_interactive, Executing '$(MAKEFILE_DIR)/install.sh $(*) $(ARGS)', \
+		FORCE=$(FORCE) MAKEFILE_DIR="$(MAKEFILE_DIR)" $(MAKEFILE_DIR)/install.sh $(*) $(ARGS) \
 	)
 
 

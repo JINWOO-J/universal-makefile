@@ -57,19 +57,31 @@ EOF_HEAD
 
 .DEFAULT_GOAL := help
 
-# 1. Project config
+# 프로젝트의 현재 환경을 정의합니다. (기본값: development)
+# (예: make build ENV=production)
+ENV ?= development
+
+# --- 설정 파일 로드 (우선순위가 낮은 것부터 순서대로) ---
+
+# 환경별 설정 파일을 먼저 로드
+#    - 예: production 환경에서는 DEBUG=false, development 환경에서는 DEBUG=true 등을 설정
+-include environments/$(ENV).mk
+
+#  프로젝트의 주된 설정을 로드합니다. (환경별 설정을 덮어쓸 수 있습니다)
+#    - 예: REPO_HUB, NAME 등 프로젝트의 고유하고 핵심적인 설정을 여기에 정의합니다.
+#    - 모든 팀원과 모든 환경에 일관되게 적용되어야 하는 값을 설정합니다.
 ifeq ($(wildcard project.mk),)
     $(warning project.mk not found. Run 'install.sh install')
 endif
 -include project.mk
+
+# 로컬 전용 설정을 마지막에 로드합니다. (모든 설정을 최종적으로 덮어쓸 수 있습니다)
+#    - 이 파일은 .gitignore에 포함되어야 하며, 개인 PC의 임시/특별 설정을 위함입니다.
 -include .project.local.mk
 
-# 2. Environments
-ENV ?= development
--include environments/$(ENV).mk
--include .project.local.mk
 
-# 3. Core system modules
+# Core system modules
+#    - 위에서 확정된 모든 변수들을 바탕으로 시스템이 동작합니다.
 include $(MAKEFILE_DIR)/makefiles/core.mk
 include $(MAKEFILE_DIR)/makefiles/help.mk
 include $(MAKEFILE_DIR)/makefiles/version.mk

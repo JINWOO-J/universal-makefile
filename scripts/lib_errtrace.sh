@@ -81,18 +81,62 @@ errtrace::chain_trap() {
 # --- fatal exit bridge: ERR를 못 탄 비정상 종료도 요약 출력
 errtrace::_on_exit() {
   local code=$?
+  # 종료 코드가 0이면(정상 종료) 아무것도 하지 않음
   (( code == 0 )) && return 0
-  set +e
-  # DEBUG에서 저장한 마지막 커맨드 문맥 사용
-  local src="${__ERRTRACE_SRC:-${BASH_SOURCE[1]:-n/a}}"
-  local line="${__ERRTRACE_LINE:-${BASH_LINENO[0]:-0}}"
-  local cmd="${__ERRTRACE_CMD:-${BASH_COMMAND}}"
-  echo -e "${ERRTRACE_RED}✖ fatal exit ${code}${ERRTRACE_RST}" >&2
-  echo -e "${ERRTRACE_YEL}↳ at ${src}:${line}${ERRTRACE_RST}" >&2
-  echo -e "${ERRTRACE_YEL}↳ last:${ERRTRACE_RST} ${cmd}" >&2
-  errtrace::stacktrace
-}
 
+  # 에러 처리 중 추가 에러 방지
+  set +e
+
+  # --- 색상 정의 (외부 변수가 없으면 기본값 사용) ---
+  local BOLD_RED="${ERRTRACE_BOLD_RED:-$(tput bold 2>/dev/null)$(tput setaf 1 2>/dev/null)}"
+  local RED="${ERRTRACE_RED:-$(tput setaf 1 2>/dev/null)}"
+  local YELLOW="${ERRTRACE_YEL:-$(tput setaf 3 2>/dev/null)}"
+  local BLUE="${ERRTRACE_BLU:-$(tput setaf 4 2>/dev/null)}"
+  local RESET="${ERRTRACE_RST:-$(tput sgr0 2>/dev/null)}"
+
+  # --- 컨텍스트 정보 수집 ---
+  # DEBUG 트랩에서 저장한 마지막 커맨드 문맥 사용
+  local src="${__ERRTRACE_SRC:-${BASH_SOURCE[1]:-n/a}}"
+  local line="${__ERRTRACE_LINE:-${BASH_LINENO[0]:-?}}"
+  local cmd="${__ERRTRACE_CMD:-${BASH_COMMAND:-?}}"
+  
+  # 추가 정보
+  local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S %Z")
+  local pid=$$
+  local user; user=$(whoami 2>/dev/null || echo "${USER:-unknown}")
+  local pwd_path; pwd_path=$(pwd)
+
+  # --- 에러 리포트 출력 ---
+  {
+    printf "\n"
+    printf "${BOLD_RED}┌─ ✖ FATAL ERROR ──────────────────────────────────────────────────────────┐${RESET}\n"
+    printf "${RED}│                                                                          │${RESET}\n"
+    printf "${RED}│${RESET}  An error occurred in the script. Execution has been halted.             ${RED}│${RESET}\n"
+    printf "${RED}│                                                                          │${RESET}\n"
+    printf "${RED}├─[ Context ]──────────────────────────────────────────────────────────────┤${RESET}\n"
+    printf "${RED}│                                                                          │${RESET}\n"
+    printf "${RED}│${RESET}  ${BLUE}%-10s${RESET}: %s\n" "Timestamp" "$timestamp"
+    printf "${RED}│${RESET}  ${BLUE}%-10s${RESET}: %s\n" "User" "$user"
+    printf "${RED}│${RESET}  ${BLUE}%-10s${RESET}: %s\n" "PID" "$pid"
+    printf "${RED}│${RESET}  ${BLUE}%-10s${RESET}: %s\n" "Directory" "$pwd_path"
+    printf "${RED}│                                                                          │${RESET}\n"
+    printf "${RED}├─[ Error Details ]────────────────────────────────────────────────────────┤${RESET}\n"
+    printf "${RED}│                                                                          │${RESET}\n"
+    printf "${RED}│${RESET}  ${YELLOW}%-10s${RESET}: %s\n" "Exit Code" "$code"
+    printf "${RED}│${RESET}  ${YELLOW}%-10s${RESET}: %s\n" "File" "$src"
+    printf "${RED}│${RESET}  ${YELLOW}%-10s${RESET}: %s\n" "Line" "$line"
+    printf "${RED}│${RESET}  ${YELLOW}%-10s${RESET}: %s\n" "Command" "$cmd"
+    printf "${RED}│                                                                          │${RESET}\n"
+    printf "${RED}├─[ Stack Trace ]──────────────────────────────────────────────────────────┤${RESET}\n"
+    printf "${RED}│                                                                          │${RESET}\n"
+    
+    # stacktrace 함수의 출력을 파이프로 받아 각 라인 앞에 박스 문자를 붙여줌
+    errtrace::stacktrace 2>&1 | sed "s/^/${RED}│${RESET}   /"
+
+    printf "${RED}│                                                                          │${RESET}\n"
+    printf "${RED}└──────────────────────────────────────────────────────────────────────────┘${RESET}\n"
+  } >&2
+}
 # --- enable에서 EXIT도 체인하도록 변경
 errtrace::enable() {
   set -E -o errtrace

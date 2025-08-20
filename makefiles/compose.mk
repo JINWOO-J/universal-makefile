@@ -48,15 +48,23 @@ endef
 
 up: env ## 🚀 Start services for the current ENV
 	@$(call colorecho, 🚀 Starting services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...)
-	@$(COMPOSE_COMMAND) up -d
-	@$(call success, ✅ Services started successfully.)
+# @$(COMPOSE_COMMAND) up -d
+
+	@$(call timed_command, Starting $(COMPOSE_FILE_TO_USE), \
+		$(COMPOSE_COMMAND) up -d)
+
+# @$(call success,Services started successfully.)
+	@$(call colorecho, \n)
 	@$(MAKE) status
 
 
 down: ## 🛑 Stop services for the current ENV
 	@$(call colorecho, 🛑 Stopping services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...)
-	@$(COMPOSE_COMMAND) down --remove-orphans
-	@$(call success, ✅ Services stopped successfully.)
+# @$(COMPOSE_COMMAND) down --remove-orphans
+	@$(call timed_command, Stopping $(COMPOSE_FILE_TO_USE), \
+		$(COMPOSE_COMMAND) down --remove-orphans)
+	@$(call colorecho, \n)
+	@$(MAKE) status
 
 restart: ## 🔧 Restart services for the current ENV
 	@$(call colorecho, 🔄 Restarting services...)

@@ -1,0 +1,9 @@
+# === Created by Universal Makefile System Installer ===
+services:
+  app:
+    image: ${REPO_HUB}/${NAME}:${TAGNAME}
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped

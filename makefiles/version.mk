@@ -38,6 +38,7 @@ show-umf-version:
 	@$(call print_var, UMF Pinned, $$(cat $(UMS_PIN_FILE) 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none'))
 	@$(call print_var, UMF Bootstrap Release, $$(cat $(UMS_BOOTSTRAP_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || echo 'none'))
 	@$(call print_var, Installation Type, $$(cat $(UMS_INSTALL_TYPE_FILE) 2>/dev/null || echo 'Unknown'))
+	@$(call print_var, MAKEFILE_DIR, $(MAKEFILE_DIR))
 
 # show-version: version ## 🔧 Alias for version command
 
