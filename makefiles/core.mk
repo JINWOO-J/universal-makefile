@@ -426,7 +426,7 @@ self-%:
 	@export DEBUG
 	@echo "DEBUG variable is: [$(DEBUG)]"
 	@$(call timed_command, Executing '$(MAKEFILE_DIR)/install.sh $(*) $(ARGS)', \
-		$(MAKEFILE_DIR)/install.sh $(*) $(ARGS) \
+		MAKEFILE_DIR="$(MAKEFILE_DIR)" $(MAKEFILE_DIR)/install.sh $(*) $(ARGS) \
 	)
 
 
