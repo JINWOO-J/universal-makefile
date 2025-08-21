@@ -17,8 +17,6 @@ DEV_COMPOSE_FILE ?= docker-compose.dev.yml
 PROD_COMPOSE_FILE ?= docker-compose.prod.yml
 
 
-
-
 # 환경별 Compose 파일 선택
 ifeq ($(ENV),development)
     ACTIVE_COMPOSE_FILE := $(DEV_COMPOSE_FILE)
@@ -49,10 +47,8 @@ endef
 up: env ## 🚀 Start services for the current ENV
 	@$(call colorecho, 🚀 Starting services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...)
 # @$(COMPOSE_COMMAND) up -d
-
 	@$(call timed_command, Starting $(COMPOSE_FILE_TO_USE), \
 		$(COMPOSE_COMMAND) up -d)
-
 # @$(call success,Services started successfully.)
 	@$(call colorecho, \n)
 	@$(MAKE) status
@@ -60,7 +56,6 @@ up: env ## 🚀 Start services for the current ENV
 
 down: ## 🛑 Stop services for the current ENV
 	@$(call colorecho, 🛑 Stopping services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...)
-# @$(COMPOSE_COMMAND) down --remove-orphans
 	@$(call timed_command, Stopping $(COMPOSE_FILE_TO_USE), \
 		$(COMPOSE_COMMAND) down --remove-orphans)
 	@$(call colorecho, \n)
@@ -74,8 +69,10 @@ restart: ## 🔧 Restart services for the current ENV
 
 rebuild: ## 🔧 Rebuild services for the current ENV
 	@$(call colorecho, 🔨 Rebuilding services for [$(ENV)] environment with no-cache...)
-	@$(COMPOSE_COMMAND) build --no-cache
-	$(call colorecho, 🚀 Services started successfully with $(COMPOSE_COMMAND))
+	@$(call timed_command, 🔨 Rebuild $(COMPOSE_COMMAND), \
+		$(COMPOSE_COMMAND) build --no-cache)
+	@$(call colorecho, 🚀 Services started successfully with $(COMPOSE_COMMAND))
+	@echo ""
 	@$(MAKE) status
 
 # ================================================================

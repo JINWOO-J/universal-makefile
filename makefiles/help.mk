@@ -81,7 +81,7 @@ _show-files-grouped:
 	  -v groups="$(GROUPS)" \
 	  -v show="$(SHOW_SOURCE)" \
 	  -v green="$(GREEN)" -v yellow="$(YELLOW)" -v reset="$(RESET)" \
-	  -f makefiles/show_grouped.awk \
+	  -f $(MAKEFILE_DIR)/makefiles/show_grouped.awk \
 	  $(MAKEFILE_LIST)
 
 # ================================================================
