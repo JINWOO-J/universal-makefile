@@ -14,11 +14,15 @@ DEVELOP_BRANCH ?= develop
 FORCE ?= false
 
 # 계산된 변수들
-CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
+CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | tr ' ' '-' || echo "unknown")
+ifeq ($(CURRENT_BRANCH),HEAD)
+    CURRENT_BRANCH := detached
+endif
 
 # 현재 짧은/긴 커밋 해시
-CURRENT_COMMIT_SHORT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-CURRENT_COMMIT_LONG := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+CURRENT_COMMIT_SHORT := $(shell git rev-parse --short HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
+CURRENT_COMMIT_LONG := $(shell git rev-parse HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
 
 # Git 워킹 디렉토리의 상태를 확인 (커밋되지 않은 변경사항이 있으면 출력 내용이 생김)
 GIT_STATUS := $(shell git status --porcelain 2>/dev/null)
@@ -145,6 +149,37 @@ define task_echo
 	$(ECHO_CMD) "\n$(YELLOW)🚀  $(1)$(RESET)"
 endef
 
+TIMER_SCRIPT := $(MAKEFILE_DIR)/scripts/timed_run_script.sh
+
+sh_quote = $(subst ','\'',$(1))
+
+# 공통 실행 코어
+define run_core
+	@TIMED_TASK_NAME='$(call sh_quote,$(strip $(1)))' \
+	TIMED_DEBUG="$(DEBUG)" \
+	TIMED_MODE="$(2)" \
+	$(TIMER_SCRIPT) $(3)
+endef
+
+# auto (기본)
+define run_auto
+	$(call run_core,$(1),$(or $(3),$(TIMED_MODE)),$(2))
+endef
+
+# pipe 고정
+define run_pipe
+	$(call run_core,$(1),pipe,$(2))
+endef
+
+# quiet 고정
+define run_quiet
+	$(call run_core,$(1),quiet,$(2))
+endef
+
+# interactive 고정
+define run_interactive
+	$(call run_core,$(1),interactive,$(2))
+endef
 
 
 # PYTHON_GET_NANO_CMD := python -c 'import time; print(int(time.time() * 10**9))'
@@ -241,13 +276,13 @@ define timed_run
 				_PADDING_LEN=$$(( 70 - $${#_END_MSG} )); \
 				[ $$_PADDING_LEN -lt 0 ] && _PADDING_LEN=0; \
 				_PADDING=$$(printf "─%.0s" $$(seq 1 $$_PADDING_LEN 2>/dev/null || :)); \
-				printf "$(GREEN)└── %s %s────┘$(RESET)\n" "$$_END_MSG" "$$_PADDING"; \
+				printf "$(GREEN)└── %s %s────┘$(RESET)\n\n" "$$_END_MSG" "$$_PADDING"; \
 			else \
 				_END_MSG="❌ FAILED (after $$_TIME_STR, code $$_EXIT_CODE)"; \
 				_PADDING_LEN=$$(( 70 - $${#_END_MSG} )); \
 				[ $$_PADDING_LEN -lt 0 ] && _PADDING_LEN=0; \
 				_PADDING=$$(printf "─%.0s" $$(seq 1 $$_PADDING_LEN 2>/dev/null || :)); \
-				printf "$(RED)└── %s %s────┘$(RESET)\n" "$$_END_MSG" "$$_PADDING" >&2; \
+				printf "$(RED)└── %s %s────┘$(RESET)\n\n" "$$_END_MSG" "$$_PADDING" >&2; \
 				exit $$_EXIT_CODE; \
 			fi; \
 		fi \
@@ -256,10 +291,8 @@ endef
 
 
 define timed_command
-	$(call timed_run,$(1),$(2))
+	$(call timed_run,$(1),$(2), pipe)
 endef
-
-
 
 define timed_simple
 	$(call timed_run,$(1),$(2))

@@ -19,29 +19,36 @@
 # 	@echo "$(BLUE)--- 이미지 상세 정보 ---$(RESET)"
 # 	@docker images $(FULL_TAG)
 
+BUILD_NO_CACHE :=
+ifeq ($(FORCE_REBUILD),true)
+  BUILD_NO_CACHE = --no-cache
+endif
+
 build: check-docker make-build-args ## 🎯 Build the Docker image
 	@$(call print_color, $(BLUE),🔨Building Docker image with tag: $(TAGNAME))
 	# Use the 'timed_command' macro to measure execution time.
 	# The BUILD_ARGS file is no longer needed; pass the make variable directly.
-	$(call timed_command, Image Build $(FULL_TAG), \
+	$(call run_pipe, Image Build $(FULL_TAG), \
 		DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker build \
 			$(DOCKER_BUILD_OPTION) \
 			$(BUILD_ARGS_CONTENT) \
+			$(BUILD_NO_CACHE) \
 			-f $(DOCKERFILE_PATH) \
 			-t $(FULL_TAG) \
 			. \
 	)
-
 	@echo ""
 	@$(call print_color, $(BLUE),--- Image Details ---)
 	@docker images $(FULL_TAG)
 
+build-clean: ## 🎯 Build without cache
+	@$(call print_color, $(BLUE),🔨Building Docker image without cache)
+	@$(MAKE) build FORCE_REBUILD=true
 
-push: build ## 🚀 Push image to registry
-	@$(call colorecho, 📦 Pushing images to registry...)
-	@$(call timed_command, "Docker push", \
-		docker push $(FULL_TAG))
-	@$(call success, Successfully pushed '$(FULL_TAG)')
+
+ensure-image:
+	@docker image inspect $(FULL_TAG) >/dev/null 2>&1 || { \
+		echo "❌ image not found: $(FULL_TAG). Run 'make build' first."; exit 1; }
 
 tag-latest: build ## 🚀 Tag image as 'latest' and push
 	@$(call colorecho, 🏷️  Tagging images as 'latest'...)
@@ -50,19 +57,31 @@ tag-latest: build ## 🚀 Tag image as 'latest' and push
 		docker push $(LATEST_TAG))
 	@$(call success, Tagged and pushed as 'latest')
 
+push: ensure-image ## 🚀 Push image to registry
+	@$(call colorecho, 📦 Pushing images to registry...)
+	@$(call run_pipe, "Docker push", docker push $(FULL_TAG))
+	@$(call success, Successfully pushed '$(FULL_TAG)')
+
+build-push: build push ## 🚀 Build then push
+
+push-latest: ensure-image ## 🚀 Push 'latest' tag only
+	$(call run_pipe, Docker push $(LATEST_TAG), docker push $(LATEST_TAG))
+
+publish-all: build tag-latest push push-latest ## 🚀 Publish versioned + latest
+
 # ================================================================
 # 개발 및 디버깅 타겟들
 # ================================================================
 
-bash: build ## 🔧 Run bash in the container
+bash: ensure-image ## 🔧 Run bash in the container
 	@$(call colorecho, 🐚 Starting bash in container...)
 	@docker run -it --rm --name $(NAME)-debug $(FULL_TAG) sh
 
-run: build ## 🔧 Run the container interactively
+run: ensure-image ## 🔧 Run the container interactively
 	@$(call colorecho, 🚀 Running container interactively...)
 	@docker run -it --rm --name $(NAME)-run $(FULL_TAG)
 
-exec: ## 🔧 Execute command in running container
+exec: ensure-image  ## 🔧 Execute command in running container
 	@$(call colorecho, 🔧 Executing in running container...)
 	@docker exec -it $(NAME) sh
 
@@ -181,9 +200,6 @@ image-history: build ## 📈 Show image build history
 # ================================================================
 # 캐시 관리
 # ================================================================
-
-build-no-cache: check-docker ## 🎯 Build without cache
-	@$(MAKE) build FORCE_REBUILD=true
 
 clear-build-cache: ## 🧹 Clear Docker build cache
 	@$(call colorecho, 🧹 Clearing Docker build cache...)
