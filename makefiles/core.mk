@@ -7,13 +7,14 @@ REPO_HUB ?= defaultrepo
 NAME ?= defaultapp
 VERSION ?= v1.0.0
 
-_RAW_TAGNAME = $(or $(TAGNAME),$(VERSION))
-_SAFE_TAGNAME := $(shell echo '$(_RAW_TAGNAME)' | sed 's/[^a-zA-Z0-9_.-]/-/g')
+_ORIGINAL_TAGNAME := $(TAGNAME)
+_SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION))
+_SAFE_TAGNAME := $(shell echo '$(_SOURCE_FOR_SANITIZE)' | sed 's/[^a-zA-Z0-9_.-]/-/g')
 
 override TAGNAME := $(_SAFE_TAGNAME)
 
-ifneq ($(_RAW_TAGNAME),$(_SAFE_TAGNAME))
-$(info ⚠️  Warning: Original tag '$(_RAW_TAGNAME)' contained invalid characters. Sanitized to '$(TAGNAME)'.)
+ifneq ($(_SOURCE_FOR_SANITIZE),$(_SAFE_TAGNAME))
+$(info ⚠️  Warning: Original tag '$(_SOURCE_FOR_SANITIZE)' contained invalid characters. Sanitized to '$(TAGNAME)'.)
 endif
 
 # Git 브랜치 설정 (project.mk에서 오버라이드 가능)
