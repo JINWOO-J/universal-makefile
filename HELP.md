@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.149
-Project: universal-makefile vv1.0.149
+📋 Universal Makefile System v1.0.150
+Project: universal-makefile vv1.0.150
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
@@ -70,6 +70,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   uv                   Update version (shortcut)  [version.mk]
   update-version       Update version using appropriate tool  [version.mk]
   update-version-file  Update version in specific file  [version.mk]
+  version-sync-ts      Sync version.ts placeholders (@VERSION, @VERSION_DETAIL, @VERSION_NAME)  [version.mk]
   version-tag          Create version tag without release  [version.mk]
   push-tags            Push all tags to remote  [version.mk]
   delete-tag           Delete version tag (usage: make delete-tag TAG=v1.0.0)  [version.mk]
