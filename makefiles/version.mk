@@ -16,6 +16,7 @@ UM_VERSION_FILE ?= $(MAKEFILE_DIR)/.version
 UMS_PIN_FILE ?= .ums-version
 UMS_BOOTSTRAP_FILE ?= .ums-release-version
 UMS_INSTALL_TYPE_FILE ?= .ums-install-type
+VERSION_TS_FILE ?= src/app/environment/version.ts
 
 
 # ================================================================
@@ -187,8 +188,41 @@ update-version-file: ## 🔧 Update version in specific file
 	if [ -n "$(VERSION_POST_UPDATE_HOOK)" ]; then \
 		$(MAKE) $(VERSION_POST_UPDATE_HOOK) VERSION=$(VERSION_TO_UPDATE); \
 	fi
+	
 
-.PHONY: update-version-file
+version-sync-ts: ## 🔧 Sync version.ts placeholders (@VERSION, @VERSION_DETAIL, @VERSION_NAME)
+	@$(call colorecho, 🧩 Syncing $(VERSION_TS_FILE))
+	@if [ ! -f "$(VERSION_TS_FILE)" ]; then \
+		$(call error, "File not found: $(VERSION_TS_FILE)"); \
+		exit 1; \
+	fi
+	@if [ -z "$(VERSION)" ]; then \
+		$(call error, "VERSION is empty. ex) make version-sync-ts VERSION=v1.2.3"); \
+		exit 1; \
+	fi
+	@$(call print_var, Target File, $(VERSION_TS_FILE))
+	@$(call print_var, VERSION, $(VERSION))
+	@$(call print_var, VERSION_DETAIL, $(VERSION_DETAIL))
+	@$(call print_var, VERSION_NAME, $(VERSION_NAME))
+	@$(ECHO_CMD) "$(BLUE)🔎 Before:$(RESET)"
+	@grep -nE "@VERSION \*/ '|@VERSION_DETAIL \*/ '|@VERSION_NAME \*/ '" "$(VERSION_TS_FILE)" || true
+ifeq ($(UNAME_S),Darwin)
+	@$(call colorecho, 🛠️  Applying replacements (Darwin/sed -E))
+	@$(SED) "s/(\/\* @VERSION \*\/ ')[^']*(')/\1$(VERSION)\2/" "$(VERSION_TS_FILE)"
+	@$(SED) "s/(\/\* @VERSION_DETAIL \*\/ ')[^']*(')/\1$(VERSION_DETAIL)\2/" "$(VERSION_TS_FILE)"
+	@$(SED) "s/(\/\* @VERSION_NAME \*\/ ')[^']*(')/\1$(VERSION_NAME)\2/" "$(VERSION_TS_FILE)"
+else
+	@$(call colorecho, 🛠️  Applying replacements (GNU sed -r))
+	@$(SED) "s/\(\/\* @VERSION \*\/ '\)[^']*\('\)/\1$(VERSION)\2/" "$(VERSION_TS_FILE)"
+	@$(SED) "s/\(\/\* @VERSION_DETAIL \*\/ '\)[^']*\('\)/\1$(VERSION_DETAIL)\2/" "$(VERSION_TS_FILE)"
+	@$(SED) "s/\(\/\* @VERSION_NAME \*\/ '\)[^']*\('\)/\1$(VERSION_NAME)\2/" "$(VERSION_TS_FILE)"
+endif
+	@$(ECHO_CMD) "$(BLUE)🔎 After:$(RESET)"
+		@grep -nE "@VERSION \*/ '|@VERSION_DETAIL \*/ '|@VERSION_NAME \*/ '" "$(VER_FILE)" || true
+	@$(call success, version.ts synced successfully)
+
+
+.PHONY: update-version-file version-sync-ts
 
 
 # ================================================================
