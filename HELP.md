@@ -1,18 +1,21 @@
+⚠️  Warning: Original tag '' contained invalid characters. Sanitized to 'v1.0.151'.
 
-📋 Universal Makefile System v1.0.150
-Project: universal-makefile vv1.0.150
+📋 Universal Makefile System v1.0.151
+Project: universal-makefile vv1.0.151
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
 Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/version.mk makefiles/colors.mk makefiles/docker.mk makefiles/compose.mk makefiles/git-flow.mk makefiles/colors.mk makefiles/cleanup.mk
 
 🎯 Main Build Targets:
+⚠️  Warning: Original tag '' contained invalid characters. Sanitized to 'v1.0.151'.
   all                  Build everything (env + version + build)  [Makefile]
   build                Build the Docker image  [docker.mk]
   build-clean          Build without cache  [docker.mk]
   build-multi          Build multi-platform image (amd64, arm64)  [docker.mk]
 
 🚀 Release & Deploy:
+⚠️  Warning: Original tag '' contained invalid characters. Sanitized to 'v1.0.151'.
   release              Full release process (build + push + tag latest)  [Makefile]
   tag-latest           Tag image as 'latest' and push  [docker.mk]
   push                 Push image to registry  [docker.mk]
@@ -27,6 +30,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   finish-hotfix        Finish hotfix (merge to main and develop)  [git-flow.mk]
 
 🌿 Git Workflow:
+⚠️  Warning: Original tag '' contained invalid characters. Sanitized to 'v1.0.151'.
   ensure-clean         Ensure clean working directory  [git-flow.mk]
   git-status           Show comprehensive git status  [git-flow.mk]
   git-branches         Show all branches with status  [git-flow.mk]
@@ -42,6 +46,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   start-hotfix         Start hotfix branch from main  [git-flow.mk]
 
 🔧 Development & Debug:
+⚠️  Warning: Original tag '' contained invalid characters. Sanitized to 'v1.0.151'.
   update-makefile-system Update makefile system  [Makefile]
   show-makefile-info   Show makefile system information  [Makefile]
   env-keys             env-show 기본/전체 키 목록 출력  [core.mk]
@@ -115,6 +120,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   bump-major           Bump major version  [git-flow.mk]
 
 🧹 Cleanup & Utils:
+⚠️  Warning: Original tag '' contained invalid characters. Sanitized to 'v1.0.151'.
   docker-clean         Clean Docker resources (containers, images, volumes)  [docker.mk]
   docker-deep-clean    Deep clean Docker (DANGEROUS - removes all unused resources)  [docker.mk]
   clear-build-cache    Clear Docker build cache  [docker.mk]
