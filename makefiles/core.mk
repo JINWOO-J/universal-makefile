@@ -6,7 +6,17 @@
 REPO_HUB ?= defaultrepo
 NAME ?= defaultapp
 VERSION ?= v1.0.0
-TAGNAME ?= $(VERSION)
+
+_RAW_TAGNAME := $(or $(TAGNAME),$(VERSION))
+override TAGNAME := $(shell echo '$(_RAW_TAGNAME)' | sed 's/[^a-zA-Z0-9_.-]/-/g')
+
+ifneq ($(_RAW_TAGNAME),$(TAGNAME))
+$(info ⚠️  Warning: Original tag '$(_RAW_TAGNAME)' contained invalid characters. Sanitized to '$(TAGNAME)'.)
+endif
+
+ifneq ($(_UNSAFE_TAGNAME),$(TAGNAME))
+$(info ⚠️  Warning: Original tag '$(_UNSAFE_TAGNAME)' contained invalid characters. Sanitized to '$(TAGNAME)'.)
+endif
 
 # Git 브랜치 설정 (project.mk에서 오버라이드 가능)
 MAIN_BRANCH ?= main
