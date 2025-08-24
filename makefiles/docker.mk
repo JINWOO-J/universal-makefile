@@ -8,17 +8,19 @@
 # 메인 Docker 타겟들
 # ================================================================
 
-# build: check-docker make-build-args  ## 🎯 Docker 이미지 빌드
-# 	@echo "🔨 Docker 이미지를 빌드합니다... TAG: $(TAGNAME)"
-# 	@DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker build $(DOCKER_BUILD_OPTION) \
-# 		$(shell cat BUILD_ARGS)  \
-# 		-f $(DOCKERFILE_PATH) \
-# 		-t $(FULL_TAG) .
-# 	@echo ""
-# 	@echo "$(GREEN)✅ 이미지 빌드 성공: '$(FULL_TAG)'$(RESET)"
-# 	@echo "$(BLUE)--- 이미지 상세 정보 ---$(RESET)"
-# 	@docker images $(FULL_TAG)
+CACHE_SCOPE ?= $(or $(SCOPE),$(shell git rev-parse --abbrev-ref HEAD))
+CACHE_FROM  := --cache-from=type=gha,scope=$(CACHE_SCOPE)
+CACHE_TO    := --cache-to=type=gha,mode=max,scope=$(CACHE_SCOPE)
 
+# buildx 출력 방식: 기본은 로컬 데몬에 적재(--load)
+# PUSH=1로 호출하면 --push로 전환 (CI에서 push 타겟과 함께 사용)
+BUILD_OUTPUT := --load
+ifeq ($(PUSH),1)
+BUILD_OUTPUT := --push
+endif
+
+# buildx 공통 옵션
+BUILDX_FLAGS := $(CACHE_FROM) $(CACHE_TO) $(BUILD_OUTPUT) --progress=plain
 BUILD_NO_CACHE :=
 ifeq ($(FORCE_REBUILD),true)
   BUILD_NO_CACHE = --no-cache
@@ -26,20 +28,20 @@ endif
 
 build: check-docker make-build-args ## 🎯 Build the Docker image
 	@$(call print_color, $(BLUE),🔨Building Docker image with tag: $(TAGNAME))
-	# Use the 'timed_command' macro to measure execution time.
-	# The BUILD_ARGS file is no longer needed; pass the make variable directly.
 	$(call run_pipe, Image Build $(FULL_TAG), \
-		DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker build \
+		DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker buildx build \
 			$(DOCKER_BUILD_OPTION) \
 			$(BUILD_ARGS_CONTENT) \
 			$(BUILD_NO_CACHE) \
 			-f $(DOCKERFILE_PATH) \
 			-t $(FULL_TAG) \
+			$(BUILDX_FLAGS) \
 			. \
 	)
 	@echo ""
 	@$(call print_color, $(BLUE),--- Image Details ---)
 	@docker images $(FULL_TAG)
+
 
 build-clean: ## 🎯 Build without cache
 	@$(call print_color, $(BLUE),🔨Building Docker image without cache)
