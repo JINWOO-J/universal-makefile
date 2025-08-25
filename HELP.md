@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.153
-Project: universal-makefile vv1.0.153
+📋 Universal Makefile System v1.0.154
+Project: universal-makefile vv1.0.154
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
@@ -10,6 +10,8 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   all                  Build everything (env + version + build)  [Makefile]
   build                Build the Docker image  [docker.mk]
   build-clean          Build without cache  [docker.mk]
+  build-local          Build locally without any cache (for testing)  [docker.mk]
+  build-legacy         Build the Docker image  [docker.mk]
   build-multi          Build multi-platform image (amd64, arm64)  [docker.mk]
 
 🚀 Release & Deploy:
@@ -20,6 +22,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   push-latest          Push 'latest' tag only  [docker.mk]
   publish-all          Publish versioned + latest  [docker.mk]
   up                   Start services for the current ENV  [compose.mk]
+  bump-and-push-tag-remote One-shot: compute next (remote) + create + push (BUMP=patch|minor|major)  [git-flow.mk]
   finish-release       Complete release process (merge to main and develop, create tag)  [git-flow.mk]
   auto-release         Automated release process  [git-flow.mk]
   update-and-release   Update version, then run auto-release (alias: ur)  [git-flow.mk]
