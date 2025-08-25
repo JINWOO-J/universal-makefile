@@ -31,6 +31,18 @@
 
 ```bash
 # 원격 부트스트랩: 레포가 없는 곳에서 실행 → 프로젝트 디렉토리 생성, 릴리스 설치, 스캐폴딩까지 자동
+wget https://raw.githubusercontent.com/jinwoo-j/universal-makefile/main/setup.sh && chmod +x setup.sh && ./setup.sh
+
+# 자동으로 <universal-makefile> 디렉토리가 생기고, 내부에서 install.sh --release가 실행됩니다.
+make help
+
+# 주의: setup.sh는 "부트스트랩 전용"입니다.
+# - 프로젝트 리포 내부나 UMF 시스템 디렉토리(universal-makefile) 안에서는 실행이 차단됩니다.
+# - 필요 시 --allow-local 또는 환경변수 UMS_SETUP_ALLOW_LOCAL=true 로만 허용됩니다.
+```
+
+```bash
+# 원격 부트스트랩: 레포가 없는 곳에서 실행 → 프로젝트 디렉토리 생성, 릴리스 설치, 스캐폴딩까지 자동
 curl -fsSL https://raw.githubusercontent.com/jinwoo-j/universal-makefile/main/setup.sh | bash
 
 # 자동으로 <universal-makefile> 디렉토리가 생기고, 내부에서 install.sh --release가 실행됩니다.

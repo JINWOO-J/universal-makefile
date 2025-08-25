@@ -8,25 +8,108 @@
 # 메인 Docker 타겟들
 # ================================================================
 
-CACHE_SCOPE ?= $(or $(SCOPE),$(shell git rev-parse --abbrev-ref HEAD))
-CACHE_FROM  := --cache-from=type=gha,scope=$(CACHE_SCOPE)
-CACHE_TO    := --cache-to=type=gha,mode=max,scope=$(CACHE_SCOPE)
+# 캐시 스코프 - 브랜치명을 안전한 Docker 태그로 변환
+CACHE_SCOPE ?= $(shell echo "$(or $(SCOPE),$(shell git rev-parse --abbrev-ref HEAD))" | sed 's/[^a-zA-Z0-9-]/-/g')
+CACHE_TAG ?= $(or $(CACHE_TAG),cache)
 
-# buildx 출력 방식: 기본은 로컬 데몬에 적재(--load)
-# PUSH=1로 호출하면 --push로 전환 (CI에서 push 타겟과 함께 사용)
+# 간단한 캐시 전략: 각 브랜치마다 고유 캐시 + main 캐시를 fallback으로 사용
+ifeq ($(DISABLE_CACHE),true)
+  # 캐시 완전 비활성화
+  CACHE_FROM :=
+  CACHE_TO   :=
+else ifeq ($(CI),true)
+  # CI 환경 - Registry 캐시 사용
+  CACHE_IMAGE := $(REPO_HUB)/$(NAME):$(CACHE_TAG)-$(CACHE_SCOPE)
+  CACHE_IMAGE_MAIN := $(REPO_HUB)/$(NAME):$(CACHE_TAG)-main
+  CACHE_FROM := --cache-from=type=registry,ref=$(CACHE_IMAGE) --cache-from=type=registry,ref=$(CACHE_IMAGE)-deps --cache-from=type=registry,ref=$(CACHE_IMAGE_MAIN) --cache-from=type=registry,ref=$(CACHE_IMAGE_MAIN)-deps
+  CACHE_TO := --cache-to=type=registry,ref=$(CACHE_IMAGE),mode=max --cache-to=type=registry,ref=$(CACHE_IMAGE)-deps,mode=max
+else
+  # 로컬 환경
+  ifneq ($(REPO_HUB),)
+     CACHE_IMAGE := $(REPO_HUB)/$(NAME):$(CACHE_TAG)-$(CACHE_SCOPE)
+     CACHE_IMAGE_MAIN := $(REPO_HUB)/$(NAME):$(CACHE_TAG)-main
+     CACHE_FROM := --cache-from=type=registry,ref=$(CACHE_IMAGE) --cache-from=type=registry,ref=$(CACHE_IMAGE)-deps --cache-from=type=registry,ref=$(CACHE_IMAGE_MAIN) --cache-from=type=registry,ref=$(CACHE_IMAGE_MAIN)-deps
+     CACHE_TO := --cache-to=type=registry,ref=$(CACHE_IMAGE),mode=max --cache-to=type=registry,ref=$(CACHE_IMAGE)-deps,mode=max
+  else
+    CACHE_FROM :=
+    CACHE_TO   :=
+  endif
+endif
+
+
+# buildx 출력 방식
 BUILD_OUTPUT := --load
 ifeq ($(PUSH),1)
 BUILD_OUTPUT := --push
 endif
 
-# buildx 공통 옵션
-BUILDX_FLAGS := $(CACHE_FROM) $(CACHE_TO) $(BUILD_OUTPUT) --progress=plain
-BUILD_NO_CACHE :=
-ifeq ($(FORCE_REBUILD),true)
-  BUILD_NO_CACHE = --no-cache
+BUILDX_DRIVER := $(shell docker buildx inspect 2>/dev/null | awk '/Driver:/ {print $$2}')
+
+ifeq ($(BUILDX_DRIVER),docker)
+  CACHE_TO :=
 endif
 
+# buildx 플래그
+ifeq ($(FORCE_REBUILD),true)
+  BUILDX_FLAGS := $(BUILD_OUTPUT) --progress=plain --no-cache
+else
+  BUILDX_FLAGS := $(CACHE_FROM) $(CACHE_TO) $(BUILD_OUTPUT) --progress=plain
+endif
+
+
+# ================================================================
+# 빌드 타겟
+# ================================================================
+
 build: check-docker make-build-args ## 🎯 Build the Docker image
+	@$(call print_color, $(BLUE),🔨Building Docker image with tag: $(TAGNAME))
+	@echo "$(BLUE)🔍 Cache Debug Info:$(RESET)"
+	@echo "  Environment: $(if $(CI),GitHub Actions,Local)"
+	@echo "  CACHE_SCOPE: $(CACHE_SCOPE)"
+	@echo "  DISABLE_CACHE: $(DISABLE_CACHE)"
+	@echo "  CACHE_TAG: $(CACHE_TAG)"
+	@$(if $(DISABLE_CACHE),echo "  CACHE: DISABLED",echo "  CACHE_IMAGE: $(CACHE_IMAGE)")
+	@$(if $(DISABLE_CACHE),,echo "  CACHE_FALLBACK: $(CACHE_IMAGE_MAIN)")
+	@echo "  CACHE_MODE: max (with multi-stage)"
+	@echo "  CACHE_FROM: $(CACHE_FROM)"
+	@echo "  CACHE_TO: $(CACHE_TO)"
+	@echo "  BUILD_OUTPUT: $(BUILD_OUTPUT)"
+	@echo "  BUILDX_FLAGS: $(BUILDX_FLAGS)"
+	@echo ""
+	$(call run_interactive, Image Build $(FULL_TAG), \
+		DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker buildx build \
+			$(DOCKER_BUILD_OPTION) \
+			$(BUILD_ARGS_CONTENT) \
+			-f $(DOCKERFILE_PATH) \
+			-t $(FULL_TAG) \
+			$(BUILDX_FLAGS) \
+			. \
+	)
+	@echo ""
+	@$(call print_color, $(BLUE),--- Image Details ---)
+	@docker images $(FULL_TAG)
+
+build-clean: ## 🎯 Build without cache
+	@$(call print_color, $(BLUE),🔨Building Docker image without cache)
+	@$(MAKE) build FORCE_REBUILD=true
+
+build-local: ## 🎯 Build locally without any cache (for testing)
+	@$(call print_color, $(BLUE),🔨Building Docker image locally without cache)
+	@DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker buildx build \
+		$(DOCKER_BUILD_OPTION) \
+		$(BUILD_ARGS_CONTENT) \
+		--no-cache \
+		-f $(DOCKERFILE_PATH) \
+		-t $(FULL_TAG) \
+		--load \
+		--progress=plain \
+		.
+	@echo ""
+	@$(call print_color, $(BLUE),--- Image Details ---)
+	@docker images $(FULL_TAG)
+
+
+build-legacy: check-docker make-build-args ## 🎯 Build the Docker image
 	@$(call print_color, $(BLUE),🔨Building Docker image with tag: $(TAGNAME))
 	$(call run_pipe, Image Build $(FULL_TAG), \
 		DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker buildx build \
@@ -43,11 +126,6 @@ build: check-docker make-build-args ## 🎯 Build the Docker image
 	@docker images $(FULL_TAG)
 
 
-build-clean: ## 🎯 Build without cache
-	@$(call print_color, $(BLUE),🔨Building Docker image without cache)
-	@$(MAKE) build FORCE_REBUILD=true
-
-
 ensure-image:
 	@docker image inspect $(FULL_TAG) >/dev/null 2>&1 || { \
 		echo "❌ image not found: $(FULL_TAG). Run 'make build' first."; exit 1; }
@@ -60,7 +138,7 @@ tag-latest: build ## 🚀 Tag image as 'latest' and push
 	@$(call success, Tagged and pushed as 'latest')
 
 push: ensure-image ## 🚀 Push image to registry
-	@$(call colorecho, 📦 Pushing images to registry...)
+	@$(call print_color, $(BLUE),📦 Pushing image to registry...)
 	@$(call run_pipe, "Docker push", docker push $(FULL_TAG))
 	@$(call success, Successfully pushed '$(FULL_TAG)')
 

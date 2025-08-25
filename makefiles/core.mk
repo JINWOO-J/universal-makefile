@@ -7,20 +7,17 @@ REPO_HUB ?= defaultrepo
 NAME ?= defaultapp
 VERSION ?= v1.0.0
 
-_ORIGINAL_TAGNAME := $(TAGNAME)
-_SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION))
-_SAFE_TAGNAME := $(shell echo '$(_SOURCE_FOR_SANITIZE)' | sed 's/[^a-zA-Z0-9_.-]/-/g')
-
-override TAGNAME := $(_SAFE_TAGNAME)
-
-ifneq ($(_SOURCE_FOR_SANITIZE),$(_SAFE_TAGNAME))
-$(info ⚠️  Warning: Original tag '$(_SOURCE_FOR_SANITIZE)' contained invalid characters. Sanitized to '$(TAGNAME)'.)
-endif
-
 # Git 브랜치 설정 (project.mk에서 오버라이드 가능)
 MAIN_BRANCH ?= main
 DEVELOP_BRANCH ?= develop
 FORCE ?= false
+
+# 현재 짧은/긴 커밋 해시 (TAGNAME 계산 전에 필요)
+CURRENT_COMMIT_SHORT := $(shell git rev-parse --short HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
+CURRENT_COMMIT_LONG := $(shell git rev-parse HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
+
+# 날짜(브랜치 태그 구성에 필요)
+DATE ?= $(shell date -u +%Y%m%d%H%M%S)
 
 # 계산된 변수들
 
@@ -29,9 +26,31 @@ ifeq ($(CURRENT_BRANCH),HEAD)
     CURRENT_BRANCH := detached
 endif
 
-# 현재 짧은/긴 커밋 해시
-CURRENT_COMMIT_SHORT := $(shell git rev-parse --short HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
-CURRENT_COMMIT_LONG := $(shell git rev-parse HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
+_ORIGINAL_TAGNAME := $(TAGNAME)
+
+ifeq ($(CURRENT_BRANCH),$(MAIN_BRANCH))
+    _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION))
+else
+    SAFE_BRANCH := $(shell echo "$(CURRENT_BRANCH)" | sed 's/[^a-zA-Z0-9._-]/-/g; s/-+/-/g')
+    # 브랜치에서는 version-branch-date-sha 형태
+    _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION)-$(SAFE_BRANCH)-$(DATE)-$(CURRENT_COMMIT_SHORT))
+endif
+
+_SAFE_TAGNAME := $(shell echo '$(_SOURCE_FOR_SANITIZE)' | sed 's/[^a-zA-Z0-9_.-]/-/g')
+
+override TAGNAME := $(_SAFE_TAGNAME)
+
+ifneq ($(_SOURCE_FOR_SANITIZE),$(TAGNAME))
+$(info ⚠️  Warning: Original tag '$(_SOURCE_FOR_SANITIZE)' contained invalid characters. Sanitized to '$(TAGNAME)'.)
+endif
+
+COMMIT_TAG := $(CURRENT_COMMIT_SHORT)$(GIT_DIRTY_SUFFIX)
+BUILD_REVISION := $(CURRENT_BRANCH)-$(CURRENT_COMMIT_SHORT)$(GIT_DIRTY_SUFFIX)
+
+IMAGE_NAME := $(REPO_HUB)/$(NAME)
+APP_IMAGE_NAME := $(REPO_HUB)/$(NAME)
+FULL_TAG := $(APP_IMAGE_NAME):$(TAGNAME)
+LATEST_TAG := $(APP_IMAGE_NAME):latest
 
 # Git 워킹 디렉토리의 상태를 확인 (커밋되지 않은 변경사항이 있으면 출력 내용이 생김)
 GIT_STATUS := $(shell git status --porcelain 2>/dev/null)
@@ -86,7 +105,7 @@ endif
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 	SED = sed -E -i ''
-	# ECHO_OPTION = 
+	# ECHO_OPTION =
 # ECHO_CMD = echo $(ECHO_OPTION)
 else
 	SED = sed -i
@@ -415,7 +434,7 @@ print-test:
 	@$(call success, success)
 	@$(call warn, warn)
 	@$(call blue, blue)
-	
+
 env-keys: ## 🔧 env-show 기본/전체 키 목록 출력
 	@echo "DEFAULT: $(ENV_VARS_DEFAULT)"
 	@echo "ALL:     $(ENV_VARS_ALL)"

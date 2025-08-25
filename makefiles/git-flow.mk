@@ -8,6 +8,15 @@ FAIL_ON_DIFF ?= 0   # 1이면 내용 다르면 비정상 종료(Exit 2)
 REMOTE ?= origin
 AUTO_RELEASE_ALLOWED_BRANCH ?= $(DEVELOP_BRANCH)
 
+TAG_REMOTE ?= origin
+TAG_PREFIX ?= v           # 태그 접두사 (예: v1.2.3)
+BUMP ?= patch             # patch | minor | major
+TAG_ANNOTATE ?= 1         # 1: annotated tag, 0: lightweight
+TAG_SIGN ?= 0             # 1: GPG 서명 태그
+TP    := $(strip $(TAG_PREFIX))
+BUMPK := $(strip $(BUMP))
+
+
 .PHONY: git-status sync-develop start-release list-old-branches clean-old-branches
 .PHONY: bump-version create-release-branch push-release-branch finish-release auto-release push-release push-release-clean
 
@@ -110,7 +119,7 @@ diff-summary: ## 📊 Show summary stats between two refs: REF1, REF2 (lines/fil
 	git diff --shortstat "$(REF1)" "$(REF2)" || true; \
 	echo ""; echo "$(BLUE)📁 Dirstat (by files)$(RESET)"; \
 	git diff --dirstat=files,0 "$(REF1)" "$(REF2)" || true
-	
+
 # Reset arbitrary branch by passing BRANCH=<name>
 reset-branch: check-git-repo ## 🔄 Reset BRANCH to origin/BRANCH
 	@if [ -z "$(BRANCH)" ]; then \
@@ -300,6 +309,73 @@ bump-major: ## 🔧 Bump major version
 	echo "$$NEW_VERSION" > .NEW_VERSION.tmp; \
 	echo "Latest tag     : $$LATEST_TAG"; \
 	echo "Next version   : $$NEW_VERSION (MAJOR)"
+
+########################################################
+# TAG 관리
+#####################################################3
+
+
+next-version-from-remote: ## 🔎 Fetch remote latest tag and compute next version (BUMP=patch|minor|major)
+	@set -Eeuo pipefail; \
+	echo "🔄 Fetching tags from '$(TAG_REMOTE)'..."; \
+	git fetch --tags $(TAG_REMOTE) >/dev/null 2>&1 || true; \
+	TP='$(TP)'; BUMPK='$(BUMPK)'; \
+	LATEST_TAG=$$( \
+	  git ls-remote --tags --refs $(TAG_REMOTE) "$${TP}*" \
+	  | awk '{print $$2}' \
+	  | sed 's#refs/tags/##' \
+	  | grep -E "^$${TP}[0-9]+\.[0-9]+\.[0-9]+$$" \
+	  | sort -V \
+	  | tail -n1 \
+	); \
+	if [ -z "$$LATEST_TAG" ]; then \
+	  echo "ℹ️  No remote tags found. Using $${TP}0.0.0 as base."; \
+	  LATEST_TAG="$${TP}0.0.0"; \
+	fi; \
+	VNUM=$$(printf "%s\n" "$$LATEST_TAG" | sed "s/^$${TP}//"); \
+	MAJOR=$$(echo $$VNUM | cut -d. -f1); \
+	MINOR=$$(echo $$VNUM | cut -d. -f2); \
+	PATCH=$$(echo $$VNUM | cut -d. -f3); \
+	case "$$BUMPK" in \
+	  major) NEW_MAJOR=$$((MAJOR+1)); NEW_MINOR=0; NEW_PATCH=0 ;; \
+	  minor) NEW_MAJOR=$$MAJOR; NEW_MINOR=$$((MINOR+1)); NEW_PATCH=0 ;; \
+	  patch) NEW_MAJOR=$$MAJOR; NEW_MINOR=$$MINOR; NEW_PATCH=$$((PATCH+1)) ;; \
+	  *) echo "❌ Unknown BUMP='$$BUMPK'. Use patch|minor|major"; exit 2 ;; \
+	esac; \
+	NEW_VERSION="$${TP}$${NEW_MAJOR}.$${NEW_MINOR}.$${NEW_PATCH}"; \
+	printf "%s\n" "$$NEW_VERSION" > .NEW_VERSION.tmp; \
+	echo "🔖 Latest remote tag : $$LATEST_TAG"; \
+	echo "🚀 Next $$BUMPK version: $$NEW_VERSION"
+# version-tag-remote:
+# - .NEW_VERSION.tmp (또는 TAG_VERSION 변수)로 태그 생성
+# - 원격(TAG_REMOTE)으로 푸시
+version-tag-remote: ## 🏷️ Create tag from computed version and push to remote
+	@set -Eeuo pipefail; \
+	TAG="$${TAG_VERSION:-$$(cat .NEW_VERSION.tmp 2>/dev/null || true)}"; \
+	if [ -z "$$TAG" ]; then echo "❌ No TAG version. Run 'make next-version-from-remote' or pass TAG_VERSION=vX.Y.Z"; exit 1; fi; \
+	echo "🪪 Using tag: $$TAG"; \
+	git fetch --tags $(TAG_REMOTE) >/dev/null 2>&1 || true; \
+	if git rev-parse -q --verify "refs/tags/$$TAG" >/dev/null; then \
+	  echo "ℹ️  Tag $$TAG already exists locally. Skipping create."; \
+	else \
+	  MSG="Release $$TAG"; \
+	  if [ "$(TAG_SIGN)" = "1" ]; then \
+	    if [ "$(TAG_ANNOTATE)" = "1" ]; then git tag -s -a "$$TAG" -m "$$MSG"; else git tag -s "$$TAG" -m "$$MSG"; fi; \
+	  else \
+	    if [ "$(TAG_ANNOTATE)" = "1" ]; then git tag -a "$$TAG" -m "$$MSG"; else git tag "$$TAG"; fi; \
+	  fi; \
+	  echo "✅ Created tag $$TAG"; \
+	fi; \
+	echo "📤 Pushing tag $$TAG to $(TAG_REMOTE) ..."; \
+	git push "$(TAG_REMOTE)" "$$TAG"
+
+# bump-and-push-tag-remote:
+# - 원샷: 최신 리모트 태그 기반 다음 버전 계산 → 태그 생성 → 푸시
+bump-and-push-tag-remote: ## 🚀 One-shot: compute next (remote) + create + push (BUMP=patch|minor|major)
+	@$(MAKE) next-version-from-remote BUMP=$(BUMP)
+	@$(MAKE) version-tag-remote
+
+
 # ================================================================
 # 릴리스 프로세스
 # ================================================================
@@ -389,7 +465,6 @@ create-release-branch: bump-version ensure-develop-branch get-release-version ##
 		exit 1; \
 	fi
 
-
 push-release-branch: ## 🌿 Push current release branch to origin
 	@$(call colorecho, 📤 Pushing release branch...)
 	@CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
@@ -451,7 +526,6 @@ finish-release: ## 🚀 Complete release process (merge to main and develop, cre
 # ================================================================
 # 자동화된 릴리스 프로세스
 # ================================================================
-
 
 
 push-release: ## 📤 Push main, develop, and tags to remote
