@@ -10,7 +10,7 @@
 
 # 캐시 스코프 - 브랜치명을 안전한 Docker 태그로 변환
 CACHE_SCOPE ?= $(shell echo "$(or $(SCOPE),$(shell git rev-parse --abbrev-ref HEAD))" | sed 's/[^a-zA-Z0-9-]/-/g')
-CACHE_TAG ?= cache
+CACHE_TAG := $(if $(CACHE_TAG),$(CACHE_TAG),cache) # 기본값 설정
 
 # 간단한 캐시 전략: 각 브랜치마다 고유 캐시 + main 캐시를 fallback으로 사용
 ifeq ($(DISABLE_CACHE),true)
@@ -45,8 +45,10 @@ endif
 
 BUILDX_DRIVER := $(shell docker buildx inspect 2>/dev/null | awk '/Driver:/ {print $$2}')
 
+# ... 기존 CACHE_FROM/CACHE_TO 계산 이후, 마지막에 안전 가드 추가
 ifeq ($(BUILDX_DRIVER),docker)
-  CACHE_TO :=
+  # docker 드라이버는 registry cache export 미지원 → 로컬 export만 비활성화
+  CACHE_TO :=  
 endif
 
 # buildx 플래그
@@ -55,6 +57,7 @@ ifeq ($(FORCE_REBUILD),true)
 else
   BUILDX_FLAGS := $(CACHE_FROM) $(CACHE_TO) $(BUILD_OUTPUT) --progress=plain
 endif
+
 
 
 # ================================================================
@@ -124,6 +127,7 @@ build-legacy: check-docker make-build-args ## 🎯 Build the Docker image
 	@echo ""
 	@$(call print_color, $(BLUE),--- Image Details ---)
 	@docker images $(FULL_TAG)
+
 
 
 ensure-image:
