@@ -30,7 +30,7 @@ prod-pre-deploy-check: ## 🔍 Run pre-deployment checks
 	@$(MAKE) test
 	@$(MAKE) validate-version
 	@if [ "$(CURRENT_BRANCH)" != "$(MAIN_BRANCH)" ]; then \
-		$(call error, Production deployment must be from $(MAIN_BRANCH) branch); \
+		$(call fail, Production deployment must be from $(MAIN_BRANCH) branch); \
 		exit 1; \
 	fi
 	@$(call success, Pre-deployment checks passed)
@@ -60,7 +60,7 @@ prod-deploy: prod-pre-deploy-check build push ## 🚀 Deploy to production (CARE
 		$(call colorecho, 🐳 Deploying with Docker Compose...); \
 		docker-compose -f docker-compose.prod.yml up -d; \
 	else \
-		$(call error, No production deployment configuration found); \
+		$(call fail, No production deployment configuration found); \
 		exit 1; \
 	fi
 	
@@ -120,7 +120,7 @@ prod-rollback: ## 🔄 Rollback production deployment (EMERGENCY)
 		kubectl rollout undo deployment/$(NAME) --namespace=$(PROD_NAMESPACE); \
 		kubectl rollout status deployment/$(NAME) --namespace=$(PROD_NAMESPACE) --timeout=300s; \
 	else \
-		$(call error, Rollback only supported for Kubernetes deployments); \
+		$(call fail, Rollback only supported for Kubernetes deployments); \
 		exit 1; \
 	fi
 	
@@ -133,7 +133,7 @@ prod-rollback: ## 🔄 Rollback production deployment (EMERGENCY)
 
 prod-scale: ## ⚖️ Scale production deployment (usage: make prod-scale REPLICAS=5)
 	@if [ -z "$(REPLICAS)" ]; then \
-		$(call error, REPLICAS is required. Usage: make prod-scale REPLICAS=5); \
+		$(call fail, REPLICAS is required. Usage: make prod-scale REPLICAS=5); \
 		exit 1; \
 	fi
 	@$(call warn, Scaling production to $(REPLICAS) replicas)
@@ -164,12 +164,12 @@ prod-backup: ## 💾 Backup production data (CRITICAL)
 	fi
 
 prod-restore: ## 🔄 Restore production from backup (EXTREMELY DANGEROUS)
-	@$(call error, 🚨 EXTREMELY DANGEROUS OPERATION 🚨)
-	@$(call error, This will OVERWRITE production data)
+	@$(call fail, 🚨 EXTREMELY DANGEROUS OPERATION 🚨)
+	@$(call fail, This will OVERWRITE production data)
 	@echo "Backup file: " && read backup_file
 	@echo "Type 'CONFIRM PRODUCTION RESTORE' to continue: " && read confirmation
 	@if [ "$$confirmation" != "CONFIRM PRODUCTION RESTORE" ]; then \
-		$(call error, "Operation cancelled"); \
+		$(call fail, Operation cancelled); \
 		exit 1; \
 	fi
 	@$(call colorecho, 🔄 Restoring production data...)

@@ -75,7 +75,7 @@ staging-test: ## 🧪 Run integration tests against staging
 staging-health-check: ## 🩺 Check staging environment health
 	@$(call colorecho, 🩺 Checking staging health...)
 	@if [ -n "$(STAGING_URL)" ]; then \
-		curl -f $(STAGING_URL)/health || $(call error, "Staging health check failed"); \
+		curl -f $(STAGING_URL)/health || $(call fail, Staging health check failed); \
 	else \
 		$(call warn, STAGING_URL not configured); \
 	fi
