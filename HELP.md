@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.156
-Project: universal-makefile vv1.0.156
+📋 Universal Makefile System v1.0.157
+Project: universal-makefile vv1.0.157
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
@@ -71,8 +71,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   getting-started      Show getting started guide  [help.mk]
   show-version         Show current version	  [version.mk]
   uv                   Update version (shortcut)  [version.mk]
-  update-version       Bump & sync: detect tool, bump version, update files (+ optional TS sync)  [version.mk]
-  update-version-file  Update version in specific file  [version.mk]
+  update-version       Bump & sync from project.mk VERSION (prefix-aware)  [version.mk]
   version-sync-ts      Sync version.ts placeholders (@VERSION, @VERSION_DETAIL, @VERSION_NAME)  [version.mk]
   version-tag          Create version tag without release  [version.mk]
   push-tags            Push all tags to remote  [version.mk]
@@ -84,6 +83,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/help.mk makefiles/
   version-patch        Bump patch version and create tag  [version.mk]
   version-minor        Bump minor version and create tag  [version.mk]
   version-major        Bump major version and create tag  [version.mk]
+  bump-from-project    Bump from project.mk VERSION and update all files  [version.mk]
   validate-version     Validate version format  [version.mk]
   check-version-consistency Check version consistency across files  [version.mk]
   um-version           Show UMF version (installed/pinned/bootstrap)  [version.mk]
