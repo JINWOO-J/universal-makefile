@@ -210,11 +210,11 @@ update-version-file:
 version-sync-ts: ## 🔧 Sync version.ts placeholders (@VERSION, @VERSION_DETAIL, @VERSION_NAME)
 	@$(call colorecho, 🧩 Syncing $(VERSION_TS_FILE))
 	@if [ ! -f "$(VERSION_TS_FILE)" ]; then \
-		echo "$(RED)File not found: $(VERSION_TS_FILE)$(RESET)" >&2; \
+		$(call fail, File not found: $(VERSION_TS_FILE)); \
 		exit 1; \
 	fi
 	@if [ -z "$(VERSION)" ]; then \
-		echo "$(RED)VERSION is empty. ex) make version-sync-ts VERSION=v1.2.3$(RESET)" >&2; \
+		$(call fail, VERSION is empty. ex) make version-sync-ts VERSION=v1.2.3); \
 		exit 1; \
 	fi
 	@$(call print_var, Target File, $(VERSION_TS_FILE))
@@ -271,36 +271,13 @@ push-tags: ## 🔧 Push all tags to remote
 
 delete-tag: ## 🔧 Delete version tag (usage: make delete-tag TAG=v1.0.0)	
 	@if [ -z "$(TAG)" ]; then \
-		echo "$(RED)TAG is required. Usage: make delete-tag TAG=v1.0.0$(RESET)" >&2; \
+		$(call error, TAG is required. Usage: make delete-tag TAG=v1.0.0); \
 		exit 1; \
-	fi
-	@if ! printf '%s' "$(TAG)" | grep -Eq '^[A-Za-z0-9._-]+$$'; then \
-		echo "$(RED)Invalid TAG: $(TAG). Allowed chars: A-Z a-z 0-9 . _ -$(RESET)" >&2; \
-		exit 1; \
-	fi
-	@if ! git rev-parse --git-dir >/dev/null 2>&1; then \
-		echo "$(RED)Not a git repository$(RESET)" >&2; \
-		exit 1; \
-	fi
-	@$(call colorecho, 🗑️  Deleting tag: $(TAG))
-	@if git tag -l | grep -Fxq "$(TAG)"; then \
-		git tag -d "$(TAG)"; \
-		echo "$(GREEN)✅ Deleted local tag $(TAG)$(RESET)"; \
-	else \
-		echo "$(YELLOW)⚠️  Local tag $(TAG) not found (skip)$(RESET)"; \
-	fi
-	@if git ls-remote --tags origin 2>/dev/null | awk '{print $$2}' | sed 's|refs/tags/||' | grep -Fxq "$(TAG)"; then \
-		if git push origin :refs/tags/$(TAG); then \
-			echo "$(GREEN)✅ Deleted remote tag $(TAG)$(RESET)"; \
-		else \
-			echo "$(RED)❌ Failed to delete remote tag $(TAG)$(RESET)" >&2; \
-			exit 1; \
-		fi; \
-	else \
-		echo "$(YELLOW)⚠️  Remote tag $(TAG) not found on origin (skip)$(RESET)"; \
-	fi
-	@$(call success, Tag $(TAG) delete flow completed)
-
+	fi; \
+	$(call colorecho, 🗑️  Deleting tag: $(TAG)); \
+	git tag -d $(TAG); \
+	git push origin :refs/tags/$(TAG); \
+	$(call success, Tag $(TAG) deleted)
 
 # ================================================================
 # 버전 히스토리 및 변경사항
@@ -418,8 +395,8 @@ validate-version: ## 🔧 Validate version format
 	@if printf '%s\n' "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$$'; then \
 		$(call success, Version format is valid: $(VERSION)); \
 	else \
-		echo "$(RED)Invalid version format: $(VERSION)$(RESET)" >&2; \
-		echo "Expected format: v1.2.3 or v1.2.3-alpha.1" >&2; \
+		$(call error, Invalid version format: $(VERSION)); \
+		echo "Expected format: v1.2.3 or v1.2.3-alpha.1"; \
 		exit 1; \
 	fi
 
@@ -491,7 +468,7 @@ check-version-consistency: ## 🔧 Check version consistency across files
 	fi; \
 	\
 	if [ "$$INCONSISTENT" = "true" ]; then \
-		echo "$(RED)❌ Version inconsistencies found$(RESET)" >&2; \
+		$(call error, Version inconsistencies found); \
 		exit 1; \
 	else \
 		$(call success, All versions are consistent); \

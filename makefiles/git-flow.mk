@@ -208,7 +208,7 @@ push-all-branches: ## 🌿 Push all local branches to remote ($(REMOTE))
 
 start-release: ## 🌿 Start new release branch from develop
 ifneq ($(CURRENT_BRANCH),$(DEVELOP_BRANCH))
-	@$(call error_echo, You must be on the '$(DEVELOP_BRANCH)' branch to start a release)
+	@$(call fail, You must be on the '$(DEVELOP_BRANCH)' branch to start a release)
 	@exit 1
 else
 	@$(call colorecho, Creating new release branch 'release/$(VERSION)' from '$(DEVELOP_BRANCH)'...)
@@ -314,7 +314,6 @@ bump-major: ## 🔧 Bump major version
 # TAG 관리
 #####################################################3
 
-
 next-version-from-remote: ## 🔎 Fetch remote latest tag and compute next version (BUMP=patch|minor|major)
 	@set -Eeuo pipefail; \
 	echo "🔄 Fetching tags from '$(TAG_REMOTE)'..."; \
@@ -389,7 +388,7 @@ bump-and-push-tag-remote: ## 🚀 One-shot: compute next (remote) + create + pus
 # 	elif [ -f .NEW_VERSION.tmp ]; then \
 # 		RELEASE_VERSION=$$(cat .NEW_VERSION.tmp); \
 # 	else \
-# 		$(call error, "NEW_VERSION is not set and .NEW_VERSION.tmp not found"); \
+# 		$(call fail, "NEW_VERSION is not set and .NEW_VERSION.tmp not found"); \
 # 		exit 1; \
 # 	fi; \
 # 	RELEASE_BRANCH="release/$$RELEASE_VERSION"; \
@@ -472,12 +471,12 @@ push-release-branch: ## 🌿 Push current release branch to origin
 		NEW_VERSION=$$(cat .NEW_VERSION.tmp 2>/dev/null || echo ""); \
 	fi; \
 	if [ -z "$$NEW_VERSION" ]; then \
-		$(call error, "No version found. Run 'make bump-version' first"); \
+		$(call fail, No version found. Run 'make bump-version' first); \
 		exit 1; \
 	fi; \
 	RELEASE_BRANCH="release/$$NEW_VERSION"; \
 	if ! echo "$$CUR_BRANCH" | grep -q "^release/"; then \
-		$(call error, "You must be on a 'release/*' branch (currently on '$$CUR_BRANCH')"); \
+		$(call fail, You must be on a 'release/*' branch (currently on '$$CUR_BRANCH')); \
 		exit 1; \
 	fi; \
 	git push -u origin $$RELEASE_BRANCH; \
@@ -486,7 +485,7 @@ push-release-branch: ## 🌿 Push current release branch to origin
 finish-release: ## 🚀 Complete release process (merge to main and develop, create tag)
 	@$(call colorecho, 🎉 Finishing release...)
 	@if [ ! -f .NEW_VERSION.tmp ]; then \
-		$(call error, "No version file found. Run release process from the beginning"); \
+		$(call fail, No version file found. Run release process from the beginning); \
 		exit 1; \
 	fi; \
 	NEW_VERSION=$$(cat .NEW_VERSION.tmp); \
@@ -676,7 +675,7 @@ merge-release: ensure-clean ## 🔄 Merge release branch to main branches
 start-hotfix: ## 🌿 Start hotfix branch from main
 	@$(call colorecho, 🔥 Starting hotfix branch...)
 	@if [ -z "$(HOTFIX_NAME)" ]; then \
-		$(call error, "HOTFIX_NAME is required. Usage: make start-hotfix HOTFIX_NAME=fix-critical-bug"); \
+		$(call fail, HOTFIX_NAME is required. Usage: make start-hotfix HOTFIX_NAME=fix-critical-bug); \
 		exit 1; \
 	fi; \
     $(call RESET_TO_REMOTE,$(MAIN_BRANCH)); \
@@ -687,7 +686,7 @@ finish-hotfix: ## 🚀 Finish hotfix (merge to main and develop)
 	@$(call colorecho, 🔥 Finishing hotfix...)
 	@CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	if ! echo "$$CUR_BRANCH" | grep -q "^hotfix/"; then \
-		$(call error, "You must be on a 'hotfix/*' branch"); \
+		$(call fail, You must be on a 'hotfix/*' branch); \
 		exit 1; \
 	fi; \
 	HOTFIX_NAME=$$(echo "$$CUR_BRANCH" | sed 's/hotfix\///'); \
@@ -703,3 +702,17 @@ finish-hotfix: ## 🚀 Finish hotfix (merge to main and develop)
 	git push origin $(DEVELOP_BRANCH); \
 	git branch -d $$CUR_BRANCH; \
 	$(call success, Hotfix '$$HOTFIX_NAME' completed)
+
+git-log: ## 📜 Graph + oneline with date and author (COUNT=N, DATE=short|iso|relative|raw|format:<fmt>)
+	@COUNT=$(if $(COUNT),$(COUNT),50); \
+	DATE_OPT=$(if $(DATE),$(DATE),short); \
+	echo "$(BLUE)📜 Git Log (last $$COUNT commits, date=$$DATE_OPT):$(RESET)"; \
+	echo "$(YELLOW)Hint: make git-log COUNT=100 DATE=relative$(RESET)"; \
+	if echo "$$DATE_OPT" | grep -q '^format:'; then \
+		DATE_ARG=$$(printf "%s" "$$DATE_OPT" | sed 's/^format://'); \
+		DATE_FLAG="--date=format:$$DATE_ARG"; \
+	else \
+		DATE_FLAG="--date=$$DATE_OPT"; \
+	fi; \
+	git --no-pager log --graph --decorate --color=always -n $$COUNT $$DATE_FLAG \
+	  --pretty=format:"$(YELLOW)%h$(RESET) $(GREEN)%ad$(RESET) $(BLUE)%an$(RESET) %C(auto)%d$(RESET) %s"

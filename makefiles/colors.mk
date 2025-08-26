@@ -137,7 +137,7 @@ define warn
 	$(ECHO_CMD) "$(YELLOW)⚠️  $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)"
 endef
 
-define error
+define fail
 	$(ECHO_CMD) "$(RED)❌ $(1) $(2) $(3) $(4) $(5) $(6) $(7) $(8) $(9) $(10)$(RESET)" >&2
 endef
 

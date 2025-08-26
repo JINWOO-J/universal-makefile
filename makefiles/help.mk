@@ -158,7 +158,7 @@ list-targets: ## 🔧 List all available targets
 
 search-targets: ## 🔧 Search targets by keyword (usage: make search-targets KEYWORD=docker)
 	@if [ -z "$(KEYWORD)" ]; then \
-		$(call error, "KEYWORD is required. Usage: make search-targets KEYWORD=docker"); \
+		$(call fail, KEYWORD is required. Usage: make search-targets KEYWORD=docker); \
 		exit 1; \
 	fi; \
 	echo "$(BLUE)Targets matching '$(KEYWORD)':$(RESET)"; \
