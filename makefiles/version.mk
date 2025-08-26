@@ -45,10 +45,38 @@ show-umf-version:
 
 uv: update-version ## 🔧 Update version (shortcut)
 
-update-version: ## 🔧 Update version using appropriate tool
+update-version: ## 🔧 Bump & sync: detect tool, bump version, update files (+ optional TS sync)
 	@$(call colorecho, 🔄 Updating version... using $(VERSION_UPDATE_TOOL))
 	@$(MAKE) _detect_and_update_version
-	@$(call success, Version updated successfully)
+	@# 새 버전 감지 (package.json -> pyproject.toml -> Cargo.toml -> VERSION -> project.mk)
+	@NEW=$$( \
+		if [ -f package.json ]; then \
+			( node -p "require('./package.json').version" 2>/dev/null ) \
+			|| ( grep -m1 '"version"' package.json | sed 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/' ); \
+		elif [ -f pyproject.toml ]; then \
+			grep -m1 -E '^[[:space:]]*version[[:space:]]*=' pyproject.toml | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/'; \
+		elif [ -f Cargo.toml ]; then \
+			grep -m1 -E '^[[:space:]]*version[[:space:]]*=' Cargo.toml | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/'; \
+		elif [ -f VERSION ]; then \
+			head -n1 VERSION; \
+		elif [ -f project.mk ]; then \
+			grep -m1 -E '^[[:space:]]*VERSION[[:space:]]*=' project.mk | sed 's/^[^=]*=[[:space:]]*//'; \
+		fi \
+	); \
+	NEW=$$(printf '%s' "$$NEW" | tr -d '[:space:]'); \
+	if [ -z "$$NEW" ]; then \
+		echo "$(RED)Failed to determine NEW_VERSION after bump$(RESET)" >&2; exit 1; \
+	fi; \
+	$(call print_var, NEW_VERSION, $$NEW); \
+	$(MAKE) update-version-file \
+		NEW_VERSION="$$NEW" \
+		VERSION_TS_FILE="$(VERSION_TS_FILE)" \
+		VERSION_POST_UPDATE_HOOK="$(VERSION_POST_UPDATE_HOOK)"
+	@$(call success, Version updated & synced successfully)
+
+
+-include .NEW_VERSION.autodetected.mk
+NEW_VERSION ?=
 
 # ================================================================
 # 버전 업데이트 도구 자동 감지 및 실행
@@ -186,18 +214,19 @@ update-version-file: ## 🔧 Update version in specific file
 		echo "$(GREEN)✅ Created VERSION file with new version$(RESET)"; \
 	fi; \
 	if [ -n "$(VERSION_POST_UPDATE_HOOK)" ]; then \
-		$(MAKE) $(VERSION_POST_UPDATE_HOOK) VERSION=$(VERSION_TO_UPDATE); \
+		$(MAKE) $(VERSION_POST_UPDATE_HOOK) \
+			VERSION="$(VERSION_TO_UPDATE)" \
+			VERSION_TS_FILE="$(VERSION_TS_FILE)"; \
 	fi
-	
 
 version-sync-ts: ## 🔧 Sync version.ts placeholders (@VERSION, @VERSION_DETAIL, @VERSION_NAME)
 	@$(call colorecho, 🧩 Syncing $(VERSION_TS_FILE))
 	@if [ ! -f "$(VERSION_TS_FILE)" ]; then \
-		$(call error, "File not found: $(VERSION_TS_FILE)"); \
+		echo "$(RED)File not found: $(VERSION_TS_FILE)$(RESET)" >&2; \
 		exit 1; \
 	fi
 	@if [ -z "$(VERSION)" ]; then \
-		$(call error, "VERSION is empty. ex) make version-sync-ts VERSION=v1.2.3"); \
+		echo "$(RED)VERSION is empty. ex) make version-sync-ts VERSION=v1.2.3$(RESET)" >&2; \
 		exit 1; \
 	fi
 	@$(call print_var, Target File, $(VERSION_TS_FILE))
@@ -218,7 +247,7 @@ else
 	@$(SED) "s/\(\/\* @VERSION_NAME \*\/ '\)[^']*\('\)/\1$(VERSION_NAME)\2/" "$(VERSION_TS_FILE)"
 endif
 	@$(ECHO_CMD) "$(BLUE)🔎 After:$(RESET)"
-		@grep -nE "@VERSION \*/ '|@VERSION_DETAIL \*/ '|@VERSION_NAME \*/ '" "$(VER_FILE)" || true
+		@grep -nE "@VERSION \*/ '|@VERSION_DETAIL \*/ '|@VERSION_NAME \*/ '" "$(VERSION_TS_FILE)" || true
 	@$(call success, version.ts synced successfully)
 
 
@@ -252,15 +281,38 @@ push-tags: ## 🔧 Push all tags to remote
 		exit 1; \
 	fi
 
-delete-tag: ## 🔧 Delete version tag (usage: make delete-tag TAG=v1.0.0)
+delete-tag: ## 🔧 Delete version tag (usage: make delete-tag TAG=v1.0.0)	
 	@if [ -z "$(TAG)" ]; then \
-		$(call error, TAG is required. Usage: make delete-tag TAG=v1.0.0); \
+		echo "$(RED)TAG is required. Usage: make delete-tag TAG=v1.0.0$(RESET)" >&2; \
 		exit 1; \
-	fi; \
-	$(call colorecho, 🗑️  Deleting tag: $(TAG)); \
-	git tag -d $(TAG); \
-	git push origin :refs/tags/$(TAG); \
-	$(call success, Tag $(TAG) deleted)
+	fi
+	@if ! printf '%s' "$(TAG)" | grep -Eq '^[A-Za-z0-9._-]+$$'; then \
+		echo "$(RED)Invalid TAG: $(TAG). Allowed chars: A-Z a-z 0-9 . _ -$(RESET)" >&2; \
+		exit 1; \
+	fi
+	@if ! git rev-parse --git-dir >/dev/null 2>&1; then \
+		echo "$(RED)Not a git repository$(RESET)" >&2; \
+		exit 1; \
+	fi
+	@$(call colorecho, 🗑️  Deleting tag: $(TAG))
+	@if git tag -l | grep -Fxq "$(TAG)"; then \
+		git tag -d "$(TAG)"; \
+		echo "$(GREEN)✅ Deleted local tag $(TAG)$(RESET)"; \
+	else \
+		echo "$(YELLOW)⚠️  Local tag $(TAG) not found (skip)$(RESET)"; \
+	fi
+	@if git ls-remote --tags origin 2>/dev/null | awk '{print $$2}' | sed 's|refs/tags/||' | grep -Fxq "$(TAG)"; then \
+		if git push origin :refs/tags/$(TAG); then \
+			echo "$(GREEN)✅ Deleted remote tag $(TAG)$(RESET)"; \
+		else \
+			echo "$(RED)❌ Failed to delete remote tag $(TAG)$(RESET)" >&2; \
+			exit 1; \
+		fi; \
+	else \
+		echo "$(YELLOW)⚠️  Remote tag $(TAG) not found on origin (skip)$(RESET)"; \
+	fi
+	@$(call success, Tag $(TAG) delete flow completed)
+
 
 # ================================================================
 # 버전 히스토리 및 변경사항
@@ -356,37 +408,93 @@ version-major: ## 🔧 Bump major version and create tag
 
 validate-version: ## 🔧 Validate version format
 	@$(call colorecho, ✅ Validating version format...)
-	@if echo "$(VERSION)" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$$' >/dev/null; then \
+	@if [ -z "$(VERSION)" ]; then \
+		echo "$(RED)VERSION is empty$(RESET)" >&2; \
+		echo "Expected format: v1.2.3 or v1.2.3-alpha.1" >&2; \
+		exit 1; \
+	fi
+	@if printf '%s\n' "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$$'; then \
 		$(call success, Version format is valid: $(VERSION)); \
 	else \
-		$(call error, Invalid version format: $(VERSION)); \
-		echo "Expected format: v1.2.3 or v1.2.3-alpha.1"; \
+		echo "$(RED)Invalid version format: $(VERSION)$(RESET)" >&2; \
+		echo "Expected format: v1.2.3 or v1.2.3-alpha.1" >&2; \
 		exit 1; \
 	fi
 
 check-version-consistency: ## 🔧 Check version consistency across files
 	@$(call colorecho, 🔍 Checking version consistency...)
-	@INCONSISTENT=false; \
-	if [ -f "package.json" ]; then \
-		PKG_VERSION=$$(grep '"version"' package.json | sed 's/.*"version": "\([^"]*\)".*/\1/'); \
-		if [ "$(VERSION:v%=%)" != "$$PKG_VERSION" ]; then \
-			$(call warn, Version mismatch in package.json: $$PKG_VERSION vs $(VERSION)); \
+	@set -e; \
+	INCONSISTENT=false; \
+	# 기준 버전(접두사 v 제거)
+	TARGET_RAW="$(VERSION)"; \
+	TARGET="$${TARGET_RAW#v}"; \
+	if [ -z "$$TARGET" ]; then \
+		echo "$(RED)VERSION is empty$(RESET)" >&2; \
+		exit 1; \
+	fi; \
+	echo "$(BLUE)Target Version (normalized): $$TARGET$(RESET)"; \
+	\
+	# package.json
+	if [ -f package.json ]; then \
+		if command -v jq >/dev/null 2>&1; then \
+			PKG_VERSION="$$(jq -r '.version // empty' package.json 2>/dev/null)"; \
+		else \
+			PKG_VERSION="$$(grep -m1 '"version"' package.json | sed 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/' )"; \
+		fi; \
+		PKG_VERSION="$${PKG_VERSION#v}"; PKG_VERSION="$$(printf '%s' "$$PKG_VERSION" | tr -d '[:space:]')"; \
+		if [ -n "$$PKG_VERSION" ] && [ "$$TARGET" != "$$PKG_VERSION" ]; then \
+			echo "$(YELLOW)⚠️  Version mismatch in package.json: $$PKG_VERSION vs $(VERSION)$(RESET)"; \
 			INCONSISTENT=true; \
 		fi; \
 	fi; \
-	if [ -f "pyproject.toml" ]; then \
-		TOML_VERSION=$$(grep '^version =' pyproject.toml | sed 's/version = "\([^"]*\)"/\1/'); \
-		if [ "$(VERSION:v%=%)" != "$$TOML_VERSION" ]; then \
-			$(call warn, Version mismatch in pyproject.toml: $$TOML_VERSION vs $(VERSION)); \
+	\
+	# pyproject.toml
+	if [ -f pyproject.toml ]; then \
+		TOML_VERSION="$$(grep -m1 -E '^[[:space:]]*version[[:space:]]*=' pyproject.toml | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/')"; \
+		TOML_VERSION="$${TOML_VERSION#v}"; TOML_VERSION="$$(printf '%s' "$$TOML_VERSION" | tr -d '[:space:]')"; \
+		if [ -n "$$TOML_VERSION" ] && [ "$$TARGET" != "$$TOML_VERSION" ]; then \
+			echo "$(YELLOW)⚠️  Version mismatch in pyproject.toml: $$TOML_VERSION vs $(VERSION)$(RESET)"; \
 			INCONSISTENT=true; \
 		fi; \
 	fi; \
+	\
+	# Cargo.toml
+	if [ -f Cargo.toml ]; then \
+		CARGO_VERSION="$$(grep -m1 -E '^[[:space:]]*version[[:space:]]*=' Cargo.toml | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/')"; \
+		CARGO_VERSION="$${CARGO_VERSION#v}"; CARGO_VERSION="$$(printf '%s' "$$CARGO_VERSION" | tr -d '[:space:]')"; \
+		if [ -n "$$CARGO_VERSION" ] && [ "$$TARGET" != "$$CARGO_VERSION" ]; then \
+			echo "$(YELLOW)⚠️  Version mismatch in Cargo.toml: $$CARGO_VERSION vs $(VERSION)$(RESET)"; \
+			INCONSISTENT=true; \
+		fi; \
+	fi; \
+	\
+	# VERSION 파일
+	if [ -f VERSION ]; then \
+		FILE_VERSION="$$(head -n1 VERSION)"; \
+		FILE_VERSION="$${FILE_VERSION#v}"; FILE_VERSION="$$(printf '%s' "$$FILE_VERSION" | tr -d '[:space:]')"; \
+		if [ -n "$$FILE_VERSION" ] && [ "$$TARGET" != "$$FILE_VERSION" ]; then \
+			echo "$(YELLOW)⚠️  Version mismatch in VERSION: $$FILE_VERSION vs $(VERSION)$(RESET)"; \
+			INCONSISTENT=true; \
+		fi; \
+	fi; \
+	\
+	# project.mk (예: VERSION = v1.2.3)
+	if [ -f project.mk ]; then \
+		PMK_VERSION="$$(grep -m1 -E '^[[:space:]]*VERSION[[:space:]]*=' project.mk | sed 's/^[^=]*=[[:space:]]*//')"; \
+		PMK_VERSION="$${PMK_VERSION#v}"; PMK_VERSION="$$(printf '%s' "$$PMK_VERSION" | tr -d '[:space:]')"; \
+		if [ -n "$$PMK_VERSION" ] && [ "$$TARGET" != "$$PMK_VERSION" ]; then \
+			echo "$(YELLOW)⚠️  Version mismatch in project.mk: $$PMK_VERSION vs $(VERSION)$(RESET)"; \
+			INCONSISTENT=true; \
+		fi; \
+	fi; \
+	\
 	if [ "$$INCONSISTENT" = "true" ]; then \
-		$(call error, Version inconsistencies found); \
+		echo "$(RED)❌ Version inconsistencies found$(RESET)" >&2; \
 		exit 1; \
 	else \
 		$(call success, All versions are consistent); \
 	fi
+
 
 # ================================================================
 # UMF 버전 표시/검증 (CHANGED)
