@@ -10,7 +10,7 @@
 
 # 캐시 스코프 - 브랜치명을 안전한 Docker 태그로 변환
 CACHE_SCOPE ?= $(shell echo "$(or $(SCOPE),$(shell git rev-parse --abbrev-ref HEAD))" | sed 's/[^a-zA-Z0-9-]/-/g')
-CACHE_TAG ?= $(or $(CACHE_TAG),cache)
+CACHE_TAG := $(if $(CACHE_TAG),$(CACHE_TAG),cache) # 기본값 설정
 
 # 간단한 캐시 전략: 각 브랜치마다 고유 캐시 + main 캐시를 fallback으로 사용
 ifeq ($(DISABLE_CACHE),true)
