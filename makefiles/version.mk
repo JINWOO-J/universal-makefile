@@ -45,24 +45,10 @@ show-umf-version:
 
 uv: update-version ## 🔧 Update version (shortcut)
 
-update-version: ## 🔧 Bump & sync: detect tool, bump version, update files (+ optional TS sync)
+update-version: ## 🔧 Bump & sync from project.mk VERSION (prefix-aware)
 	@$(call colorecho, 🔄 Updating version... using $(VERSION_UPDATE_TOOL))
 	@$(MAKE) _detect_and_update_version
-	@# 새 버전 감지 (package.json -> pyproject.toml -> Cargo.toml -> VERSION -> project.mk)
-	@NEW=$$( \
-		if [ -f package.json ]; then \
-			( node -p "require('./package.json').version" 2>/dev/null ) \
-			|| ( grep -m1 '"version"' package.json | sed 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/' ); \
-		elif [ -f pyproject.toml ]; then \
-			grep -m1 -E '^[[:space:]]*version[[:space:]]*=' pyproject.toml | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/'; \
-		elif [ -f Cargo.toml ]; then \
-			grep -m1 -E '^[[:space:]]*version[[:space:]]*=' Cargo.toml | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/'; \
-		elif [ -f VERSION ]; then \
-			head -n1 VERSION; \
-		elif [ -f project.mk ]; then \
-			grep -m1 -E '^[[:space:]]*VERSION[[:space:]]*=' project.mk | sed 's/^[^=]*=[[:space:]]*//'; \
-		fi \
-	); \
+	@NEW=$$( if [ -f .NEW_VERSION.tmp ]; then cat .NEW_VERSION.tmp; else printf '%s' "$(VERSION)"; fi ); \
 	NEW=$$(printf '%s' "$$NEW" | tr -d '[:space:]'); \
 	if [ -z "$$NEW" ]; then \
 		echo "$(RED)Failed to determine NEW_VERSION after bump$(RESET)" >&2; exit 1; \
@@ -115,23 +101,6 @@ _auto_detect_version_tool:
 		$(MAKE) _update_version_with_tool TOOL=generic; \
 	fi
 
-# ================================================================
-# Fallback: bump version using VERSION variable only
-# ================================================================
-
-_bump_version_from_variable:
-	@current="$(VERSION)"; \
-	if echo "$$current" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-		major=$$(echo "$$current" | sed -E 's/^v([0-9]+)\..*/\1/'); \
-		minor=$$(echo "$$current" | sed -E 's/^v[0-9]+\.([0-9]+)\..*/\1/'); \
-		patch=$$(echo "$$current" | sed -E 's/^v[0-9]+\.[0-9]+\.([0-9]+).*$$/\1/'); \
-		new_version=v$$major.$$minor.$$((patch+1)); \
-	else \
-		new_version=v1.0.1; \
-	fi; \
-	$(call colorecho, 📝 New version: $$new_version); \
-	$(MAKE) update-version-file NEW_VERSION=$$new_version
-
 _update_version_with_tool:
 	@case "$(TOOL)" in \
 		yarn) \
@@ -169,37 +138,53 @@ _update_version_with_tool:
 	esac
 
 # ================================================================
+# Fallback: bump version using VERSION variable only
+# ================================================================
+
+_bump_version_from_variable:
+	@current="$(VERSION)"; \
+	prefix=$$(echo "$$current" | sed -E 's/^(.*)v[0-9]+\.[0-9]+\.[0-9]+.*$/\1/'); \
+	if echo "$$current" | grep -Eq 'v[0-9]+\.[0-9]+\.[0-9]+'; then \
+		major=$$(echo "$$current" | sed -E 's/.*v([0-9]+)\..*/\1/'); \
+		minor=$$(echo "$$current" | sed -E 's/.*v[0-9]+\.([0-9]+)\..*/\1/'); \
+		patch=$$(echo "$$current" | sed -E 's/.*v[0-9]+\.[0-9]+\.([0-9]+).*/\1/'); \
+		new_version="$$prefix"v$$major.$$minor.$$((patch+1)); \
+	else \
+		new_version=v1.0.1; \
+	fi; \
+	$(call colorecho, 📝 New version: $$new_version); \
+	echo "$$new_version" > .NEW_VERSION.tmp
+
+# ================================================================
 # 버전 파일 관리
 # ================================================================
 
-# Update version in files
-update-version-file: ## 🔧 Update version in specific file
+update-version-file:
 	@$(eval VERSION_TO_UPDATE := $(or $(NEW_VERSION),$(shell cat .NEW_VERSION.tmp 2>/dev/null)))
-	@if [ -z "$(VERSION_TO_UPDATE)" ]; then \
-		echo "$(RED)Error: NEW_VERSION is not set and .NEW_VERSION.tmp not found$(RESET)" >&2; \
-		exit 1; \
-	fi
 	@echo "$(BLUE)📝 Updating version to $(VERSION_TO_UPDATE)...$(RESET)"
 	@success=false; \
+	PKG_ONLY_VER=$$(echo "$(VERSION_TO_UPDATE)" | sed -E 's/.*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/'); \
+	PREFIX=$$(echo "$(VERSION)" | sed -E 's/^(.*)v[0-9]+\.[0-9]+\.[0-9]+.*$$/\1/'); \
+	FULL_VER="$$PREFIX"v"$$PKG_ONLY_VER"; \
 	for file in $(VERSION_FILES); do \
 		if [ -f "$$file" ]; then \
 			echo "$(BLUE)Updating version in $$file...$(RESET)"; \
 			case "$$file" in \
 				package.json) \
-					$(SED) 's/"version": "[^"]*"/"version": "$(VERSION_TO_UPDATE:v%=%)"/' "$$file" 2>/dev/null && success=true; \
+					$(SED) 's/"version": "[^"]*"/"version": "'$$PKG_ONLY_VER'"/' "$$file" 2>/dev/null && success=true; \
 					;; \
 				pyproject.toml) \
-					$(SED) 's/version = "[^"]*"/version = "$(VERSION_TO_UPDATE:v%=%)"/' "$$file" 2>/dev/null && success=true; \
+					$(SED) 's/version = "[^"]*"/version = "'$$PKG_ONLY_VER'"/' "$$file" 2>/dev/null && success=true; \
 					;; \
 				Cargo.toml) \
-					$(SED) 's/version = "[^"]*"/version = "$(VERSION_TO_UPDATE:v%=%)"/' "$$file" 2>/dev/null && success=true; \
+					$(SED) 's/version = "[^"]*"/version = "'$$PKG_ONLY_VER'"/' "$$file" 2>/dev/null && success=true; \
 					;; \
 				VERSION) \
-					echo "$(VERSION_TO_UPDATE)" > "$$file" 2>/dev/null && success=true; \
+					echo "$$FULL_VER" > "$$file" 2>/dev/null && success=true; \
 					;; \
 				project.mk) \
-					$(SED) 's/^VERSION[[:space:]]*=.*/VERSION = $(VERSION_TO_UPDATE)/' "$$file" 2>/dev/null; \
-					grep -Eq "^VERSION[[:space:]]*=[[:space:]]*$(VERSION_TO_UPDATE:v%=%)$$" "$$file" && success=true; \
+					$(SED) 's/^VERSION[[:space:]]*=.*/VERSION = '$$FULL_VER'/' "$$file" 2>/dev/null; \
+					grep -Eq "^VERSION[[:space:]]*=[[:space:]]*$$FULL_VER$$" "$$file" && success=true; \
 					;; \
 			esac; \
 			if [ "$$success" = "true" ]; then \
@@ -210,13 +195,16 @@ update-version-file: ## 🔧 Update version in specific file
 	done; \
 	if [ "$$success" = "false" ]; then \
 		echo "$(YELLOW)Warning: No suitable version file found. Creating VERSION file...$(RESET)"; \
-		echo "$(VERSION_TO_UPDATE)" > VERSION && \
+		echo "$$FULL_VER" > VERSION && \
 		echo "$(GREEN)✅ Created VERSION file with new version$(RESET)"; \
 	fi; \
 	if [ -n "$(VERSION_POST_UPDATE_HOOK)" ]; then \
 		$(MAKE) $(VERSION_POST_UPDATE_HOOK) \
-			VERSION="$(VERSION_TO_UPDATE)" \
-			VERSION_TS_FILE="$(VERSION_TS_FILE)"; \
+			VERSION="$$FULL_VER" \
+			VERSION_DETAIL="$$FULL_VER" \
+			PKG_VERSION="$$PKG_ONLY_VER" \
+			VERSION_TS_FILE="$(abspath $(VERSION_TS_FILE))" \
+			$(VERSION_HOOK_ARGS); \
 	fi
 
 version-sync-ts: ## 🔧 Sync version.ts placeholders (@VERSION, @VERSION_DETAIL, @VERSION_NAME)
@@ -402,6 +390,20 @@ version-major: ## 🔧 Bump major version and create tag
 	$(MAKE) version-tag TAG_VERSION=$$NEW_VERSION; \
 	$(call success, Major version bumped to $$NEW_VERSION)
 
+bump-from-project: ## 🔧 Bump from project.mk VERSION and update all files
+	@curr="$(VERSION)"; \
+	if echo "$$curr" | grep -Eq 'v[0-9]+\.[0-9]+\.[0-9]+'; then \
+		prefix=$$(echo "$$curr" | sed -E 's/(.*)v[0-9]+\.[0-9]+\.[0-9]+.*/\1/'); \
+		major=$$(echo "$$curr" | sed -E 's/.*v([0-9]+)\..*/\1/'); \
+		minor=$$(echo "$$curr" | sed -E 's/.*v[0-9]+\.([0-9]+)\..*/\1/'); \
+		patch=$$(echo "$$curr" | sed -E 's/.*v[0-9]+\.[0-9]+\.([0-9]+).*/\1/'); \
+		new_patch=$$((patch+1)); \
+		new_ver="$${prefix}v$${major}.$${minor}.$${new_patch}"; \
+	else \
+		new_ver="v1.0.1"; \
+	fi; \
+	echo "$$new_ver" > .NEW_VERSION.tmp; \
+	$(MAKE) update-version-file NEW_VERSION="$$new_ver"
 # ================================================================
 # 버전 검증
 # ================================================================
