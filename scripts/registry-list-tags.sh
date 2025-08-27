@@ -69,7 +69,7 @@ apply_ignore() {
   # stdin/인자 ‘lines’를 받아 IGNORE/IGNORE_RE로 필터링
   # have_dates=1 이면 "<tag>\t<date>" 형식, 0이면 "<tag>"
   local lines="$1" have_dates="$2"
-  local pat="${IGNORE_RE:-}"
+  local pat="${IGNORE_TAG:-}"
   if [[ -z "$pat" && -n "${IGNORE:-}" ]]; then
     pat="$(make_regex_from_list "$IGNORE" || true)"
   fi
