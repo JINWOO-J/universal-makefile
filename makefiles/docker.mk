@@ -12,6 +12,13 @@
 CACHE_SCOPE ?= $(shell echo "$(or $(SCOPE),$(shell git rev-parse --abbrev-ref HEAD))" | sed 's/[^a-zA-Z0-9-]/-/g')
 CACHE_TAG := $(if $(CACHE_TAG),$(CACHE_TAG),cache) # 기본값 설정
 
+# ---- Tag listing (script wrapper) ----
+LIST_TAGS_SCRIPT ?= scripts/registry-list-tags.sh
+PRIVATE ?= 1
+PAGE_SIZE ?= 100
+AUTHFILE ?= $(HOME)/.docker/config.json
+
+
 # 간단한 캐시 전략: 각 브랜치마다 고유 캐시 + main 캐시를 fallback으로 사용
 ifeq ($(DISABLE_CACHE),true)
   # 캐시 완전 비활성화
@@ -289,3 +296,15 @@ clear-build-cache: ## 🧹 Clear Docker build cache
 	@$(call colorecho, 🧹 Clearing Docker build cache...)
 	@docker builder prune -f
 	@$(call success, Build cache cleared)
+
+
+list-tags: ## 🔖 List tags from registry (supports private)
+	@REPO_HUB="$(REPO_HUB)" NAME="$(NAME)" PRIVATE="$(PRIVATE)" PAGE_SIZE="$(PAGE_SIZE)" AUTHFILE="$(AUTHFILE)" \
+	DOCKER_USERNAME="$(DOCKER_USERNAME)" DOCKER_PASSWORD="$(DOCKER_PASSWORD)" \
+	REG_USER="$(REG_USER)" REG_PASS="$(REG_PASS)" \
+	"$(LIST_TAGS_SCRIPT)"
+
+
+latest-tag: ## 🔖 Show latest SemVer tag
+	@$(MAKE) --no-print-directory list-tags REPO_HUB="$(REPO_HUB)" NAME="$(NAME)" | \
+	grep -E '^[0-9]+(\.[0-9]+){1,2}(-[0-9A-Za-z.-]+)?$$' | sort -Vr | head -n1
