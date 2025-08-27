@@ -17,7 +17,7 @@ CURRENT_COMMIT_SHORT := $(shell git rev-parse --short HEAD 2>/dev/null | tr -d '
 CURRENT_COMMIT_LONG := $(shell git rev-parse HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
 
 # 날짜(브랜치 태그 구성에 필요)
-DATE ?= $(shell date -u +%Y%m%d%H%M%S)
+DATE ?= $(shell date -u +%Y%m%d)
 
 # 계산된 변수들
 
