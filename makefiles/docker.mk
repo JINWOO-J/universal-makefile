@@ -299,7 +299,7 @@ clear-build-cache: ## 🧹 Clear Docker build cache
 
 
 list-tags: ## 🔖 List tags from registry (supports private)
-	@IGNORE_TAG_RE="$(IGNORE_TAG_RE)" REPO_HUB="$(REPO_HUB)" NAME="$(NAME)" PRIVATE="$(PRIVATE)" PAGE_SIZE="$(PAGE_SIZE)" AUTHFILE="$(AUTHFILE)" \
+	@IGNORE_TAG="$(IGNORE_TAG)" REPO_HUB="$(REPO_HUB)" NAME="$(NAME)" PRIVATE="$(PRIVATE)" PAGE_SIZE="$(PAGE_SIZE)" AUTHFILE="$(AUTHFILE)" \
 	DOCKER_USERNAME="$(DOCKER_USERNAME)" DOCKER_PASSWORD="$(DOCKER_PASSWORD)" \
 	REG_USER="$(REG_USER)" REG_PASS="$(REG_PASS)" \
 	"$(LIST_TAGS_SCRIPT)"
