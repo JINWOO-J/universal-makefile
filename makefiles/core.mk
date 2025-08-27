@@ -571,7 +571,7 @@ self-%:
 	@echo "DEBUG variable is: [$(DEBUG)]"
 	@export FORCE
 	@echo "FORCE variable is: [$(FORCE)]"
-	@$(call timed_run_with_interactive, Executing '$(MAKEFILE_DIR)/install.sh $(*) $(ARGS)', \
+	@$(call run_interactive, Executing '$(MAKEFILE_DIR)/install.sh $(*) $(ARGS)', \
 		FORCE=$(FORCE) MAKEFILE_DIR="$(MAKEFILE_DIR)" $(MAKEFILE_DIR)/install.sh $(*) $(ARGS) \
 	)
 
