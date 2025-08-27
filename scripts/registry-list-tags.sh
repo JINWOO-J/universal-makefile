@@ -60,6 +60,14 @@ fi
 [[ -n "$NS" ]] || NS="library"
 REF="$HOST/$NS/$IMG"
 
+# ── 추가: FULL_PREFIX (출력용)
+if [[ "$HOST" == "docker.io" ]]; then
+  FULL_PREFIX="$NS/$IMG"            # 예: mycompany/app
+else
+  FULL_PREFIX="$HOST/$NS/$IMG"      # 예: ghcr.io/mycompany/app
+fi
+
+
 echo "${BOLD}${CYAN}Registry:${RESET} $HOST    ${BOLD}${CYAN}Repository:${RESET} $NS/$IMG"
 echo "${DIM}mode:${RESET} ${PRIVATE:-auto}   ${DIM}meta:${RESET} $( [[ "$FETCH_META" == "1" ]] && echo on || echo off )"
 echo
@@ -150,15 +158,22 @@ print_table() {
     return 0
   fi
   if [[ "$have_dates" == "1" ]]; then
-    printf "%s\n" "$lines" | sort -t $'\t' -k2,2r | awk -F'\t' -v y="$YELLOW" -v g="$GREEN" -v r="$RESET" '
-      BEGIN{ printf "%-54s  %s\n", "TAG", "LAST UPDATED" }
-      { printf y"%-54s"r"  "g"%s"r"\n", $1, $2 }
-    '
+    # 입력: "<tag>\t<last_updated>"
+    # 정렬: last_updated 내림차순(최신 위)
+    printf "%s\n" "$lines" \
+    | sort -t $'\t' -k2,2r \
+    | awk -F'\t' -v pfx="$FULL_PREFIX" -v y="$YELLOW" -v g="$GREEN" -v r="$RESET" '
+        BEGIN{ printf "%-70s  %s\n", "IMAGE:TAG", "LAST UPDATED" }
+        { printf y"%-70s"r"  "g"%s"r"\n", pfx ":" $1, $2 }
+      '
   else
-    printf "%s\n" "$lines" | sort | awk -v y="$YELLOW" -v r="$RESET" '
-      BEGIN{ printf "%-54s\n", "TAG" }
-      { printf y"%-54s"r"\n", $0 }
-    '
+    # 입력: "<tag>"
+    printf "%s\n" "$lines" \
+    | sort \
+    | awk -v pfx="$FULL_PREFIX" -v y="$YELLOW" -v r="$RESET" '
+        BEGIN{ printf "%-70s\n", "IMAGE:TAG" }
+        { printf y"%-70s"r"\n", pfx ":" $0 }
+      '
   fi
 }
 
