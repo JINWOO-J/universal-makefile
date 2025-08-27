@@ -48,6 +48,47 @@ fi
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "❌ '$1' 필요합니다." >&2; exit 2; }; }
 
+escape_ere() {
+  # ERE에서 특수문자 이스케이프
+  sed -e 's/[.[\*^$+?(){|\\]/\\&/g'
+}
+
+make_regex_from_list() {
+  # "a,b  c" → (?:a|b|c) 형태의 ERE (리터럴)
+  local raw="$1" IFS=', ' arr=() p
+  read -ra arr <<<"$raw"
+  local out=() item
+  for item in "${arr[@]}"; do
+    [[ -z "$item" ]] && continue
+    out+=("$(printf '%s' "$item" | escape_ere)")
+  done
+  [[ ${#out[@]} -gt 0 ]] && printf '(?:%s)\n' "$(IFS='|'; echo "${out[*]}")"
+}
+
+apply_ignore() {
+  # stdin/인자 ‘lines’를 받아 IGNORE/IGNORE_RE로 필터링
+  # have_dates=1 이면 "<tag>\t<date>" 형식, 0이면 "<tag>"
+  local lines="$1" have_dates="$2"
+  local pat="${IGNORE_RE:-}"
+  if [[ -z "$pat" && -n "${IGNORE:-}" ]]; then
+    pat="$(make_regex_from_list "$IGNORE" || true)"
+  fi
+  [[ -n "$pat" ]] || { printf '%s\n' "$lines"; return 0; }
+
+  local ci="${IGNORE_CASE:-0}"
+  if [[ "$have_dates" == "1" ]]; then
+    awk -F'\t' -v pat="$pat" -v ci="$ci" '
+      function LM(s,p,ci){ return ci ? (tolower(s) ~ tolower(p)) : (s ~ p) }
+      NF { if (!LM($1, pat, ci)) print $0 }
+    ' <<<"$lines"
+  else
+    awk -v pat="$pat" -v ci="$ci" '
+      function LM(s,p,ci){ return ci ? (tolower(s) ~ tolower(p)) : (s ~ p) }
+      NF { if (!LM($0, pat, ci)) print $0 }
+    ' <<<"$lines"
+  fi
+}
+
 # parse repo
 HUB="$REPO_HUB"; IMG="$NAME"
 if [[ "$HUB" == *.*/* ]]; then
@@ -153,13 +194,16 @@ ecr_maybe_set_creds() {
 
 print_table() {
   local lines="$1" have_dates="$2"
+
+  # 🔎 필터 먼저 적용
+  lines="$(apply_ignore "$lines" "$have_dates")"
+
   if [[ -z "$lines" ]]; then
-    echo "⚠️  태그가 없습니다." >&2
+    echo "⚠️  (필터 적용 후) 남은 태그가 없습니다." >&2
     return 0
   fi
+
   if [[ "$have_dates" == "1" ]]; then
-    # 입력: "<tag>\t<last_updated>"
-    # 정렬: last_updated 내림차순(최신 위)
     printf "%s\n" "$lines" \
     | sort -t $'\t' -k2,2r \
     | awk -F'\t' -v pfx="$FULL_PREFIX" -v y="$YELLOW" -v g="$GREEN" -v r="$RESET" '
@@ -167,7 +211,6 @@ print_table() {
         { printf y"%-70s"r"  "g"%s"r"\n", pfx ":" $1, $2 }
       '
   else
-    # 입력: "<tag>"
     printf "%s\n" "$lines" \
     | sort \
     | awk -v pfx="$FULL_PREFIX" -v y="$YELLOW" -v r="$RESET" '
@@ -176,6 +219,7 @@ print_table() {
       '
   fi
 }
+
 
 # ---------- Docker Hub ----------
 hub_list_public() {
@@ -320,6 +364,11 @@ other_registry_list() {
     print_table "$tags" 0
   fi
 }
+
+[[ -n "${IGNORE_RE:-}" || -n "${IGNORE:-}" ]] && \
+  echo "${DIM}ignore:${RESET} ${IGNORE_RE:-$IGNORE}"
+echo
+
 
 # main
 if [[ "$HOST" == "docker.io" ]]; then
