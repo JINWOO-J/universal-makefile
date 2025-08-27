@@ -13,7 +13,7 @@ CACHE_SCOPE ?= $(shell echo "$(or $(SCOPE),$(shell git rev-parse --abbrev-ref HE
 CACHE_TAG := $(if $(CACHE_TAG),$(CACHE_TAG),cache) # 기본값 설정
 
 # ---- Tag listing (script wrapper) ----
-LIST_TAGS_SCRIPT ?= scripts/registry-list-tags.sh
+LIST_TAGS_SCRIPT ?= $(MAKEFILE_DIR)/scripts/registry-list-tags.sh
 PRIVATE ?= 1
 PAGE_SIZE ?= 100
 AUTHFILE ?= $(HOME)/.docker/config.json
