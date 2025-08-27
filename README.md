@@ -31,7 +31,7 @@
 
 ```bash
 # 원격 부트스트랩: 레포가 없는 곳에서 실행 → 프로젝트 디렉토리 생성, 릴리스 설치, 스캐폴딩까지 자동
-wget https://raw.githubusercontent.com/jinwoo-j/universal-makefile/main/setup.sh && chmod +x setup.sh && ./setup.sh
+wget -O setup.sh https://raw.githubusercontent.com/jinwoo-j/universal-makefile/main/setup.sh && chmod +x setup.sh && ./setup.sh
 
 # 자동으로 <universal-makefile> 디렉토리가 생기고, 내부에서 install.sh --release가 실행됩니다.
 make help
