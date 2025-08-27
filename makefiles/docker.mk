@@ -15,7 +15,7 @@ CACHE_TAG := $(if $(CACHE_TAG),$(CACHE_TAG),cache) # 기본값 설정
 # ---- Tag listing (script wrapper) ----
 LIST_TAGS_SCRIPT ?= $(MAKEFILE_DIR)/scripts/registry-list-tags.sh
 PRIVATE ?= 1
-PAGE_SIZE ?= 100
+PAGE_SIZE ?= 10
 AUTHFILE ?= $(HOME)/.docker/config.json
 
 
@@ -299,7 +299,7 @@ clear-build-cache: ## 🧹 Clear Docker build cache
 
 
 list-tags: ## 🔖 List tags from registry (supports private)
-	@REPO_HUB="$(REPO_HUB)" NAME="$(NAME)" PRIVATE="$(PRIVATE)" PAGE_SIZE="$(PAGE_SIZE)" AUTHFILE="$(AUTHFILE)" \
+	@IGNORE_RE="$(IGNORE_RE)" REPO_HUB="$(REPO_HUB)" NAME="$(NAME)" PRIVATE="$(PRIVATE)" PAGE_SIZE="$(PAGE_SIZE)" AUTHFILE="$(AUTHFILE)" \
 	DOCKER_USERNAME="$(DOCKER_USERNAME)" DOCKER_PASSWORD="$(DOCKER_PASSWORD)" \
 	REG_USER="$(REG_USER)" REG_PASS="$(REG_PASS)" \
 	"$(LIST_TAGS_SCRIPT)"
