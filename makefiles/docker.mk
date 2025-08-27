@@ -9,8 +9,13 @@
 # ================================================================
 
 # 캐시 스코프 - 브랜치명을 안전한 Docker 태그로 변환
+empty :=
+space := $(empty) $(empty)
 CACHE_SCOPE ?= $(shell echo "$(or $(SCOPE),$(shell git rev-parse --abbrev-ref HEAD))" | sed 's/[^a-zA-Z0-9-]/-/g')
-CACHE_TAG := $(if $(CACHE_TAG),$(CACHE_TAG),cache) # 기본값 설정
+CACHE_TAG ?= cache # 기본값 설정
+CACHE_TAG := $(strip $(CACHE_TAG))
+REPO_HUB := $(strip $(REPO_HUB))
+NAME     := $(strip $(NAME))
 
 # ---- Tag listing (script wrapper) ----
 LIST_TAGS_SCRIPT ?= $(MAKEFILE_DIR)/scripts/registry-list-tags.sh
