@@ -365,8 +365,8 @@ other_registry_list() {
   fi
 }
 
-[[ -n "${IGNORE_RE:-}" || -n "${IGNORE:-}" ]] && \
-  echo "${DIM}ignore:${RESET} ${IGNORE_RE:-$IGNORE}"
+[[ -n "${IGNORE_TAG_RE:-}" || -n "${IGNORE_TAG:-}" ]] && \
+  echo "${DIM}ignore:${RESET} ${IGNORE_TAG_RE:-$IGNORE_TAG}"
 echo
 
 
