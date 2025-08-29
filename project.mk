@@ -1,4 +1,4 @@
 REPO_HUB=jinwoo
 NAME=universal-makefile
-VERSION = v1.0.168
+VERSION = v1.0.169
 IGNORE_TAG_RE = cache
