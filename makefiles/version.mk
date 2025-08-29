@@ -53,7 +53,7 @@ update-version: ## 🔧 Bump & sync from project.mk VERSION (prefix-aware)
 	if [ -z "$$NEW" ]; then \
 		echo "$(RED)Failed to determine NEW_VERSION after bump$(RESET)" >&2; exit 1; \
 	fi; \
-	$(call print_var, NEW_VERSION, $$NEW); \
+	printf "     %s : %s\n" "NEW_VERSION" "$$NEW"; \
 	$(MAKE) update-version-file \
 		NEW_VERSION="$$NEW" \
 		VERSION_TS_FILE="$(VERSION_TS_FILE)" \
@@ -143,7 +143,7 @@ _update_version_with_tool:
 
 _bump_version_from_variable:
 	@current="$(VERSION)"; \
-	prefix=$$(echo "$$current" | sed -E 's/^(.*)v[0-9]+\.[0-9]+\.[0-9]+.*$/\1/'); \
+	prefix=$${current%%v[0-9]*.[0-9]*.[0-9]*}; \
 	if echo "$$current" | grep -Eq 'v[0-9]+\.[0-9]+\.[0-9]+'; then \
 		major=$$(echo "$$current" | sed -E 's/.*v([0-9]+)\..*/\1/'); \
 		minor=$$(echo "$$current" | sed -E 's/.*v[0-9]+\.([0-9]+)\..*/\1/'); \
@@ -169,27 +169,28 @@ update-version-file:
 	for file in $(VERSION_FILES); do \
 		if [ -f "$$file" ]; then \
 			echo "$(BLUE)Updating version in $$file...$(RESET)"; \
+			updated=false; \
 			case "$$file" in \
 				package.json) \
-					$(SED) 's/"version": "[^"]*"/"version": "'$$PKG_ONLY_VER'"/' "$$file" 2>/dev/null && success=true; \
+					$(SED) 's/"version": "[^"]*"/"version": "'$$PKG_ONLY_VER'"/' "$$file" 2>/dev/null && updated=true; \
 					;; \
 				pyproject.toml) \
-					$(SED) 's/version = "[^"]*"/version = "'$$PKG_ONLY_VER'"/' "$$file" 2>/dev/null && success=true; \
+					$(SED) 's/version = "[^"]*"/version = "'$$PKG_ONLY_VER'"/' "$$file" 2>/dev/null && updated=true; \
 					;; \
 				Cargo.toml) \
-					$(SED) 's/version = "[^"]*"/version = "'$$PKG_ONLY_VER'"/' "$$file" 2>/dev/null && success=true; \
+					$(SED) 's/version = "[^"]*"/version = "'$$PKG_ONLY_VER'"/' "$$file" 2>/dev/null && updated=true; \
 					;; \
 				VERSION) \
-					echo "$$FULL_VER" > "$$file" 2>/dev/null && success=true; \
+					echo "$$FULL_VER" > "$$file" 2>/dev/null && updated=true; \
 					;; \
 				project.mk) \
 					$(SED) 's/^VERSION[[:space:]]*=.*/VERSION = '$$FULL_VER'/' "$$file" 2>/dev/null; \
-					grep -Eq "^VERSION[[:space:]]*=[[:space:]]*$$FULL_VER$$" "$$file" && success=true; \
+					grep -Eq "^VERSION[[:space:]]*=[[:space:]]*$$FULL_VER$$" "$$file" && updated=true; \
 					;; \
 			esac; \
-			if [ "$$success" = "true" ]; then \
+			if [ "$$updated" = "true" ]; then \
 				echo "$(GREEN)✅ Updated version in $$file$(RESET)"; \
-				break; \
+				success=true; \
 			fi; \
 		fi; \
 	done; \
@@ -201,7 +202,7 @@ update-version-file:
 	if [ -n "$(VERSION_POST_UPDATE_HOOK)" ]; then \
 		$(MAKE) $(VERSION_POST_UPDATE_HOOK) \
 			VERSION="$$FULL_VER" \
-			VERSION_DETAIL="$$FULL_VER" \
+			VERSION_DETAIL="$(TAGNAME)" \
 			PKG_VERSION="$$PKG_ONLY_VER" \
 			VERSION_TS_FILE="$(abspath $(VERSION_TS_FILE))" \
 			$(VERSION_HOOK_ARGS); \
@@ -214,7 +215,7 @@ version-sync-ts: ## 🔧 Sync version.ts placeholders (@VERSION, @VERSION_DETAIL
 		exit 1; \
 	fi
 	@if [ -z "$(VERSION)" ]; then \
-		$(call fail, VERSION is empty. ex) make version-sync-ts VERSION=v1.2.3); \
+		$(call fail, VERSION is empty. ex: make version-sync-ts VERSION=v1.2.3); \
 		exit 1; \
 	fi
 	@$(call print_var, Target File, $(VERSION_TS_FILE))
