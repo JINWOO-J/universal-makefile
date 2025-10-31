@@ -1,0 +1,385 @@
+#!/usr/bin/env python3
+"""
+환경 변수 통합 관리 스크립트
+- 환경별 .env 파일 관리
+- 배포 상태 업데이트
+- 환경 변수 조회/검증
+- Git 커밋 자동화
+"""
+
+import os
+import sys
+import json
+import argparse
+import subprocess
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Optional
+
+
+class EnvManager:
+    """환경 변수 통합 관리자"""
+    
+    def __init__(self, environment: str = "prod", project_root: str = None):
+        self.environment = environment
+        self.project_root = Path(project_root or os.getcwd())
+        
+        # 파일 경로
+        self.common_env = self.project_root / ".env.common"
+        self.env_file = self.project_root / f".env.{environment}"
+        self.local_env = self.project_root / ".env.local"
+        self.config_dir = self.project_root / "config" / environment
+        
+        # 필수 변수
+        self.required_vars = [
+            "DOCKER_REGISTRY",
+            "DOCKER_REPO_HUB",
+            "IMAGE_NAME",
+            "ENVIRONMENT"
+        ]
+    
+    def update_deploy_image(self, 
+                           image: str,
+                           ref: str,
+                           version: str,
+                           commit_sha: str,
+                           deployed_by: str) -> None:
+        """배포 이미지 정보 업데이트 (멱등)"""
+        
+        # 기존 내용 읽기
+        env_data = self._read_env_file(self.env_file)
+        
+        # 업데이트
+        env_data["ENVIRONMENT"] = self.environment
+        env_data["DEPLOY_IMAGE"] = image
+        env_data["LAST_DEPLOYED_AT"] = datetime.now().astimezone().isoformat()
+        env_data["DEPLOYED_BY"] = deployed_by
+        env_data["DEPLOYED_COMMIT"] = commit_sha
+        env_data["DEPLOYED_REF"] = ref
+        env_data["DEPLOYED_VERSION"] = version
+        
+        # 파일 쓰기 (멱등)
+        header = f"# {self.environment.upper()} 배포 상태"
+        self._write_env_file(self.env_file, env_data, header=header)
+        
+        # Git 커밋
+        self._git_commit(f"deploy: {self.environment} to {image}")
+        
+        print(f"✓ {self.env_file} 업데이트 완료")
+        print(f"  DEPLOY_IMAGE: {image}")
+    
+    def get(self, key: str, default: str = None) -> Optional[str]:
+        """환경 변수 조회 (계층적)"""
+        
+        # 1. .env.local (최우선)
+        if self.local_env.exists():
+            local_data = self._read_env_file(self.local_env)
+            if key in local_data:
+                return local_data[key]
+        
+        # 2. .env.{environment}
+        env_data = self._read_env_file(self.env_file)
+        if key in env_data:
+            return env_data[key]
+        
+        # 3. .env.common
+        if self.common_env.exists():
+            common_data = self._read_env_file(self.common_env)
+            if key in common_data:
+                return common_data[key]
+        
+        # 4. 기본값
+        return default
+    
+    def set(self, key: str, value: str, commit: bool = True) -> None:
+        """환경 변수 설정"""
+        
+        env_data = self._read_env_file(self.env_file)
+        env_data[key] = value
+        
+        self._write_env_file(self.env_file, env_data)
+        
+        if commit:
+            self._git_commit(f"env: set {key}={value} in {self.environment}")
+        
+        print(f"✓ {key}={value} 설정 완료")
+    
+    def load_all(self) -> Dict[str, str]:
+        """모든 환경 변수 로드 (계층적)"""
+        
+        result = {}
+        
+        # 1. .env.common (기본)
+        if self.common_env.exists():
+            result.update(self._read_env_file(self.common_env))
+        
+        # 2. .env.{environment} (환경별 오버라이드)
+        if self.env_file.exists():
+            result.update(self._read_env_file(self.env_file))
+        
+        # 3. .env.local (로컬 오버라이드)
+        if self.local_env.exists():
+            result.update(self._read_env_file(self.local_env))
+        
+        return result
+    
+    def validate(self) -> bool:
+        """필수 환경 변수 검증"""
+        
+        env_data = self.load_all()
+        missing = []
+        
+        for var in self.required_vars:
+            if var not in env_data or not env_data[var]:
+                missing.append(var)
+        
+        if missing:
+            print(f"❌ 누락된 필수 환경 변수: {', '.join(missing)}", file=sys.stderr)
+            return False
+        
+        print(f"✓ 모든 필수 환경 변수 설정됨")
+        return True
+    
+    def get_deploy_status(self) -> Dict:
+        """배포 상태 조회"""
+        
+        env_data = self._read_env_file(self.env_file)
+        
+        return {
+            "environment": self.environment,
+            "deploy_image": env_data.get("DEPLOY_IMAGE", "N/A"),
+            "last_deployed_at": env_data.get("LAST_DEPLOYED_AT", "N/A"),
+            "deployed_by": env_data.get("DEPLOYED_BY", "N/A"),
+            "deployed_commit": env_data.get("DEPLOYED_COMMIT", "N/A"),
+            "deployed_ref": env_data.get("DEPLOYED_REF", "N/A"),
+            "deployed_version": env_data.get("DEPLOYED_VERSION", "N/A"),
+        }
+    
+    def export(self, include_warning: bool = True) -> str:
+        """docker-compose용 환경 변수 export"""
+        
+        env_data = self.load_all()
+        lines = []
+        
+        if include_warning:
+            lines.append("# ⚠️  이 파일은 자동 생성됩니다. 직접 수정하지 마세요!")
+            lines.append(f"# 환경: {self.environment}")
+            lines.append(f"# 생성 시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            lines.append(f"# 로드 순서: .env.common → .env.{self.environment} → .env.local")
+            lines.append("")
+        
+        for key, value in sorted(env_data.items()):
+            lines.append(f"{key}={value}")
+        
+        return "\n".join(lines)
+    
+    def export_with_sources(self) -> list:
+        """오버라이드 정보를 포함한 환경 변수 export"""
+        
+        # 각 파일별로 로드
+        common_data = {}
+        env_data = {}
+        local_data = {}
+        
+        if self.common_env.exists():
+            common_data = self._read_env_file(self.common_env)
+        
+        if self.env_file.exists():
+            env_data = self._read_env_file(self.env_file)
+        
+        if self.local_env.exists():
+            local_data = self._read_env_file(self.local_env)
+        
+        # 모든 키 수집
+        all_keys = set()
+        all_keys.update(common_data.keys())
+        all_keys.update(env_data.keys())
+        all_keys.update(local_data.keys())
+        
+        result = []
+        for key in sorted(all_keys):
+            sources = []
+            final_value = None
+            
+            # 각 소스에서 값 확인
+            if key in common_data:
+                sources.append(("common", common_data[key]))
+                final_value = common_data[key]
+            
+            if key in env_data:
+                sources.append((self.environment, env_data[key]))
+                final_value = env_data[key]
+            
+            if key in local_data:
+                sources.append(("local", local_data[key]))
+                final_value = local_data[key]
+            
+            # 결과 생성
+            result.append({
+                "key": key,
+                "value": final_value,
+                "sources": sources,
+                "overridden": len(sources) > 1
+            })
+        
+        return result
+    
+    def init_env_file(self) -> None:
+        """환경 파일 초기화"""
+        
+        if self.env_file.exists():
+            print(f"⚠️  {self.env_file} 파일이 이미 존재합니다")
+            return
+        
+        # 기본 내용
+        env_data = {
+            "ENVIRONMENT": self.environment,
+        }
+        
+        header = f"# {self.environment.upper()} 배포 상태"
+        self._write_env_file(self.env_file, env_data, header=header)
+        
+        print(f"✓ {self.env_file} 파일 생성 완료")
+    
+    # Private methods
+    
+    def _read_env_file(self, path: Path) -> Dict[str, str]:
+        """env 파일 읽기"""
+        
+        if not path.exists():
+            return {}
+        
+        result = {}
+        with open(path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    result[key.strip()] = value.strip()
+        
+        return result
+    
+    def _write_env_file(self, path: Path, data: Dict[str, str], header: str = None) -> None:
+        """env 파일 쓰기 (멱등)"""
+        
+        lines = []
+        
+        if header:
+            lines.append(header)
+            lines.append(f"# 마지막 업데이트: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            lines.append("")
+        
+        for key, value in sorted(data.items()):
+            lines.append(f"{key}={value}")
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write("\n".join(lines) + "\n")
+    
+    def _git_commit(self, message: str) -> None:
+        """Git 커밋"""
+        
+        try:
+            subprocess.run(
+                ["git", "add", str(self.env_file)],
+                check=True,
+                cwd=self.project_root,
+                capture_output=True
+            )
+            subprocess.run(
+                ["git", "commit", "-m", message],
+                check=True,
+                cwd=self.project_root,
+                capture_output=True
+            )
+            print(f"✓ Git 커밋: {message}")
+        except subprocess.CalledProcessError:
+            # 변경사항이 없거나 커밋 실패 시 무시
+            pass
+
+
+def main():
+    parser = argparse.ArgumentParser(description="환경 변수 통합 관리")
+    parser.add_argument(
+        "command",
+        choices=["update", "get", "set", "status", "validate", "export", "init", "export-sources"],
+        help="실행할 명령"
+    )
+    parser.add_argument(
+        "--environment", "-e",
+        default="prod",
+        help="환경 (기본: prod)"
+    )
+    parser.add_argument("--image", help="배포 이미지")
+    parser.add_argument("--ref", help="Git 참조")
+    parser.add_argument("--version", help="버전")
+    parser.add_argument("--commit-sha", help="커밋 SHA")
+    parser.add_argument("--deployed-by", help="배포자")
+    parser.add_argument("--no-warning", action="store_true", help="export 시 경고 메시지 제외")
+    parser.add_argument("key", nargs="?", help="환경 변수 키")
+    parser.add_argument("value", nargs="?", help="환경 변수 값")
+    
+    args = parser.parse_args()
+    
+    manager = EnvManager(environment=args.environment)
+    
+    try:
+        if args.command == "update":
+            if not all([args.image, args.ref, args.version, args.commit_sha, args.deployed_by]):
+                print("❌ update 명령은 --image, --ref, --version, --commit-sha, --deployed-by 필요", file=sys.stderr)
+                sys.exit(1)
+            
+            manager.update_deploy_image(
+                image=args.image,
+                ref=args.ref,
+                version=args.version,
+                commit_sha=args.commit_sha,
+                deployed_by=args.deployed_by
+            )
+        
+        elif args.command == "get":
+            if not args.key:
+                print("❌ get 명령은 key 인자 필요", file=sys.stderr)
+                sys.exit(1)
+            
+            value = manager.get(args.key)
+            if value:
+                print(value)
+            else:
+                print(f"❌ {args.key} not found", file=sys.stderr)
+                sys.exit(1)
+        
+        elif args.command == "set":
+            if not args.key or not args.value:
+                print("❌ set 명령은 key와 value 인자 필요", file=sys.stderr)
+                sys.exit(1)
+            
+            manager.set(args.key, args.value)
+        
+        elif args.command == "status":
+            status = manager.get_deploy_status()
+            print(json.dumps(status, indent=2, ensure_ascii=False))
+        
+        elif args.command == "validate":
+            if not manager.validate():
+                sys.exit(1)
+        
+        elif args.command == "export":
+            print(manager.export(include_warning=not args.no_warning))
+        
+        elif args.command == "export-sources":
+            sources_data = manager.export_with_sources()
+            print(json.dumps(sources_data, ensure_ascii=False, indent=2))
+        
+        elif args.command == "init":
+            manager.init_env_file()
+    
+    except Exception as e:
+        print(f"❌ 에러 발생: {str(e)}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
