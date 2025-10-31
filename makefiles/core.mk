@@ -1,3 +1,4 @@
+SHELL := /bin/bash
 # ================================================================
 # Core Functions and Variables
 # ================================================================
@@ -11,6 +12,9 @@ VERSION ?= v1.0.0
 MAIN_BRANCH ?= main
 DEVELOP_BRANCH ?= develop
 FORCE ?= false
+
+SOURCE_DIR ?= $(CURDIR)/source
+SOURCE_REPO ?= ""
 
 # 현재 짧은/긴 커밋 해시 (TAGNAME 계산 전에 필요)
 CURRENT_COMMIT_SHORT := $(shell git rev-parse --short HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
@@ -84,7 +88,8 @@ ifeq ($(FORCE_REBUILD), true)
 endif
 
 # Docker 파일 경로 (project.mk에서 오버라이드 가능)
-DOCKERFILE_PATH ?= docker/Dockerfile.app
+DOCKERFILE_PATH ?= docker/Dockerfile
+DOCKERFILE_CONTEXT ?= $(SOURCE_DIR)
 
 # 색상 설정 (CI 환경 고려)
 ifeq ($(CI),true)
@@ -93,12 +98,14 @@ ifeq ($(CI),true)
     BLUE :=
     RED :=
     RESET :=
+	NC :=
 else
     GREEN := $(shell tput setaf 2 2>/dev/null || echo "")
     YELLOW := $(shell tput setaf 3 2>/dev/null || echo "")
     BLUE := $(shell tput setaf 4 2>/dev/null || echo "")
     RED := $(shell tput setaf 1 2>/dev/null || echo "")
     RESET := $(shell tput sgr0 2>/dev/null || echo "")
+    NC := $(shell tput sgr0 2>/dev/null || echo "")
 endif
 
 # 플랫폼별 SED 설정
@@ -138,6 +145,34 @@ export $(ENV_VARS_ALL) $(ENV_VARS_PASSTHROUGH)
 # ================================================================
 
 # 색상 출력 함수
+define log_info
+	@echo -e "$(BLUE)[INFO]$(NC) $(1)"
+endef
+
+define log_success
+	@echo -e "$(GREEN)[SUCCESS]$(NC) $(1)"
+endef
+
+define log_warning
+	@echo -e "$(YELLOW)[WARNING]$(NC) $(1)"
+endef
+
+define log_error
+	@echo -e "$(RED)[ERROR]$(NC) $(1)"
+endef
+
+define sh_log_info
+printf "$(BLUE)[INFO]$(NC) %s\n" "$(1)"
+endef
+define sh_log_warning
+printf "$(YELLOW)[WARNING]$(NC) %s\n" "$(1)"
+endef
+define sh_log_error
+printf "$(RED)[ERROR]$(NC) %s\n" "$(1)"
+endef
+
+
+
 define colorecho
 @if [ -n "$(GREEN)" ]; then \
     $(ECHO_CMD) "$(GREEN)$(1)$(RESET)"; \
@@ -620,6 +655,10 @@ self-%:
 
 debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(ECHO_CMD) "$(MAGENTA)🐰 Core Variables:$(RESET)"
+	
+	@$(call print_var, SOURCE_REPO, $(SOURCE_REPO))
+	@$(call print_var, SOURCE_DIR, $(SOURCE_DIR))
+
 	@$(call print_var, REPO_HUB, $(REPO_HUB))
 	@$(call print_var, NAME, $(NAME))
 	@$(call print_var, VERSION, $(VERSION))
@@ -641,6 +680,7 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(ECHO_CMD) ""
 	@$(ECHO_CMD) "$(MAGENTA)🐰 Docker Configuration:$(RESET)"
 	@$(call print_var, DOCKERFILE_PATH, $(DOCKERFILE_PATH))
+	@$(call print_var, DOCKERFILE_CONTEXT, $(DOCKERFILE_CONTEXT))
 	@$(call print_var, DOCKER_BUILD_OPTION, $(DOCKER_BUILD_OPTION))
 	@$(call print_var, BUILD_ARGS, $(BUILD_ARGS_CONTENT))
 	@$(call print_var, DEBUG_ARGS, $(DEBUG_ARGS_CONTENT))
