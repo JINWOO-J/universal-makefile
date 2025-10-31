@@ -555,3 +555,34 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 
 
 info: debug-vars
+
+# ================================================================
+# GitHub Actions 워크플로우 관리
+# ================================================================
+
+install-workflows: ## 🔧 GitHub Actions 워크플로우 대화형 설치
+	@$(call colorecho, 🚀 GitHub Actions 워크플로우 설치 마법사)
+	@bash $(MAKEFILE_DIR)/scripts/install_workflows.sh
+
+list-workflows: ## 🔧 사용 가능한 워크플로우 목록 보기
+	@echo "$(BLUE)📋 사용 가능한 워크플로우:$(RESET)"
+	@echo ""
+	@if [ -d "$(MAKEFILE_DIR)/github/workflows" ]; then \
+		for file in $(MAKEFILE_DIR)/github/workflows/*.yml $(MAKEFILE_DIR)/github/workflows/*.yaml; do \
+			if [ -f "$$file" ]; then \
+				name=$$(basename "$$file"); \
+				desc=$$(grep -m1 "^name:" "$$file" 2>/dev/null | sed 's/name:[[:space:]]*//'); \
+				installed=""; \
+				if [ -f ".github/workflows/$$name" ]; then \
+					installed="$(GREEN)[설치됨]$(RESET)"; \
+				else \
+					installed="$(GRAY)[미설치]$(RESET)"; \
+				fi; \
+				printf "  $(CYAN)%-30s$(RESET) %s %s\n" "$$name" "$$desc" "$$installed"; \
+			fi; \
+		done; \
+	else \
+		echo "$(RED)워크플로우 디렉토리를 찾을 수 없습니다.$(RESET)"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)💡 설치하려면: make install-workflows$(RESET)"
