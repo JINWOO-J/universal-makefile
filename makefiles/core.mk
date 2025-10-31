@@ -35,7 +35,9 @@ ifeq ($(UMF_MODE),global)
         else
           override VERSION := $(_PARSED_VERSION)
         endif
-        $(info [INFO] VERSION 자동 파싱: $(VERSION) (from $(VERSION_FILE)))
+        ifndef SILENT_MODE
+          $(info [INFO] VERSION 자동 파싱: $(VERSION) (from $(VERSION_FILE)))
+        endif
       endif
     endif
   endif

@@ -81,6 +81,20 @@ show-src-version:
 	  echo "$$GIT_COMMIT_LOGS"; \
 	};	
 
+print-env: ## 🔧 환경 변수 출력 (SILENT_MODE=1로 로그 숨김 가능)
+	@{ \
+		$(compute_build_vars); \
+		echo "COMMIT_SHA=$$COMMIT_SHA"; \
+		echo "SHA8=$$SHA8"; \
+		echo "BRANCH_NAME=$$BRANCH_NAME"; \
+		echo "IMAGE_TAG=$$IMAGE_TAG"; \
+		echo "VERSION=$(VERSION)"; \
+		echo "TAGNAME=$(TAGNAME)"; \
+	}
+
+print-env-quiet: ## 🔧 환경 변수 출력 (로그 없이)
+	@$(MAKE) --no-print-directory print-env SILENT_MODE=1
+
 show-umf-version:
 	@$(ECHO_CMD) "$(MAGENTA)🐰 Universal Makefile Information:$(RESET)"
 	@$(call print_var, UMF Installed, $$(cat $(UM_VERSION_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none'))
