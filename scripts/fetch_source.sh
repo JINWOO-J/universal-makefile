@@ -1,6 +1,14 @@
 #!/bin/bash
 # 소스 코드 fetch 스크립트
-# 사용법: ./scripts/fetch_source.sh <SOURCE_DIR> <SOURCE_REPO> <REF> <CLEAN>
+# 사용법: ./scripts/fetch_source.sh <SOURCE_DIR> <SOURCE_REPO> <REF> [CLEAN]
+#
+# 환경 변수:
+#   GH_TOKEN - GitHub Personal Access Token (private repo 접근용)
+#
+# SOURCE_REPO 형식:
+#   - owner/repo                    → https://github.com/owner/repo.git
+#   - https://github.com/owner/repo → 그대로 사용
+#   - git@github.com:owner/repo     → SSH 사용
 
 set -e  # 에러 발생 시 즉시 종료
 
@@ -52,12 +60,48 @@ else
     NEED_CLONE=true
 fi
 
+# Git URL 생성 함수
+build_git_url() {
+    local repo="$1"
+    
+    # 이미 완전한 URL인 경우 (https:// 또는 git@)
+    if [[ "$repo" =~ ^https:// ]] || [[ "$repo" =~ ^git@ ]]; then
+        echo "$repo"
+        return
+    fi
+    
+    # SSH 형식 감지 (git@github.com:owner/repo)
+    if [[ "$repo" =~ ^git@ ]]; then
+        echo "$repo"
+        return
+    fi
+    
+    # owner/repo 형식 → HTTPS URL 생성
+    # GH_TOKEN이 있으면 포함
+    if [ -n "$GH_TOKEN" ]; then
+        echo "https://${GH_TOKEN}@github.com/${repo}.git"
+    else
+        echo "https://github.com/${repo}.git"
+    fi
+}
+
 # Clone 또는 Fetch
 if [ "$NEED_CLONE" = "true" ]; then
     mkdir -p "$SOURCE_DIR"
     echo ""
-    echo -e "${BLUE}[INFO]${NC} 저장소 클론: $SOURCE_REPO"
-    git clone "https://github.com/$SOURCE_REPO.git" "$SOURCE_DIR" || {
+    
+    # Git URL 생성
+    GIT_URL=$(build_git_url "$SOURCE_REPO")
+    
+    # 토큰 마스킹된 URL (로그용)
+    if [ -n "$GH_TOKEN" ]; then
+        DISPLAY_URL=$(echo "$GIT_URL" | sed "s/${GH_TOKEN}/***TOKEN***/g")
+        echo -e "${BLUE}[INFO]${NC} 저장소 클론: $DISPLAY_URL"
+    else
+        echo -e "${BLUE}[INFO]${NC} 저장소 클론: $GIT_URL"
+    fi
+    
+    git clone "$GIT_URL" "$SOURCE_DIR" || {
         echo -e "${RED}❌ 저장소 클론 실패${NC}"
         exit 1
     }
