@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.179(B
-Project: universal-makefile vv1.0.179(B
+📋 Universal Makefile System v1.0.180(B
+Project: universal-makefile vv1.0.180(B
 Repository: jinwoo/universal-makefile(B
 Current Branch: develop(B
 Environment: development(B
@@ -64,6 +64,8 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   version-info        (B Show version information  [help.mk]
   getting-started     (B Show getting started guide  [help.mk]
   show-version        (B Show current version	  [version.mk]
+  print-env           (B 환경 변수 출력 (SILENT_MODE=1로 로그 숨김 가능)  [version.mk]
+  print-env-quiet     (B 환경 변수 출력 (로그 없이)  [version.mk]
   uv                  (B Update version (shortcut)  [version.mk]
   update-version      (B Bump & sync from project.mk VERSION (prefix-aware)  [version.mk]
   version-sync-ts     (B Sync version.ts placeholders (@VERSION, @VERSION_DETAIL, @VERSION_NAME)  [version.mk]

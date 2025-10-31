@@ -11,16 +11,22 @@ ENV_FILE_LOADED := true
 ifneq (,$(wildcard .env.common))
     include .env.common
     export
-    $(info [INFO] .env.common 파일 로드됨)
+    ifndef SILENT_MODE
+      $(info [INFO] .env.common 파일 로드됨)
+    endif
 endif
 
 ifneq (,$(wildcard .env.local))
     include .env.local
     export
-    $(info [INFO] .env.local 파일 로드됨 (오버라이드))
+    ifndef SILENT_MODE
+      $(info [INFO] .env.local 파일 로드됨 (오버라이드))
+    endif
 else
     $(shell touch .env.local)
-    $(info [INFO] .env.local 파일이 없어서 빈 파일로 생성했습니다)
+    ifndef SILENT_MODE
+      $(info [INFO] .env.local 파일이 없어서 빈 파일로 생성했습니다)
+    endif
 endif
 
 endif # ENV_FILE_LOADED
@@ -28,7 +34,9 @@ endif # ENV_FILE_LOADED
 # .env.runtime 파일 확인 및 생성
 ifeq (,$(wildcard .env.runtime))
     $(shell touch .env.runtime)
-    $(info [INFO] .env.runtime 파일이 없어서 빈 파일로 생성했습니다)
+    ifndef SILENT_MODE
+      $(info [INFO] .env.runtime 파일이 없어서 빈 파일로 생성했습니다)
+    endif
 endif
 
 prepare-env: ## 🔧 .env 파일 준비 (docker-compose용)
