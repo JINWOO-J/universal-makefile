@@ -1,3 +1,7 @@
+# Include guard - 중복 로드 방지
+ifndef COLORS_MK_LOADED
+COLORS_MK_LOADED := true
+
 # ANSI Color codes
 # RED := \033[0;31m
 # GREEN := \033[0;32m
@@ -45,12 +49,82 @@ RESET  := $(ESC)[0m
 # 	@printf '\033[0;33m%s\033[0m\n' $(1)
 # endef
 
+# 색상 출력 함수
+define log_info
+	@echo -e "$(BLUE)[INFO]$(NC) $(1)"
+endef
+
+define log_success
+	@echo -e "$(GREEN)[SUCCESS]$(NC) $(1)"
+endef
+
+define log_warning
+	@echo -e "$(YELLOW)[WARNING]$(NC) $(1)"
+endef
+
+define log_error
+	@echo -e "$(RED)[ERROR]$(NC) $(1)"
+endef
+
+define sh_log_info
+printf "$(BLUE)[INFO]$(NC) %s\n" "$(1)"
+endef
+define sh_log_warning
+printf "$(YELLOW)[WARNING]$(NC) %s\n" "$(1)"
+endef
+define sh_log_error
+printf "$(RED)[ERROR]$(NC) %s\n" "$(1)"
+endef
+
 define print_color
 	$(ECHO_CMD) " $(1)$(2)$(RESET)"
 endef
 
 define print_error
 	$(ECHO_CMD) "$(RED) ❌ $(1)$(RESET)"
+endef
+
+
+
+
+
+define colorecho
+@if [ -n "$(GREEN)" ]; then \
+    $(ECHO_CMD) "$(GREEN)$(1)$(RESET)"; \
+else \
+    $(ECHO_CMD) "--- $(1) ---"; \
+fi
+endef
+
+
+define warn_echo
+if [ -n "$(YELLOW)" ]; then \
+    $(ECHO_CMD) "$(YELLOW)⚠️  $(1)$(RESET)"; \
+else \
+    $(ECHO_CMD) "WARNING: $(1)"; \
+fi
+endef
+
+
+define error_echo
+if [ -n "$(RED)" ]; then \
+    $(ECHO_CMD) "$(RED)❌ $(1)$(RESET)" >&2; \
+else \
+    $(ECHO_CMD) "ERROR: $(1)" >&2; \
+fi
+endef
+
+define success_echo
+if [ -n "$(GREEN)" ]; then \
+    $(ECHO_CMD) "$(GREEN)✅ $(1)$(RESET)"; \
+else \
+    $(ECHO_CMD) "SUCCESS: $(1)"; \
+fi
+endef
+
+
+define task_echo
+	$(ECHO_CMD) "\n$(YELLOW)🚀  $(1)$(RESET)"
 endef
 
 
@@ -157,3 +231,4 @@ export GREEN
 export YELLOW
 export RED
 export RESET
+endif

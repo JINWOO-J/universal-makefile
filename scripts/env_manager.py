@@ -173,8 +173,13 @@ class EnvManager:
         
         return "\n".join(lines)
     
-    def export_with_sources(self) -> list:
-        """오버라이드 정보를 포함한 환경 변수 export"""
+    def export_with_sources(self, format: str = "json", show_override: bool = False) -> str:
+        """오버라이드 정보를 포함한 환경 변수 export
+        
+        Args:
+            format: 출력 형식 (json, table, colored)
+            show_override: 오버라이드 정보 표시 여부
+        """
         
         # 각 파일별로 로드
         common_data = {}
@@ -222,7 +227,77 @@ class EnvManager:
                 "overridden": len(sources) > 1
             })
         
-        return result
+        # 포맷에 따라 출력
+        if format == "json":
+            return json.dumps(result, ensure_ascii=False, indent=2)
+        elif format == "table":
+            return self._format_table(result, show_override)
+        elif format == "colored":
+            return self._format_colored(result, show_override)
+        else:
+            raise ValueError(f"Unknown format: {format}")
+    
+    def _format_table(self, data: list, show_override: bool) -> str:
+        """테이블 형식으로 포맷"""
+        lines = []
+        
+        for item in data:
+            key = item["key"]
+            value = item["value"]
+            overridden = item["overridden"]
+            
+            if show_override and overridden:
+                # 오버라이드된 경우 소스 정보 표시
+                lines.append(f"{key}|{value}|OVERRIDE")
+                for source_name, source_value in item["sources"]:
+                    is_final = source_value == value
+                    marker = "✓" if is_final else " "
+                    lines.append(f"  {marker} {source_name}|{source_value}|")
+            else:
+                # 단일 소스
+                source_name = item["sources"][0][0] if item["sources"] else "unknown"
+                lines.append(f"{key}|{value}|{source_name}")
+        
+        return "\n".join(lines)
+    
+    def _format_colored(self, data: list, show_override: bool) -> str:
+        """색상 포함 형식으로 포맷 (ANSI 색상 코드)"""
+        # ANSI 색상 코드
+        BLUE = "\033[34m"
+        GREEN = "\033[32m"
+        RED = "\033[31m"
+        YELLOW = "\033[33m"
+        GRAY = "\033[90m"
+        NC = "\033[0m"  # No Color
+        
+        lines = []
+        
+        for item in data:
+            key = item["key"]
+            value = item["value"]
+            overridden = item["overridden"]
+            sources = item["sources"]
+            
+            if show_override and overridden:
+                # 상세 오버라이드 정보 표시
+                lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {RED}[Override]{NC}")
+                for i, (source_name, source_value) in enumerate(sources):
+                    is_last = i == len(sources) - 1
+                    is_final = source_value == value
+                    prefix = "└─" if is_last else "├─"
+                    marker = f" {YELLOW}✓{NC}" if is_final else ""
+                    lines.append(f"{GRAY}  {prefix} {source_name}: {source_value}{marker}{NC}")
+            elif overridden:
+                # 간단한 오버라이드 표시 (최종 소스만)
+                final_source = sources[-1][0] if sources else "unknown"
+                source_list = " → ".join([s[0] for s in sources])
+                lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {YELLOW}[{source_list}]{NC}")
+            else:
+                # 단일 소스
+                source_name = sources[0][0] if sources else "unknown"
+                lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {GRAY}[{source_name}]{NC}")
+        
+        return "\n".join(lines)
     
     def init_env_file(self) -> None:
         """환경 파일 초기화"""
@@ -318,6 +393,8 @@ def main():
     parser.add_argument("--commit-sha", help="커밋 SHA")
     parser.add_argument("--deployed-by", help="배포자")
     parser.add_argument("--no-warning", action="store_true", help="export 시 경고 메시지 제외")
+    parser.add_argument("--format", choices=["json", "table", "colored"], default="json", help="export-sources 출력 형식")
+    parser.add_argument("--show-override", action="store_true", help="오버라이드 정보 표시")
     parser.add_argument("key", nargs="?", help="환경 변수 키")
     parser.add_argument("value", nargs="?", help="환경 변수 값")
     
@@ -370,8 +447,11 @@ def main():
             print(manager.export(include_warning=not args.no_warning))
         
         elif args.command == "export-sources":
-            sources_data = manager.export_with_sources()
-            print(json.dumps(sources_data, ensure_ascii=False, indent=2))
+            output = manager.export_with_sources(
+                format=args.format,
+                show_override=args.show_override
+            )
+            print(output)
         
         elif args.command == "init":
             manager.init_env_file()
