@@ -386,6 +386,7 @@ include $(MAKEFILE_DIR)/makefiles/docker.mk
 include $(MAKEFILE_DIR)/makefiles/compose.mk
 include $(MAKEFILE_DIR)/makefiles/git-flow.mk
 include $(MAKEFILE_DIR)/makefiles/cleanup.mk
+include $(MAKEFILE_DIR)/makefiles/git-file.mk
 EOF
         log_success "Makefile.universal scaffolded"
     fi

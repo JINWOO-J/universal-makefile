@@ -99,6 +99,11 @@ jobs:
        needs.validate-payload.outputs.ref == 'refs/heads/develop' ||
        startsWith(needs.validate-payload.outputs.ref, 'refs/heads/ci/'))
     
+    outputs:
+      image_tag: ${{ steps.build-vars.outputs.image_tag }}
+      build_version: ${{ steps.build-vars.outputs.build_version }}
+      build_commit: ${{ steps.build-vars.outputs.build_commit }}
+    
     env:
       SOURCE_REPO: ${{ needs.validate-payload.outputs.source_repo }}
       REF: ${{ needs.validate-payload.outputs.ref }}
@@ -134,11 +139,28 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
       
       - name: 빌드 환경 변수 설정
+        id: build-vars
         run: |
           echo "DOCKER_REGISTRY=${{ vars.DOCKER_REGISTRY || 'docker.io' }}" >> $GITHUB_ENV
-          echo "REPO_HUB=${{ vars.DOCKER_REPO_HUB || 'jinwoo' }}" >> $GITHUB_ENV
+          echo "REPO_HUB=${{ vars.DOCKER_REPO_HUB || '42tape' }}" >> $GITHUB_ENV
           echo "NAME=${{ vars.IMAGE_NAME || 'app' }}" >> $GITHUB_ENV
           echo "UMF_MODE=global" >> $GITHUB_ENV
+          
+          # 빌드 변수 추출
+          eval $(make print-env SILENT_MODE=1)
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          echo "BUILD_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "BUILD_COMMIT=$SHA8" >> $GITHUB_ENV
+          
+          # Outputs 설정
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "build_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_commit=$SHA8" >> $GITHUB_OUTPUT
+          
+          echo "=== 빌드 정보 ==="
+          echo "IMAGE_TAG: $IMAGE_TAG"
+          echo "VERSION: $VERSION"
+          echo "COMMIT: $SHA8"
       
       - name: 이미지 빌드
         run: |
@@ -170,10 +192,11 @@ jobs:
                 "color": "good",
                 "fields": [
                   {"title": "소스 저장소", "value": "${{ needs.validate-payload.outputs.source_repo }}", "short": true},
-                  {"title": "버전", "value": "${{ needs.validate-payload.outputs.version }}", "short": true},
+                  {"title": "버전", "value": "${{ env.BUILD_VERSION }}", "short": true},
                   {"title": "서비스", "value": "${{ needs.validate-payload.outputs.service_kind }}", "short": true},
                   {"title": "환경", "value": "${{ needs.validate-payload.outputs.environment }}", "short": true},
-                  {"title": "이미지", "value": "${{ env.REPO_HUB }}/${{ env.NAME }}:${{ needs.validate-payload.outputs.version }}", "short": false}
+                  {"title": "커밋", "value": "${{ env.BUILD_COMMIT }}", "short": true},
+                  {"title": "이미지", "value": "${{ env.IMAGE_TAG }}", "short": false}
                 ]
               }]
             }'
@@ -282,22 +305,33 @@ jobs:
       - name: Slack 알림 - 배포 성공
         if: success() && vars.SLACK_WEBHOOK_URL
         run: |
+          # 빌드된 이미지 정보 가져오기
+          IMAGE_TAG="${{ needs.build.outputs.image_tag }}"
+          BUILD_VERSION="${{ needs.build.outputs.build_version }}"
+          BUILD_COMMIT="${{ needs.build.outputs.build_commit }}"
+          
+          # 빌드가 스킵된 경우 기본값 사용
+          if [ -z "$IMAGE_TAG" ]; then
+            IMAGE_TAG="${{ env.DOCKER_REPO_HUB }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
+            BUILD_VERSION="${{ env.VERSION }}"
+          fi
+          
           curl -X POST ${{ vars.SLACK_WEBHOOK_URL }} \
             -H 'Content-Type: application/json' \
-            -d '{
-              "text": "🎉 배포 성공",
-              "attachments": [{
-                "color": "good",
-                "fields": [
-                  {"title": "소스 저장소", "value": "${{ env.SOURCE_REPO }}", "short": true},
-                  {"title": "버전", "value": "${{ env.VERSION }}", "short": true},
-                  {"title": "서비스", "value": "${{ env.SERVICE_KIND }}", "short": true},
-                  {"title": "환경", "value": "${{ env.ENVIRONMENT }}", "short": true},
-                  {"title": "이미지", "value": "${{ env.DOCKER_REPO_HUB }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}", "short": false},
-                  {"title": "배포 시각", "value": "<!date^${{ github.event.repository.updated_at }}^{date_short_pretty} {time}|${{ github.event.repository.updated_at }}>", "short": false}
+            -d "{
+              \"text\": \"🎉 배포 성공\",
+              \"attachments\": [{
+                \"color\": \"good\",
+                \"fields\": [
+                  {\"title\": \"소스 저장소\", \"value\": \"${{ env.SOURCE_REPO }}\", \"short\": true},
+                  {\"title\": \"버전\", \"value\": \"$BUILD_VERSION\", \"short\": true},
+                  {\"title\": \"서비스\", \"value\": \"${{ env.SERVICE_KIND }}\", \"short\": true},
+                  {\"title\": \"환경\", \"value\": \"${{ env.ENVIRONMENT }}\", \"short\": true},
+                  {\"title\": \"커밋\", \"value\": \"$BUILD_COMMIT\", \"short\": true},
+                  {\"title\": \"이미지\", \"value\": \"$IMAGE_TAG\", \"short\": false}
                 ]
               }]
-            }'
+            }"
       
       - name: Slack 알림 - 배포 실패
         if: failure() && vars.SLACK_WEBHOOK_URL
