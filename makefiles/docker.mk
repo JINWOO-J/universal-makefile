@@ -76,8 +76,20 @@ endif
 # 빌드 타겟
 # ================================================================
 
-build: check-docker make-build-args ## 🎯 Build the Docker image
-	@$(call print_color, $(BLUE),🔨Building Docker image with tag: $(TAGNAME))
+validate-dockerfile:
+	@if [ -z "$(strip $(DOCKERFILE_PATH))" ]; then \
+		echo "[ERROR] DOCKERFILE_PATH가 비어 있습니다. 예: DOCKERFILE_PATH=./Dockerfile"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(DOCKERFILE_PATH)" ]; then \
+		echo "[ERROR] Dockerfile을 찾을 수 없습니다: $(DOCKERFILE_PATH)"; \
+		exit 1; \
+	else \
+		$(call print_color, $(BLUE),🔎 Using Dockerfile: $(DOCKERFILE_PATH)); \
+	fi
+
+build: validate-dockerfile check-docker make-build-args ## 🎯 Build the Docker image
+	@$(call print_color,$(BLUE),🔨Building Docker image with tag: $(TAGNAME))
 	@echo "$(BLUE)🔍 Cache Debug Info:$(RESET)"
 	@echo "  Environment: $(if $(CI),GitHub Actions,Local)"
 	@echo "  CACHE_SCOPE: $(CACHE_SCOPE)"
@@ -98,11 +110,72 @@ build: check-docker make-build-args ## 🎯 Build the Docker image
 			-f $(DOCKERFILE_PATH) \
 			-t $(FULL_TAG) \
 			$(BUILDX_FLAGS) \
-			. \
+			$(DOCKERFILE_CONTEXT) \
 	)
 	@echo ""
 	@$(call print_color, $(BLUE),--- Image Details ---)
 	@docker images $(FULL_TAG)
+
+docker-build:   ## 소스 fetch 후 Docker 명령어로 직접 빌드
+	$(call log_info,"Docker 직접 빌드 시작...")
+
+	@if [ ! -d "$(SOURCE_DIR)" ]; then \
+		$(call sh_log_error,소스 디렉토리가 없습니다. 먼저 'make fetch'를 실행하세요.); \
+		exit 1; \
+	fi
+
+	@echo ""
+	@echo "=== 빌드 정보 ==="
+	@echo "Dockerfile 모드: $(DOCKERFILE_MODE)"
+	@echo "선택된 Dockerfile: $(DOCKERFILE_SELECTED)"
+	@echo "선택된 Context: $(CONTEXT_SELECTED)"
+	@echo ""
+
+	@if [ ! -f "$(DOCKERFILE_SELECTED)" ]; then \
+		$(call sh_log_error,Dockerfile을 찾을 수 없습니다: $(DOCKERFILE_SELECTED)); \
+		exit 1; \
+	fi
+
+	@if [ ! -d "$(CONTEXT_SELECTED)" ]; then \
+		$(call sh_log_error,빌드 컨텍스트 디렉토리가 없습니다: $(CONTEXT_SELECTED)); \
+		exit 1; \
+	fi
+
+	@{ \
+	  $(compute_build_vars); \
+	  CACHE_FLAG=$$( [ "$(NO_CACHE)" = "true" ] && echo "--no-cache" ); \
+	  echo "=== 생성된 이미지 태그 ==="; \
+	  echo "$$IMAGE_TAG"; \
+	  echo ""; \
+	  echo "=== Docker 빌드 시작 ==="; \
+	  echo ""; \
+	  echo "🔍 실행할 명령어:"; \
+	  echo "DOCKER_BUILDKIT=1 docker build $$CACHE_FLAG --build-arg NODE_VERSION=$(NODE_VERSION) --progress=plain -f $(DOCKERFILE_SELECTED) -t $$IMAGE_TAG $(CONTEXT_SELECTED)"; \
+	  echo ""; \
+	  DOCKER_BUILDKIT=1 docker build $$CACHE_FLAG \
+	    --build-arg NODE_VERSION="$(NODE_VERSION)" \
+	    --progress=plain \
+	    -f "$(DOCKERFILE_SELECTED)" \
+	    -t "$$IMAGE_TAG" \
+	    "$(CONTEXT_SELECTED)" \
+	  || { \
+	    echo ""; \
+	    printf "$(RED)============================================================$(NC)\n"; \
+	    printf "$(RED)❌ Docker 빌드 실패$(NC)\n"; \
+	    printf "$(RED)============================================================$(NC)\n"; \
+	    exit 1; \
+	  }; \
+	  echo ""; \
+	  printf "$(GREEN)============================================================$(NC)\n"; \
+	  printf "$(GREEN)✅ Docker 빌드 성공: %s$(NC)\n" "$$IMAGE_TAG"; \
+	  printf "$(GREEN)============================================================$(NC)\n"; \
+	  echo ""; \
+	  echo "이미지 정보: $$IMAGE_TAG"; \
+	  docker images "$$IMAGE_TAG_NO_REGISTRY" --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"; \
+	}
+
+	$(call log_success,"Docker 직접 빌드 완료")
+
 
 build-clean: ## 🎯 Build without cache
 	@$(call print_color, $(BLUE),🔨Building Docker image without cache)

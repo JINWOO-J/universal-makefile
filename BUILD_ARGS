@@ -1,1 +1,1 @@
---build-arg REPO_HUB=defaultrepo --build-arg NAME=universal-makefile --build-arg VERSION=v1.0.7 --build-arg TAGNAME=v1.0.7 --build-arg BUILD_REVISION=master-02beb9f-dirty --build-arg ENV=development
+--build-arg REPO_HUB=jinwoo --build-arg NAME=universal-makefile --build-arg VERSION=v1.0.171 --build-arg TAGNAME=v1.0.171-develop-20251031-0b553fd --build-arg BUILD_REVISION=develop-0b553fd-dirty --build-arg ENV=development

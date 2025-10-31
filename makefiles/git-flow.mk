@@ -15,6 +15,7 @@ TAG_ANNOTATE ?= 1         # 1: annotated tag, 0: lightweight
 TAG_SIGN ?= 0             # 1: GPG 서명 태그
 TP    := $(strip $(TAG_PREFIX))
 BUMPK := $(strip $(BUMP))
+SCRIPTS_DIR = $(MAKEFILE_DIR)/scripts
 
 
 .PHONY: git-status sync-develop start-release list-old-branches clean-old-branches
@@ -56,6 +57,11 @@ define RESET_TO_REMOTE
 endef
 
 .PHONY: reset-branch reset-main reset-develop
+
+git-fetch: 
+	$(call log_info,"소스 코드 가져오기 시작... $(SOURCE_REPO) ")
+	@bash $(SCRIPTS_DIR)/fetch_source.sh "$(SOURCE_DIR)" "$(SOURCE_REPO)" "$(REF)" "$(CLEAN)"
+	$(call log_success,"소스 코드 가져오기 완료")
 
 scan-secrets: ## 🔒 Lightweight secret scan (regex) — no deps
 	@set -Eeuo pipefail; echo "$(BLUE)🔍 Scanning for obvious secrets...$(RESET)"; \

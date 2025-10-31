@@ -22,6 +22,42 @@ VERSION_TS_FILE ?= src/app/environment/version.ts
 # ================================================================
 # 기본 버전 관리 타겟들
 # ================================================================
+define extract_branch_name_script
+if [[ "$(REF)" == refs/pull/* ]]; then \
+	PR_NUM=$$(echo "$(REF)" | sed 's|refs/pull/\([0-9]*\)/.*|\1|'); \
+	if [[ "$(REF)" == */merge ]]; then \
+		BRANCH_NAME="pr-$$PR_NUM-merge"; \
+	else \
+		BRANCH_NAME="pr-$$PR_NUM"; \
+	fi; \
+else \
+	BRANCH_NAME=$$(echo "$(REF)" | sed 's/.*\///'); \
+fi
+endef
+
+# 사용법: BRANCH_NAME=$(call extract_branch_name,$(REF))
+define extract_branch_name
+$(shell \
+	if [[ "$(1)" == refs/pull/* ]]; then \
+		echo "$(1)" | sed 's|refs/pull/\([0-9]*\)/.*|pr-\1|'; \
+	else \
+		echo "$(1)" | sed 's/.*\///'; \
+	fi \
+)
+endef
+
+define get_latest_git_logs
+	GIT_COMMIT_LOGS=$$(cd $(SOURCE_DIR) && git --no-pager log -4 --oneline --no-decorate)
+endef
+
+
+define compute_build_vars
+	COMMIT_SHA=$$(cd $(SOURCE_DIR) && git rev-parse HEAD); \
+	$(extract_branch_name_script); \
+	CURRENT_DATE=$$(date +%Y%m%d); \
+	SHA8=$${COMMIT_SHA:0:8}; \
+	IMAGE_TAG="$(IMAGE_NAME):$(SERVICE_KIND)-$(VERSION)-$${BRANCH_NAME}-$${CURRENT_DATE}-$${SHA8}"
+endef
 
 show-version: ## 🔧 Show current version	
 	@$(ECHO_CMD) "$(MAGENTA)🐰 Version Information:$(RESET)"
@@ -32,6 +68,18 @@ show-version: ## 🔧 Show current version
 	@$(call print_var, Git Commit, $$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown'))
 	@$(ECHO_CMD) ""
 	@$(MAKE) show-umf-version
+
+show-src-version:
+	@{ \
+	  $(compute_build_vars); \
+	  $(get_latest_git_logs); \
+	  echo "> Commit: $$COMMIT_SHA"; \
+	  echo "> SHA8: $$SHA8"; \
+	  echo "> BRANCH_NAME: $$BRANCH_NAME"; \
+	  echo "> IMAGE_TAG: $$IMAGE_TAG"; \
+	  echo "> Git commit logs"; \
+	  echo "$$GIT_COMMIT_LOGS"; \
+	};	
 
 show-umf-version:
 	@$(ECHO_CMD) "$(MAGENTA)🐰 Universal Makefile Information:$(RESET)"
