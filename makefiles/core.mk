@@ -23,8 +23,10 @@ CURRENT_COMMIT_LONG := $(shell git rev-parse HEAD 2>/dev/null | tr -d ' ' || ech
 # 날짜(브랜치 태그 구성에 필요)
 DATE ?= $(shell date -u +%Y%m%d)
 
-# 계산된 변수들
+# Universal Makfile 실행 모드 = local: project와 함께 or global: 외부 clone으로 동작
+UMF_MODE ?= local 
 
+# 계산된 변수들
 CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | tr ' ' '-' || echo "unknown")
 ifeq ($(CURRENT_BRANCH),HEAD)
     CURRENT_BRANCH := detached
