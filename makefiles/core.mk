@@ -560,11 +560,7 @@ info: debug-vars
 # GitHub Actions 워크플로우 관리
 # ================================================================
 
-install-workflows: ## 🔧 GitHub Actions 워크플로우 대화형 설치
-	@$(call colorecho, 🚀 GitHub Actions 워크플로우 설치 마법사)
-	@bash $(MAKEFILE_DIR)/scripts/install_workflows.sh
-
-list-workflows: ## 🔧 사용 가능한 워크플로우 목록 보기
+list-workflows: ## � 사용 가능한 워크플로c우 목록 보기
 	@echo "$(BLUE)📋 사용 가능한 워크플로우:$(RESET)"
 	@echo ""
 	@if [ -d "$(MAKEFILE_DIR)/github/workflows" ]; then \
@@ -585,4 +581,46 @@ list-workflows: ## 🔧 사용 가능한 워크플로우 목록 보기
 		echo "$(RED)워크플로우 디렉토리를 찾을 수 없습니다.$(RESET)"; \
 	fi
 	@echo ""
-	@echo "$(YELLOW)💡 설치하려면: make install-workflows$(RESET)"
+	@echo "$(YELLOW)💡 사용법:$(RESET)"
+	@echo "  make install-workflow WORKFLOW=dispatch-deploy.yml"
+	@echo "  make install-workflow WORKFLOW=\"dispatch-deploy.yml build-dev.yml\""
+
+install-workflow: ## 🔧 워크플로우 설치 (사용법: make install-workflow WORKFLOW=파일명)
+	@if [ -z "$(WORKFLOW)" ]; then \
+		echo "$(RED)❌ WORKFLOW 변수가 필요합니다.$(RESET)"; \
+		echo ""; \
+		echo "$(YELLOW)사용법:$(RESET)"; \
+		echo "  make install-workflow WORKFLOW=dispatch-deploy.yml"; \
+		echo "  make install-workflow WORKFLOW=\"dispatch-deploy.yml build-dev.yml\""; \
+		echo ""; \
+		echo "$(CYAN)사용 가능한 워크플로우 목록:$(RESET)"; \
+		$(MAKE) --no-print-directory list-workflows; \
+		exit 1; \
+	fi; \
+	mkdir -p .github/workflows; \
+	installed=0; \
+	skipped=0; \
+	for wf in $(WORKFLOW); do \
+		source="$(MAKEFILE_DIR)/github/workflows/$$wf"; \
+		target=".github/workflows/$$wf"; \
+		if [ ! -f "$$source" ]; then \
+			echo "$(RED)❌ 파일을 찾을 수 없습니다: $$wf$(RESET)"; \
+			continue; \
+		fi; \
+		if [ -f "$$target" ]; then \
+			echo "$(YELLOW)⚠️  이미 존재합니다: $$wf$(RESET)"; \
+			read -p "   덮어쓰시겠습니까? (y/N): " -n 1 -r; \
+			echo ""; \
+			if [[ ! $$REPLY =~ ^[Yy]$$ ]]; then \
+				echo "$(CYAN)   → 건너뜀$(RESET)"; \
+				skipped=$$((skipped + 1)); \
+				continue; \
+			fi; \
+		fi; \
+		cp "$$source" "$$target"; \
+		echo "$(GREEN)✓ 설치 완료: $$wf$(RESET)"; \
+		installed=$$((installed + 1)); \
+	done; \
+	echo ""; \
+	echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"; \
+	echo "$(GREEN)✅ 완료!$(RESET) 설치: $${installed} 개, 건너뜀: $${skipped} 개"
