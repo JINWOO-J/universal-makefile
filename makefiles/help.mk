@@ -137,8 +137,8 @@ help-env: ## 🔧 Environment variable helpers help (auto, grouped)
 	@echo "$(BLUE)🌐 Environment Helpers$(RESET)"
 	@echo ""
 	@$(MAKE) --no-print-directory _show-files-grouped \
-		FILES="core.mk" \
-		GROUPS="query:Query/Show|format:Formatting|file:Files|other:Other"
+		FILES="core.mk,env-file.mk" \
+		GROUPS="query:Query/Show|format:Formatting|file:Files|prepare:.env Preparation|other:Other"
 
 help-system: ## 🔧 Installer/system commands help (auto, grouped)
 	@echo ""

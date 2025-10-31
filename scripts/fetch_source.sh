@@ -78,16 +78,23 @@ cd "$SOURCE_DIR"
 if [[ "$REF" == refs/pull/* ]]; then
     echo -e "${BLUE}[INFO]${NC} PR 참조 감지, fetch 실행: $REF"
     
-    # pr-branch가 이미 체크아웃되어 있으면 임시로 detached HEAD로 이동
+    # PR 번호 추출 (refs/pull/17/head -> pr-17)
+    PR_NUMBER=$(echo "$REF" | sed -n 's|refs/pull/\([0-9]*\)/.*|\1|p')
+    BRANCH_NAME="pr-${PR_NUMBER}"
+    
+    echo "  PR 번호: $PR_NUMBER"
+    echo "  브랜치 이름: $BRANCH_NAME"
+    
+    # 해당 브랜치가 이미 체크아웃되어 있으면 임시로 detached HEAD로 이동
     CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
-    if [ "$CURRENT_BRANCH" = "pr-branch" ]; then
-        echo "  현재 pr-branch에 있음, 임시로 HEAD로 이동..."
+    if [ "$CURRENT_BRANCH" = "$BRANCH_NAME" ]; then
+        echo "  현재 $BRANCH_NAME에 있음, 임시로 HEAD로 이동..."
         git checkout --detach HEAD
     fi
     
-    # pr-branch 삭제 후 다시 생성 (강제 업데이트)
-    git branch -D pr-branch 2>/dev/null || true
-    git fetch origin "$REF:pr-branch" && git checkout pr-branch
+    # 기존 브랜치 삭제 후 다시 생성 (강제 업데이트)
+    git branch -D "$BRANCH_NAME" 2>/dev/null || true
+    git fetch origin "$REF:$BRANCH_NAME" && git checkout "$BRANCH_NAME"
 else
     git checkout "$REF"
 fi || {
