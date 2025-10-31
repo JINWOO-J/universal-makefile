@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.176(B
-Project: universal-makefile vv1.0.176(B
+📋 Universal Makefile System v1.0.177(B
+Project: universal-makefile vv1.0.177(B
 Repository: jinwoo/universal-makefile(B
 Current Branch: develop(B
 Environment: development(B
@@ -51,6 +51,8 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   check-docker        (B Check if Docker is running  [core.mk]
   check-git-clean     (B Check if working directory is clean  [core.mk]
   debug-vars          (B Show all Makefile variables in a structured way  [core.mk]
+  install-workflows   (B GitHub Actions 워크플로우 대화형 설치  [core.mk]
+  list-workflows      (B 사용 가능한 워크플로우 목록 보기  [core.mk]
   help-git            (B Git workflow commands help (auto, grouped)  [help.mk]
   help-compose        (B Docker Compose commands help (auto, grouped)  [help.mk]
   help-cleanup        (B Cleanup commands help (auto, grouped)  [help.mk]
