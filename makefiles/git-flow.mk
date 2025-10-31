@@ -58,10 +58,31 @@ endef
 
 .PHONY: reset-branch reset-main reset-develop
 
-git-fetch: 
-	$(call log_info,"소스 코드 가져오기 시작... $(SOURCE_REPO) ")
-	@bash $(SCRIPTS_DIR)/fetch_source.sh "$(SOURCE_DIR)" "$(SOURCE_REPO)" "$(REF)" "$(CLEAN)"
-	$(call log_success,"소스 코드 가져오기 완료")
+git-fetch: ## 🔧 소스 코드 가져오기 (사용법: make git-fetch SOURCE_REPO=owner/repo REF=main)
+	@if [ -z "$(SOURCE_REPO)" ]; then \
+		echo "$(RED)❌ SOURCE_REPO 변수가 필요합니다.$(RESET)"; \
+		echo ""; \
+		echo "$(YELLOW)사용법:$(RESET)"; \
+		echo "  make git-fetch SOURCE_REPO=owner/repo REF=main"; \
+		echo "  make git-fetch SOURCE_REPO=git@github.com:owner/repo.git REF=develop"; \
+		echo "  make git-fetch SOURCE_REPO=https://github.com/owner/repo REF=feature/test"; \
+		echo ""; \
+		echo "$(CYAN)환경 변수:$(RESET)"; \
+		echo "  GH_TOKEN - GitHub Personal Access Token (private repo용)"; \
+		echo "  CLEAN    - 기존 디렉토리 삭제 여부 (기본: true)"; \
+		exit 1; \
+	fi; \
+	if [ -z "$(REF)" ]; then \
+		echo "$(RED)❌ REF 변수가 필요합니다.$(RESET)"; \
+		exit 1; \
+	fi; \
+	export GH_TOKEN="$(GH_TOKEN)"; \
+	bash $(MAKEFILE_DIR)/scripts/fetch_source.sh \
+		"$(SOURCE_DIR)" \
+		"$(SOURCE_REPO)" \
+		"$(REF)" \
+		"$(CLEAN)"
+
 
 scan-secrets: ## 🔒 Lightweight secret scan (regex) — no deps
 	@set -Eeuo pipefail; echo "$(BLUE)🔍 Scanning for obvious secrets...$(RESET)"; \
