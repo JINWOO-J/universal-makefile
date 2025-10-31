@@ -108,7 +108,7 @@ draw_screen() {
     echo -e "${BOLD}${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${YELLOW}📋 사용 가능한 워크플로우:${NC}"
-    echo -e "${CYAN}   [Space] 선택/해제  [Enter] 설치  [q] 종료${NC}"
+    echo -e "${CYAN}   [↑/↓ or j/k] 이동  [Space] 선택/해제  [Enter] 설치  [q] 종료${NC}"
     echo ""
     
     local workflows=($(get_available_workflows))
@@ -172,49 +172,62 @@ interactive_select() {
         exit 1
     fi
     
-    # 터미널 설정 저장
+    # 터미널 설정 저장 및 raw 모드 설정
     local old_tty_settings=$(stty -g)
+    stty -echo -icanon time 0 min 0
     
     # 화면 그리기
     draw_screen
     
     # 키 입력 처리
     while true; do
-        # 한 글자씩 읽기
-        read -rsn1 key
+        # 키 입력 읽기
+        IFS= read -rsn1 key
         
-        case "$key" in
-            $'\x1b')  # ESC 시퀀스
-                read -rsn2 key  # 나머지 읽기
-                case "$key" in
-                    '[A')  # 위 화살표
-                        if [ $CURRENT_INDEX -gt 0 ]; then
-                            ((CURRENT_INDEX--))
-                            draw_screen
-                        fi
-                        ;;
-                    '[B')  # 아래 화살표
-                        if [ $CURRENT_INDEX -lt $((total - 1)) ]; then
-                            ((CURRENT_INDEX++))
-                            draw_screen
-                        fi
-                        ;;
-                esac
-                ;;
-            ' ')  # 스페이스바
-                toggle_selection "${workflows[$CURRENT_INDEX]}"
+        # ESC 시퀀스 처리
+        if [[ $key == $'\x1b' ]]; then
+            # 추가 문자 읽기
+            read -rsn2 -t 0.1 key
+            case "$key" in
+                '[A')  # 위 화살표
+                    if [ $CURRENT_INDEX -gt 0 ]; then
+                        ((CURRENT_INDEX--))
+                        draw_screen
+                    fi
+                    ;;
+                '[B')  # 아래 화살표
+                    if [ $CURRENT_INDEX -lt $((total - 1)) ]; then
+                        ((CURRENT_INDEX++))
+                        draw_screen
+                    fi
+                    ;;
+            esac
+        elif [[ $key == ' ' ]]; then
+            # 스페이스바
+            toggle_selection "${workflows[$CURRENT_INDEX]}"
+            draw_screen
+        elif [[ $key == '' ]]; then
+            # 엔터
+            break
+        elif [[ $key == 'q' ]] || [[ $key == 'Q' ]]; then
+            # 종료
+            stty "$old_tty_settings"
+            echo ""
+            echo -e "${YELLOW}설치를 취소했습니다.${NC}"
+            exit 0
+        elif [[ $key == 'j' ]] || [[ $key == 'J' ]]; then
+            # j = 아래로 (vim 스타일)
+            if [ $CURRENT_INDEX -lt $((total - 1)) ]; then
+                ((CURRENT_INDEX++))
                 draw_screen
-                ;;
-            '')  # 엔터
-                break
-                ;;
-            'q'|'Q')  # 종료
-                stty "$old_tty_settings"
-                echo ""
-                echo -e "${YELLOW}설치를 취소했습니다.${NC}"
-                exit 0
-                ;;
-        esac
+            fi
+        elif [[ $key == 'k' ]] || [[ $key == 'K' ]]; then
+            # k = 위로 (vim 스타일)
+            if [ $CURRENT_INDEX -gt 0 ]; then
+                ((CURRENT_INDEX--))
+                draw_screen
+            fi
+        fi
     done
     
     # 터미널 설정 복원
@@ -282,6 +295,54 @@ install_workflows() {
     echo ""
 }
 
+# 간단한 선택 UI (폴백)
+simple_select() {
+    local workflows=($(get_available_workflows))
+    local total=${#workflows[@]}
+    
+    if [ $total -eq 0 ]; then
+        echo -e "${RED}❌ 사용 가능한 워크플로우가 없습니다.${NC}"
+        exit 1
+    fi
+    
+    echo -e "${YELLOW}📋 사용 가능한 워크플로우:${NC}"
+    echo ""
+    
+    local index=1
+    for workflow in "${workflows[@]}"; do
+        local description=$(get_workflow_description "$workflow")
+        local installed=""
+        
+        if is_installed "$workflow"; then
+            installed="${GREEN}[설치됨]${NC}"
+        else
+            installed="${GRAY}[미설치]${NC}"
+        fi
+        
+        echo -e " ${CYAN}$index)${NC} ${BOLD}$workflow${NC}"
+        echo -e "    $description $installed"
+        echo ""
+        ((index++))
+    done
+    
+    echo -e "${CYAN}설치할 워크플로우 번호를 입력하세요 (쉼표로 구분, 예: 1,3,5):${NC}"
+    read -p "> " selection
+    
+    if [ -z "$selection" ]; then
+        echo -e "${YELLOW}선택된 워크플로우가 없습니다.${NC}"
+        exit 0
+    fi
+    
+    # 선택 파싱
+    IFS=',' read -ra SELECTED_INDICES <<< "$selection"
+    for idx in "${SELECTED_INDICES[@]}"; do
+        idx=$(echo "$idx" | tr -d ' ')
+        if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "$total" ]; then
+            SELECTED_WORKFLOWS+=("${workflows[$((idx-1))]}")
+        fi
+    done
+}
+
 # 메인 실행
 main() {
     echo -e "${BOLD}${MAGENTA}"
@@ -299,8 +360,8 @@ main() {
         exit 1
     fi
     
-    # 대화형 선택
-    interactive_select
+    # 간단한 선택 모드 사용 (더 안정적)
+    simple_select
     
     # 설치 실행
     install_workflows
