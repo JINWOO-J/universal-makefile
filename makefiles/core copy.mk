@@ -3,15 +3,10 @@ SHELL := /bin/bash
 # Core Functions and Variables
 # ================================================================
 
-include $(MAKEFILE_DIR)/makefiles/colors.mk
-
 # 기본 변수들 (project.mk에서 오버라이드 가능)
 REPO_HUB ?= defaultrepo
 NAME ?= defaultapp
 VERSION ?= v1.0.0
-
-# 버전 파일 설정 (선택적)
-VERSION_FILE ?=
 
 # Git 브랜치 설정 (project.mk에서 오버라이드 가능)
 MAIN_BRANCH ?= main
@@ -21,45 +16,18 @@ FORCE ?= false
 SOURCE_DIR ?= $(CURDIR)/source
 SOURCE_REPO ?= ""
 
-# UMF_MODE에 따라 버전 자동 파싱
-ifeq ($(UMF_MODE),global)
-  ifneq ($(VERSION_FILE),)
-    _VERSION_FILE_PATH := $(SOURCE_DIR)/$(VERSION_FILE)
-    ifneq ($(wildcard $(_VERSION_FILE_PATH)),)
-      # VERSION_FILE이 존재하면 파싱
-      _PARSED_VERSION := $(shell bash $(MAKEFILE_DIR)/scripts/parse_version.sh "$(_VERSION_FILE_PATH)" 2>/dev/null)
-      ifneq ($(_PARSED_VERSION),)
-        # v 접두사가 없으면 추가
-        ifeq ($(findstring v,$(_PARSED_VERSION)),)
-          override VERSION := v$(_PARSED_VERSION)
-        else
-          override VERSION := $(_PARSED_VERSION)
-        endif
-        $(info [INFO] VERSION 자동 파싱: $(VERSION) (from $(VERSION_FILE)))
-      endif
-    endif
-  endif
-endif
-
-# Universal Makfile 실행 모드 = local: project와 함께 or global: 외부 clone으로 동작
-UMF_MODE ?= local 
-
-# UMF_MODE에 따라 Git 작업 디렉토리 결정
-ifeq ($(UMF_MODE),global)
-    GIT_WORK_DIR := $(SOURCE_DIR)
-else
-    GIT_WORK_DIR := $(CURDIR)
-endif
-
 # 현재 짧은/긴 커밋 해시 (TAGNAME 계산 전에 필요)
-CURRENT_COMMIT_SHORT := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse --short HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
-CURRENT_COMMIT_LONG := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
+CURRENT_COMMIT_SHORT := $(shell git rev-parse --short HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
+CURRENT_COMMIT_LONG := $(shell git rev-parse HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
 
 # 날짜(브랜치 태그 구성에 필요)
 DATE ?= $(shell date -u +%Y%m%d)
 
+# Universal Makfile 실행 모드 = local: project와 함께 or global: 외부 clone으로 동작
+UMF_MODE ?= local 
+
 # 계산된 변수들
-CURRENT_BRANCH := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null | tr ' ' '-' || echo "unknown")
+CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | tr ' ' '-' || echo "unknown")
 ifeq ($(CURRENT_BRANCH),HEAD)
     CURRENT_BRANCH := detached
 endif
@@ -91,7 +59,7 @@ FULL_TAG := $(APP_IMAGE_NAME):$(TAGNAME)
 LATEST_TAG := $(APP_IMAGE_NAME):latest
 
 # Git 워킹 디렉토리의 상태를 확인 (커밋되지 않은 변경사항이 있으면 출력 내용이 생김)
-GIT_STATUS := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git status --porcelain 2>/dev/null)
+GIT_STATUS := $(shell git status --porcelain 2>/dev/null)
 
 ifeq ($(strip $(GIT_STATUS)),)
 	GIT_DIRTY_SUFFIX :=
@@ -178,6 +146,73 @@ export $(ENV_VARS_ALL) $(ENV_VARS_PASSTHROUGH)
 # 공통 함수들
 # ================================================================
 
+# 색상 출력 함수
+define log_info
+	@echo -e "$(BLUE)[INFO]$(NC) $(1)"
+endef
+
+define log_success
+	@echo -e "$(GREEN)[SUCCESS]$(NC) $(1)"
+endef
+
+define log_warning
+	@echo -e "$(YELLOW)[WARNING]$(NC) $(1)"
+endef
+
+define log_error
+	@echo -e "$(RED)[ERROR]$(NC) $(1)"
+endef
+
+define sh_log_info
+printf "$(BLUE)[INFO]$(NC) %s\n" "$(1)"
+endef
+define sh_log_warning
+printf "$(YELLOW)[WARNING]$(NC) %s\n" "$(1)"
+endef
+define sh_log_error
+printf "$(RED)[ERROR]$(NC) %s\n" "$(1)"
+endef
+
+
+
+define colorecho
+@if [ -n "$(GREEN)" ]; then \
+    $(ECHO_CMD) "$(GREEN)$(1)$(RESET)"; \
+else \
+    $(ECHO_CMD) "--- $(1) ---"; \
+fi
+endef
+
+
+define warn_echo
+if [ -n "$(YELLOW)" ]; then \
+    $(ECHO_CMD) "$(YELLOW)⚠️  $(1)$(RESET)"; \
+else \
+    $(ECHO_CMD) "WARNING: $(1)"; \
+fi
+endef
+
+
+define error_echo
+if [ -n "$(RED)" ]; then \
+    $(ECHO_CMD) "$(RED)❌ $(1)$(RESET)" >&2; \
+else \
+    $(ECHO_CMD) "ERROR: $(1)" >&2; \
+fi
+endef
+
+define success_echo
+if [ -n "$(GREEN)" ]; then \
+    $(ECHO_CMD) "$(GREEN)✅ $(1)$(RESET)"; \
+else \
+    $(ECHO_CMD) "SUCCESS: $(1)"; \
+fi
+endef
+
+
+define task_echo
+	$(ECHO_CMD) "\n$(YELLOW)🚀  $(1)$(RESET)"
+endef
 
 TIMER_SCRIPT := $(MAKEFILE_DIR)/scripts/timed_run_script.sh
 
@@ -437,7 +472,80 @@ print-test:
 	@$(call warn, warn)
 	@$(call blue, blue)
 
+env-keys: ## 🔧 env-show 기본/전체 키 목록 출력
+	@echo "DEFAULT: $(ENV_VARS_DEFAULT)"
+	@echo "ALL:     $(ENV_VARS_ALL)"
 
+env-get: ## 🔧 지정 변수 값만 출력 (사용법: make env-get VAR=NAME)
+	@[ -n "$(VAR)" ] || { echo "VAR is required (e.g., make env-get VAR=NAME)" >&2; exit 1; }
+	@printf "%s\n" "$($(VAR))"
+
+# 사용 예:
+#  - make env-show -s >> $$GITHUB_ENV
+#  - make env-show FORMAT=kv
+#  - make env-show VARS="REPO_HUB NAME ROLE"
+#  - make env-show PREFIX=DOCKER_
+#  - make env-show ALL=true SKIP_EMPTY=true
+#  - make env-show SHOW_SECRETS=true
+env-show: ## 🔧 key=value 형식 출력(FORMAT=kv|dotenv|github, VARS/ENV_VARS/PREFIX/ALL/SKIP_EMPTY/SHOW_SECRETS)
+	@FORMAT='$(FORMAT)'; [ -n "$$FORMAT" ] || FORMAT="dotenv"; \
+	SKIP_EMPTY='$(SKIP_EMPTY)'; [ -n "$$SKIP_EMPTY" ] || SKIP_EMPTY="false"; \
+	SHOW_SECRETS='$(SHOW_SECRETS)'; [ -n "$$SHOW_SECRETS" ] || SHOW_SECRETS="false"; \
+	for k in $(if $(strip $(PREFIX)),$(filter $(PREFIX)%,$(if $(filter true,$(ALL)),$(ENV_VARS_ALL),$(if $(strip $(VARS)),$(VARS),$(if $(strip $(ENV_VARS)),$(ENV_VARS),$(ENV_VARS_DEFAULT))))) ,$(if $(filter true,$(ALL)),$(ENV_VARS_ALL),$(if $(strip $(VARS)),$(VARS),$(if $(strip $(ENV_VARS)),$(ENV_VARS),$(ENV_VARS_DEFAULT))))) ; do \
+		v=$$(printenv "$$k"); \
+		if [ "$$SKIP_EMPTY" = "true" ] && [ -z "$$v" ]; then continue; fi; \
+		case "$$k" in *TOKEN*|*PASSWORD*|*SECRET*|*KEY*|*WEBHOOK*) \
+			if [ "$$SHOW_SECRETS" != "true" ]; then v="****"; fi ;; \
+		esac; \
+		if [ "$$FORMAT" = "github" ]; then \
+			one=$$(printf '%s' "$$v" | tr '\n' ' '); \
+			printf '%s=%s\n' "$$k" "$$one"; \
+		else \
+			one=$$(printf '%s' "$$v" | tr '\n' ' ' | sed 's/"/\\"/g'); \
+			printf '%s="%s"\n' "$$k" "$$one"; \
+		fi; \
+	done
+
+# .env 파일로 저장 (기본: .env). 비어있는 값 건너뛰기(SKIP_EMPTY), 비밀값 마스킹 제어(SHOW_SECRETS)
+env-file: ## 🔧 선택한 환경 변수를 .env 파일로 저장 (FILE=.env, VARS/ENV_VARS/PREFIX/ALL/SKIP_EMPTY/SHOW_SECRETS)
+	@FILE='$(FILE)'; [ -n "$$FILE" ] || FILE=".env"; \
+	SKIP_EMPTY='$(SKIP_EMPTY)'; [ -n "$$SKIP_EMPTY" ] || SKIP_EMPTY="false"; \
+	SHOW_SECRETS='$(SHOW_SECRETS)'; [ -n "$$SHOW_SECRETS" ] || SHOW_SECRETS="false"; \
+	echo "# Generated .env - $$(date)" > "$$FILE"; \
+	for k in $(if $(strip $(PREFIX)),$(filter $(PREFIX)%,$(if $(filter true,$(ALL)),$(ENV_VARS_ALL),$(if $(strip $(VARS)),$(VARS),$(if $(strip $(ENV_VARS)),$(ENV_VARS),$(ENV_VARS_DEFAULT))))) ,$(if $(filter true,$(ALL)),$(ENV_VARS_ALL),$(if $(strip $(VARS)),$(VARS),$(if $(strip $(ENV_VARS)),$(ENV_VARS),$(ENV_VARS_DEFAULT))))) ; do \
+		v=$$(printenv "$$k"); \
+		if [ "$$SKIP_EMPTY" = "true" ] && [ -z "$$v" ]; then continue; fi; \
+		case "$$k" in *TOKEN*|*PASSWORD*|*SECRET*|*KEY*|*WEBHOOK*) \
+			if [ "$$SHOW_SECRETS" != "true" ]; then v="****"; fi ;; \
+		esac; \
+		one=$$(printf '%s' "$$v" | tr '\n' ' ' | sed 's/"/\\"/g'); \
+		printf '%s="%s"\n' "$$k" "$$one" >> "$$FILE"; \
+	done; \
+	$(call success_echo, Wrote $$FILE)
+
+# 간단 별칭: 디폴트로 .env 저장. 필요 시 FILE=path로 변경
+env: ## 🔧 현재 환경 변수를 .env로 저장 (별칭: env-file)
+	@$(MAKE) --no-print-directory -f $(firstword $(MAKEFILE_LIST)) env-file FILE='$(FILE)' VARS='$(VARS)' ENV_VARS='$(ENV_VARS)' PREFIX='$(PREFIX)' ALL='$(ALL)' SKIP_EMPTY='$(SKIP_EMPTY)' SHOW_SECRETS='$(SHOW_SECRETS)'
+
+# 가독성 출력 모드(표 형태). 마스킹 규칙은 env-show와 동일
+env-pretty: ## 🔧 표 형태로 환경 변수 출력 (VARS/ENV_VARS/PREFIX/ALL/SKIP_EMPTY/SHOW_SECRETS)
+	@SKIP_EMPTY='$(SKIP_EMPTY)'; [ -n "$$SKIP_EMPTY" ] || SKIP_EMPTY="false"; \
+	SHOW_SECRETS='$(SHOW_SECRETS)'; [ -n "$$SHOW_SECRETS" ] || SHOW_SECRETS="false"; \
+	printf "$(BLUE)%-22s$(RESET) : $(BLUE)%s$(RESET)\n" "Variable" "Value"; \
+	printf "%-22s : %s\n" "----------------------" "----------------"; \
+	for k in $(if $(strip $(PREFIX)),$(filter $(PREFIX)%,$(if $(filter true,$(ALL)),$(ENV_VARS_ALL),$(if $(strip $(VARS)),$(VARS),$(if $(strip $(ENV_VARS)),$(ENV_VARS),$(ENV_VARS_DEFAULT))))) ,$(if $(filter true,$(ALL)),$(ENV_VARS_ALL),$(if $(strip $(VARS)),$(VARS),$(if $(strip $(ENV_VARS)),$(ENV_VARS),$(ENV_VARS_DEFAULT))))) ; do \
+		v=$$(printenv "$$k"); \
+		if [ "$$SKIP_EMPTY" = "true" ] && [ -z "$$v" ]; then continue; fi; \
+		case "$$k" in *TOKEN*|*PASSWORD*|*SECRET*|*KEY*|*WEBHOOK*) \
+			if [ "$$SHOW_SECRETS" != "true" ]; then v="****"; fi ;; \
+		esac; \
+	one=$$(printf '%s' "$$v" | tr '\n' ' '); \
+	printf "  %-20s = %s\n" "$$k" "$$one"; \
+	done
+
+# GitHub Actions 출력용 포맷 래퍼
+env-github: ## 🔧 GitHub Actions용 형식으로 출력 (VARS/ENV_VARS/PREFIX/ALL/SKIP_EMPTY/SHOW_SECRETS)
+	@$(MAKE) --no-print-directory -f $(firstword $(MAKEFILE_LIST)) env-show FORMAT=github VARS='$(VARS)' ENV_VARS='$(ENV_VARS)' PREFIX='$(PREFIX)' ALL='$(ALL)' SKIP_EMPTY='$(SKIP_EMPTY)' SHOW_SECRETS='$(SHOW_SECRETS)'
 
 check-check:
 	$(call success, All required tools are available)
@@ -526,7 +634,6 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(call print_var, LATEST_TAG, $(LATEST_TAG))
 	@$(ECHO_CMD) ""
 	@$(ECHO_CMD) "$(MAGENTA)🐰 Git Configuration:$(RESET)"
-	@$(call print_var, GIT_WORK_DIR, $(GIT_WORK_DIR))
 	@$(call print_var, CURRENT_BRANCH, $(CURRENT_BRANCH))
 	@$(call print_var, MAIN_BRANCH, $(MAIN_BRANCH))
 	@$(call print_var, DEVELOP_BRANCH, $(DEVELOP_BRANCH))
@@ -548,8 +655,6 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(call print_var, CI, $(CI))
 	@$(call print_var, DEBUG, $(DEBUG))
 	@$(call print_var, FORCE_REBUILD, $(FORCE_REBUILD))
-	@$(call print_var, VERSION, $(VERSION))
-	
 	@$(ECHO_CMD) ""
 	@$(MAKE) show-umf-version
 

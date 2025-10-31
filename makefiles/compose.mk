@@ -44,13 +44,38 @@ endef
 # 환경별 타겟들
 # ================================================================
 
-up: env ## 🚀 Start services for the current ENV
-	@$(call colorecho, 🚀 Starting services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...)
-# @$(COMPOSE_COMMAND) up -d
+deploy: ## 무중단 배포 (단일 컨테이너)
+	@echo "🚀 배포 시작..."
+	
+	# 1. 새 이미지 pull
+	@docker-compose pull app
+	
+	# 2. 무중단 재시작
+	@docker-compose up -d --no-deps --build app
+	# --no-deps: 의존성 재시작 안함
+	# docker-compose가 자동으로:
+	#   - 새 컨테이너 시작
+	#   - 헬스체크 통과 대기
+	#   - 구 컨테이너 종료
+	
+	@echo "✅ 배포 완료"
+
+
+up: prepare-env ## 🚀 Start services (자동으로 .env 갱신 체크)	
+	@$(call colorecho, 🚀 Starting services for [$(ENVIRONMENT)] environment using [$(COMPOSE_FILE_TO_USE)]...)
 	@$(call timed_command, Starting $(COMPOSE_FILE_TO_USE), \
 		$(COMPOSE_COMMAND) up -d)
-# @$(call success,Services started successfully.)
 	@$(call colorecho, \n)
+	@$(MAKE) status
+
+up-force: ## 🔧 Start services (.env 강제 갱신)
+	@$(MAKE) prepare-env ENVIRONMENT=$(ENVIRONMENT)
+	@$(MAKE) up ENVIRONMENT=$(ENVIRONMENT)
+
+up-quick:  ## 🔧 Start services (.env 갱신 없이 빠른 시작)
+	@$(call colorecho, 🚀 Starting services for [$(ENVIRONMENT)] environment...)
+	@$(call timed_command, Starting $(COMPOSE_FILE_TO_USE), \
+		$(COMPOSE_COMMAND) up -d)
 	@$(MAKE) status
 
 
