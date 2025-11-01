@@ -11,22 +11,16 @@ ENV_FILE_LOADED := true
 ifneq (,$(wildcard .env.common))
     include .env.common
     export
-    ifndef SILENT_MODE
-      $(info [INFO] .env.common 파일 로드됨)
-    endif
+    $(info [INFO] .env.common 파일 로드됨)
 endif
 
 ifneq (,$(wildcard .env.local))
     include .env.local
     export
-    ifndef SILENT_MODE
-      $(info [INFO] .env.local 파일 로드됨 (오버라이드))
-    endif
+    $(info [INFO] .env.local 파일 로드됨 (오버라이드))
 else
     $(shell touch .env.local)
-    ifndef SILENT_MODE
-      $(info [INFO] .env.local 파일이 없어서 빈 파일로 생성했습니다)
-    endif
+    $(info [INFO] .env.local 파일이 없어서 빈 파일로 생성했습니다)
 endif
 
 endif # ENV_FILE_LOADED
@@ -34,18 +28,36 @@ endif # ENV_FILE_LOADED
 # .env.runtime 파일 확인 및 생성
 ifeq (,$(wildcard .env.runtime))
     $(shell touch .env.runtime)
-    ifndef SILENT_MODE
-      $(info [INFO] .env.runtime 파일이 없어서 빈 파일로 생성했습니다)
-    endif
+    $(info [INFO] .env.runtime 파일이 없어서 빈 파일로 생성했습니다)
 endif
 
-prepare-env: ## 🔧 .env 파일 준비 (docker-compose용)
+prepare-env: ## 🔧 .env 파일 준비 (docker-compose용, 빌드 후 자동 감지)
 	@echo "$(BLUE)📝 .env 파일 생성 중...$(NC)"
 	@echo ""
+	@$(ENV_MANAGER) export --environment $(ENVIRONMENT) > .env
+	@# 빌드된 이미지가 있으면 DEPLOY_IMAGE만 오버라이드
+	@if [ -f .build-info ]; then \
+		BUILD_IMAGE=$$(cat .build-info); \
+		echo "$(CYAN)🔍 빌드된 이미지 감지: $$BUILD_IMAGE$(NC)"; \
+		TMP=$$(mktemp .env.XXXXXX); \
+		awk -v img="$$BUILD_IMAGE" '\
+			/^DEPLOY_IMAGE=/ { print "DEPLOY_IMAGE=" img; next } \
+			{ print }' .env > "$$TMP"; \
+		if ! grep -q '^DEPLOY_IMAGE=' "$$TMP"; then \
+			echo "DEPLOY_IMAGE=$$BUILD_IMAGE" >> "$$TMP"; \
+		fi; \
+		mv "$$TMP" .env; \
+	fi
 	@echo "$(YELLOW)배포 환경:$(NC)"
 	@echo "  ENVIRONMENT     : $(ENVIRONMENT)"
-	@if [ -n "$(DEPLOY_IMAGE)" ]; then \
-		echo "  DEPLOY_IMAGE    : $(DEPLOY_IMAGE)"; \
+	@DEPLOY_IMG=$$(grep '^DEPLOY_IMAGE=' .env 2>/dev/null | cut -d= -f2); \
+	if [ -n "$$DEPLOY_IMG" ]; then \
+		echo "  DEPLOY_IMAGE    : $$DEPLOY_IMG"; \
+		if [ -f .build-info ]; then \
+			echo "  $(CYAN)소스           : 로컬 빌드 (.build-info)$(NC)"; \
+		else \
+			echo "  $(GRAY)소스           : .env.$(ENVIRONMENT)$(NC)"; \
+		fi; \
 	else \
 		echo "  DEPLOY_IMAGE    : $(GRAY)(설정 안됨)$(NC)"; \
 	fi
@@ -62,8 +74,11 @@ prepare-env: ## 🔧 .env 파일 준비 (docker-compose용)
 		echo "  CURRENT_COMMIT  : $(CURRENT_COMMIT_SHORT)"; \
 	fi
 	@echo ""
-	@$(ENV_MANAGER) export --environment $(ENVIRONMENT) > .env
 	@echo "$(GREEN)✓ .env 파일 생성 완료 (Environment: $(ENVIRONMENT))$(NC)"
+	@if [ ! -f .build-info ]; then \
+		echo "$(GRAY)💡 Tip: 'make build' 후에는 빌드된 이미지가 자동으로 사용됩니다$(NC)"; \
+		echo "$(GRAY)💡 Tip: 'make reset-build' 로 .env.$(ENVIRONMENT) 기준으로 리셋할 수 있습니다$(NC)"; \
+	fi
 
 # prepare-runtime-env: ## .env + DEPLOY_IMAGE 생성 (docker-compose/로컬 실행용)
 # 	@$(ENV_MANAGER) export --environment "$(ENVIRONMENT)" > .env
@@ -131,6 +146,16 @@ prepare-runtime-env: ## 🔧 .env + DEPLOY_IMAGE 생성 (docker-compose/로컬 �
 	
 # 	$(call log_success,".env.runtime 생성 완료")
 
+
+reset-build: ## 🔧 빌드 정보 리셋 (.env.{ENV} 기준으로 복원)
+	@if [ -f .build-info ]; then \
+		echo "$(YELLOW)🔄 빌드 정보 리셋 중...$(NC)"; \
+		rm -f .build-info; \
+		echo "$(GREEN)✓ .build-info 삭제됨$(NC)"; \
+		echo "$(BLUE)💡 다음 'make prepare-env'는 .env.$(ENVIRONMENT) 기준으로 실행됩니다$(NC)"; \
+	else \
+		echo "$(GRAY)ℹ️  빌드 정보가 없습니다 (이미 리셋 상태)$(NC)"; \
+	fi
 
 env-list: ## 🔧 환경 변수 목록 조회 (FILTER=키워드로 필터링 가능, SHOW_OVERRIDE=true로 오버라이드 표시)
 	@echo "=== 환경 변수 목록 (환경: $(ENVIRONMENT)) ==="
