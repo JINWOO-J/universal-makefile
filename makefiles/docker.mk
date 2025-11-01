@@ -115,6 +115,9 @@ build: validate-dockerfile check-docker make-build-args ## 🎯 Build the Docker
 	@echo ""
 	@$(call print_color, $(BLUE),--- Image Details ---)
 	@docker images $(FULL_TAG)
+	@echo "$(FULL_TAG)" > .build-info
+	@$(call print_color, $(GREEN),✓ 빌드 정보 저장됨: .build-info)
+	@$(call print_color, $(GRAY),💡 다음 'make prepare-env'는 이 이미지를 자동으로 사용합니다)
 
 docker-build:   ## 소스 fetch 후 Docker 명령어로 직접 빌드
 	$(call log_info,"Docker 직접 빌드 시작...")
