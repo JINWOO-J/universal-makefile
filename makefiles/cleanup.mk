@@ -1,4 +1,4 @@
-.PHONY: clean env-clean deep-clean safe-clean
+.PHONY: cleanup env-clean deep-clean safe-clean reset
 .PHONY: clean-temp clean-logs clean-cache clean-build
 .PHONY: clean-all-containers clean-all-images clean-all-volumes
 
@@ -12,7 +12,7 @@ define SAFE_RM
 	fi
 endef
 
-clean: ## 🧹 Clean temporary files and safe cleanup
+cleanup: ## 🧹 Clean temporary files and safe cleanup
 	@$(call colorecho, 🧹 Cleaning temporary files...)
 	@$(MAKE) clean-temp
 	@$(MAKE) clean-logs
@@ -150,3 +150,57 @@ clean-secrets: ## 🧹 Clean potential secret files (BE CAREFUL!)
 	@find . -name "*.p12" -type f -print0 | xargs -0 sh -c 'if [ "$${DRY_RUN:-}" = "true" ]; then echo "[Dry run]: Would remove: $$@"; else rm -rf "$$@"; fi' sh
 	@find . -name "*.pfx" -type f -print0 | xargs -0 sh -c 'if [ "$${DRY_RUN:-}" = "true" ]; then echo "[Dry run]: Would remove: $$@"; else rm -rf "$$@"; fi' sh
 	@$(call success, Secret files cleaned)
+
+reclone: ## 🔄 Reset to remote state (discard local changes, re-fetch source)
+	@echo "$(RED)⚠️  WARNING: This will reset your deployment to remote state$(RESET)"
+	@echo "$(YELLOW)This will:$(RESET)"
+	@echo "  - Remove .build-info (빌드 정보 초기화)"
+	@echo "  - Remove .env (환경 변수 초기화)"
+	@echo "  - Clean source directory (소스 코드 재다운로드)"
+	@echo "  - Stop all containers (실행 중인 컨테이너 중지)"
+	@echo ""
+	@if [ "$(FORCE)" != "true" ]; then \
+		echo "Continue? [y/N] " && read ans && [ $${ans:-N} = y ] || exit 1; \
+	fi
+	@echo ""
+	@$(call colorecho, 🔄 Resetting to remote state...)
+	@echo ""
+	@# 1. 컨테이너 중지
+	@if [ -f docker-compose.yml ]; then \
+		echo "$(BLUE)1/5 Stopping containers...$(RESET)"; \
+		docker-compose down 2>/dev/null || true; \
+	fi
+	@echo ""
+	@# 2. 빌드 정보 제거
+	@echo "$(BLUE)2/5 Removing build info...$(RESET)"
+	@rm -f .build-info
+	@echo "$(GREEN)✓ .build-info removed$(RESET)"
+	@echo ""
+	@# 3. 환경 파일 제거
+	@echo "$(BLUE)3/5 Removing generated env files...$(RESET)"
+	@rm -f .env .env.runtime
+	@echo "$(GREEN)✓ .env files removed$(RESET)"
+	@echo ""
+	@# 4. 소스 디렉토리 정리
+	@if [ "$(UMF_MODE)" = "global" ] && [ -d "$(SOURCE_DIR)" ]; then \
+		echo "$(BLUE)4/5 Cleaning source directory...$(RESET)"; \
+		rm -rf "$(SOURCE_DIR)"; \
+		echo "$(GREEN)✓ Source directory removed$(RESET)"; \
+	else \
+		echo "$(GRAY)4/5 Skipping source cleanup (UMF_MODE=$(UMF_MODE))$(RESET)"; \
+	fi
+	@echo ""
+	@# 5. 리모트에서 재다운로드 (선택적)
+	@if [ "$(UMF_MODE)" = "global" ] && [ -n "$(SOURCE_REPO)" ]; then \
+		echo "$(BLUE)5/5 Re-fetching from remote...$(RESET)"; \
+		$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) CLEAN=true; \
+		echo "$(GREEN)✓ Source re-fetched$(RESET)"; \
+	else \
+		echo "$(GRAY)5/5 Skipping re-fetch (UMF_MODE=$(UMF_MODE) or SOURCE_REPO not set)$(RESET)"; \
+	fi
+	@echo ""
+	@$(call success, Reset completed! Run 'make prepare-env && make up' to redeploy)
+	@echo ""
+	@echo "$(YELLOW)Next steps:$(RESET)"
+	@echo "  1. make prepare-env ENV=prod  # 환경 설정 재생성"
+	@echo "  2. make up                     # 컨테이너 시작"
