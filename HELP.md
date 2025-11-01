@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.183(B
-Project: universal-makefile vv1.0.183(B
+📋 Universal Makefile System v1.0.184(B
+Project: universal-makefile vv1.0.184(B
 Repository: jinwoo/universal-makefile(B
 Current Branch: develop(B
 Environment: development(B
@@ -125,7 +125,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   clean-old-branches  (B Delete merged release branches (CAREFUL!)  [git-flow.mk]
   clean-remote-branches(B Delete merged remote release branches (VERY CAREFUL!)  [git-flow.mk]
   push-release-clean  (B Also delete remote release/* branch (optional)  [git-flow.mk]
-  clean               (B Clean temporary files and safe cleanup  [cleanup.mk]
+  cleanup             (B Clean temporary files and safe cleanup  [cleanup.mk]
   clean-temp          (B Clean temporary files  [cleanup.mk]
   clean-logs          (B Clean log files  [cleanup.mk]
   clean-cache         (B Clean cache files and directories  [cleanup.mk]
