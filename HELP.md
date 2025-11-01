@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.182(B
-Project: universal-makefile vv1.0.182(B
+📋 Universal Makefile System v1.0.183(B
+Project: universal-makefile vv1.0.183(B
 Repository: jinwoo/universal-makefile(B
 Current Branch: develop(B
 Environment: development(B
@@ -86,6 +86,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   um-check            (B Check UMF version sync with pinned  [version.mk]
   export-version-info (B Export version information to file  [version.mk]
   version-help        (B Show version management help  [version.mk]
+  ensure-source       (B 소스 코드 확인 및 자동 fetch (UMF_MODE=global일 때, SKIP_FETCH=true로 비활성화 가능)  [docker.mk]
   bash                (B Run bash in the container  [docker.mk]
   run                 (B Run the container interactively  [docker.mk]
   exec                (B Execute command in running container  [docker.mk]
