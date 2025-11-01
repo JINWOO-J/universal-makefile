@@ -173,7 +173,7 @@ search-targets: ## 🔧 Search targets by keyword (usage: make search-targets KE
 help-md: ## 🔧 Generate help.md file
 	@NO_COLOR=1 HELP_WIDTH=28 \
 	$(MAKE) --no-print-directory help \
-	| sed 's/\x1b\[[0-9;]*m//g' > HELP.md
+	| sed -E 's/\x1b\[[0-9;]*[mGKH]//g' | sed -E 's/\x1b\([B0]//g' > HELP.md
 	@echo "Wrote HELP.md"
 
 help-%: ## 🔧 Show detailed help for specific target (usage: make help-build)
