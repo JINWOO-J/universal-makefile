@@ -74,6 +74,7 @@ endif
 # ================================================================
 # 빌드 타겟
 # ================================================================
+COMPUTE_TAG_SCRIPT ?= $(MAKEFILE_DIR)/scripts/compute_build_tag.sh
 
 ensure-source: ## 🔧 소스 코드 확인 및 자동 fetch (UMF_MODE=global일 때, SKIP_FETCH=true로 비활성화 가능)
 	@if [ "$(SKIP_FETCH)" = "true" ]; then \
@@ -110,36 +111,49 @@ validate-dockerfile:
 		$(call print_color, $(BLUE),🔎 Using Dockerfile: $(DOCKERFILE_PATH)); \
 	fi
 
-build: validate-dockerfile check-docker make-build-args ensure-source ## 🎯 Build the Docker image
-	@$(call print_color,$(BLUE),🔨Building Docker image with tag: $(TAGNAME))
+build: validate-dockerfile check-docker make-build-args ensure-source _compute-build-tag ## 🎯 Build the Docker image
+	@$(call print_color,$(BLUE),🔨 Building Docker image with tag: $(BUILD_TAG_COMPUTED))
 	@echo "$(BLUE)🔍 Cache Debug Info:$(RESET)"
 	@echo "  Environment: $(if $(CI),GitHub Actions,Local)"
 	@echo "  CACHE_SCOPE: $(CACHE_SCOPE)"
 	@echo "  DISABLE_CACHE: $(DISABLE_CACHE)"
-	@echo "  CACHE_TAG: $(CACHE_TAG)"
 	@$(if $(DISABLE_CACHE),echo "  CACHE: DISABLED",echo "  CACHE_IMAGE: $(CACHE_IMAGE)")
 	@$(if $(DISABLE_CACHE),,echo "  CACHE_FALLBACK: $(CACHE_IMAGE_MAIN)")
-	@echo "  CACHE_MODE: max (with multi-stage)"
-	@echo "  CACHE_FROM: $(CACHE_FROM)"
-	@echo "  CACHE_TO: $(CACHE_TO)"
-	@echo "  BUILD_OUTPUT: $(BUILD_OUTPUT)"
-	@echo "  BUILDX_FLAGS: $(BUILDX_FLAGS)"
 	@echo ""
-	$(call run_interactive, Image Build $(FULL_TAG), \
+	$(call run_interactive, Image Build $(BUILD_TAG_COMPUTED), \
 		DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker buildx build \
 			$(DOCKER_BUILD_OPTION) \
 			$(BUILD_ARGS_CONTENT) \
 			-f $(DOCKERFILE_PATH) \
-			-t $(FULL_TAG) \
+			-t $(BUILD_TAG_COMPUTED) \
 			$(BUILDX_FLAGS) \
 			$(DOCKERFILE_CONTEXT) \
 	)
 	@echo ""
 	@$(call print_color, $(BLUE),--- Image Details ---)
-	@docker images $(FULL_TAG)
-	@echo "$(FULL_TAG)" > .build-info
+	@docker images $(BUILD_TAG_COMPUTED)
+	@echo "$(BUILD_TAG_COMPUTED)" > .build-info
 	@$(call print_color, $(GREEN),✓ 빌드 정보 저장됨: .build-info)
 	@$(call print_color, $(GRAY),💡 다음 'make prepare-env'는 이 이미지를 자동으로 사용합니다)
+
+_compute-build-tag:
+	@# UMF_MODE=global일 때 스크립트로 동적 태그 계산
+	$(eval BUILD_TAG_COMPUTED := $(shell \
+		if [ "$(UMF_MODE)" = "global" ]; then \
+			bash $(MAKEFILE_DIR)/scripts/compute_build_tag.sh \
+				"$(SOURCE_DIR)" \
+				"$(REF)" \
+				"$(IMAGE_NAME)" \
+				"$(SERVICE_KIND)" \
+				"$(VERSION)"; \
+		else \
+			echo "$(FULL_TAG)"; \
+		fi \
+	))
+	@echo "$(BLUE)🔍 Build Info:$(RESET)"
+	@echo "  Mode: $(UMF_MODE)"
+	@echo "  Tag: $(BUILD_TAG_COMPUTED)"
+	@echo ""
 
 docker-build:   ## 소스 fetch 후 Docker 명령어로 직접 빌드
 	$(call log_info,"Docker 직접 빌드 시작...")
