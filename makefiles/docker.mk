@@ -71,10 +71,32 @@ else
 endif
 
 
-
 # ================================================================
 # 빌드 타겟
 # ================================================================
+
+ensure-source: ## 🔧 소스 코드 확인 및 자동 fetch (UMF_MODE=global일 때, SKIP_FETCH=true로 비활성화 가능)
+	@if [ "$(SKIP_FETCH)" = "true" ]; then \
+		echo "$(GRAY)ℹ️  SKIP_FETCH=true, 자동 fetch 건너뜀$(NC)"; \
+	elif [ "$(UMF_MODE)" = "global" ]; then \
+		if [ ! -d "$(SOURCE_DIR)" ] || [ ! -d "$(SOURCE_DIR)/.git" ]; then \
+			echo "$(YELLOW)📥 소스 코드가 없습니다. git-fetch 실행 중...$(NC)"; \
+			$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) CLEAN=$(CLEAN); \
+		elif [ -n "$(REF)" ]; then \
+			CURRENT_REF=$$(cd $(SOURCE_DIR) && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""); \
+			TARGET_REF=$$(echo "$(REF)" | sed 's/.*\///'); \
+			if [ "$$CURRENT_REF" != "$$TARGET_REF" ]; then \
+				echo "$(YELLOW)🔄 REF가 변경되었습니다 ($$CURRENT_REF → $$TARGET_REF). git-fetch 실행 중...$(NC)"; \
+				$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) CLEAN=$(CLEAN); \
+			else \
+				echo "$(GREEN)✓ 소스 코드가 최신 상태입니다 ($$CURRENT_REF)$(NC)"; \
+			fi; \
+		else \
+			echo "$(GREEN)✓ 소스 코드 존재 확인$(NC)"; \
+		fi; \
+	else \
+		echo "$(GRAY)ℹ️  UMF_MODE=local, 소스 fetch 건너뜀$(NC)"; \
+	fi
 
 validate-dockerfile:
 	@if [ -z "$(strip $(DOCKERFILE_PATH))" ]; then \
@@ -88,7 +110,7 @@ validate-dockerfile:
 		$(call print_color, $(BLUE),🔎 Using Dockerfile: $(DOCKERFILE_PATH)); \
 	fi
 
-build: validate-dockerfile check-docker make-build-args ## 🎯 Build the Docker image
+build: validate-dockerfile check-docker make-build-args ensure-source ## 🎯 Build the Docker image
 	@$(call print_color,$(BLUE),🔨Building Docker image with tag: $(TAGNAME))
 	@echo "$(BLUE)🔍 Cache Debug Info:$(RESET)"
 	@echo "  Environment: $(if $(CI),GitHub Actions,Local)"

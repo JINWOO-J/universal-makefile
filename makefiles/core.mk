@@ -61,7 +61,23 @@ CURRENT_COMMIT_LONG := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse H
 DATE ?= $(shell date -u +%Y%m%d)
 
 # 계산된 변수들
-CURRENT_BRANCH := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null | tr ' ' '-' || echo "unknown")
+# UMF_MODE=global이고 REF가 지정되면 REF에서 브랜치명 추출
+ifeq ($(UMF_MODE),global)
+  ifneq ($(REF),)
+    # REF에서 브랜치명 추출 (refs/heads/develop → develop, refs/pull/15/head → pr-15)
+    CURRENT_BRANCH := $(shell \
+      if echo "$(REF)" | grep -q "^refs/pull/"; then \
+        echo "$(REF)" | sed 's|refs/pull/\([0-9]*\)/.*|pr-\1|'; \
+      else \
+        echo "$(REF)" | sed 's|.*/||'; \
+      fi)
+  else
+    CURRENT_BRANCH := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null | tr ' ' '-' || echo "unknown")
+  endif
+else
+  CURRENT_BRANCH := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null | tr ' ' '-' || echo "unknown")
+endif
+
 ifeq ($(CURRENT_BRANCH),HEAD)
     CURRENT_BRANCH := detached
 endif
