@@ -311,6 +311,228 @@ make finish-release
 make auto-release
 ```
 
+## 🔵🟢 Blue/Green 배포
+
+Universal Makefile System은 무중단 Blue/Green 배포를 지원합니다. 이 기능을 통해 안전하고 신뢰할 수 있는 배포를 수행할 수 있습니다.
+
+### Blue/Green 배포란?
+
+Blue/Green 배포는 두 개의 동일한 프로덕션 환경(Blue와 Green)을 유지하면서, 한 번에 하나의 환경만 라이브 트래픽을 처리하도록 하는 배포 전략입니다. 새 버전을 배포할 때는 비활성 환경에 배포한 후 트래픽을 전환하여 무중단 배포를 실현합니다.
+
+### 초기 설정
+
+```bash
+# 1. project.mk에서 Blue/Green 배포 활성화
+echo "BG_ENABLED = true" >> project.mk
+
+# 2. Blue/Green 환경 초기화
+make bg-init
+
+# 3. 설정 파일 확인 및 커스터마이징
+# - config/bluegreen.conf: 기본 설정
+# - config/nginx-proxy.conf: 프록시 설정 (프록시 사용 시)
+# - docker-compose.bluegreen.yml: Docker Compose 설정
+```
+
+### 환경 변수 관리
+
+Blue/Green 배포는 환경별 설정을 위한 3가지 환경 파일을 지원합니다:
+
+```bash
+# 공통 환경 변수 (.env.common)
+POSTGRES_HOST=db.example.com
+REDIS_URL=redis://cache.example.com:6379
+
+# Blue 환경 전용 변수 (.env.blue)
+APP_ENV=blue
+DATABASE_NAME=myapp_blue
+PORT=8080
+
+# Green 환경 전용 변수 (.env.green)
+APP_ENV=green
+DATABASE_NAME=myapp_green
+PORT=8081
+```
+
+### 기본 사용법
+
+```bash
+# 현재 상태 확인
+make bg-status
+
+# 새 버전 빌드
+make bg-build VERSION=1.2.0
+
+# Blue/Green 배포 실행 (완전 자동화)
+make bg-deploy VERSION=1.2.0
+
+# 헬스체크 실행
+make bg-health
+
+# 이전 환경으로 롤백
+make bg-rollback
+```
+
+### 단계별 배포 (고급)
+
+더 세밀한 제어가 필요한 경우 단계별로 배포할 수 있습니다:
+
+```bash
+# 1. 비활성 환경에 새 버전 배포
+make bg-deploy-prepare VERSION=1.2.0
+
+# 2. 헬스체크로 검증
+make bg-health
+
+# 3. 트래픽 전환
+make bg-deploy-switch
+
+# 4. 최종 검증
+make bg-deploy-verify
+```
+
+### 배포 전략
+
+#### 프록시 기반 배포 (권장)
+```bash
+# Nginx 프록시를 통한 트래픽 전환
+BG_USE_PROXY=true make bg-init
+```
+
+- ✅ 무중단 전환
+- ✅ 포트 변경 없음
+- ✅ 로드밸런싱 가능
+- ✅ SSL 종료 지원
+
+#### 포트 기반 배포
+```bash
+# 포트 매핑을 통한 트래픽 전환
+BG_USE_PROXY=false make bg-init
+```
+
+- ✅ 단순한 구조
+- ✅ 프록시 불필요
+- ⚠️ 포트 변경 필요
+- ⚠️ 클라이언트 재연결 필요
+
+### 헬스체크 설정
+
+```bash
+# config/bluegreen.conf에서 헬스체크 설정
+BG_HEALTH_ENDPOINT=/health
+BG_HEALTH_CHECK_TIMEOUT=30
+BG_HEALTH_CHECK_RETRIES=5
+
+# 커스텀 헬스체크 스크립트 사용
+BG_HEALTH_CHECK_SCRIPT=./scripts/custom-health-check.sh
+```
+
+### 롤백 관리
+
+```bash
+# 이전 환경으로 즉시 롤백
+make bg-rollback
+
+# 특정 버전으로 롤백
+make bg-rollback-version VERSION=1.1.0
+
+# 배포 히스토리 확인
+make bg-rollback-history
+```
+
+### 모니터링 및 로그
+
+```bash
+# 전체 상태 확인
+make bg-status
+
+# 환경별 로그 확인
+make bg-logs-blue
+make bg-logs-green
+
+# 전체 로그
+make bg-logs
+```
+
+### 정리 및 유지보수
+
+```bash
+# 비활성 환경 정리
+make bg-clean
+
+# 전체 환경 정리 (주의!)
+make bg-clean-all
+
+# 오래된 이미지 정리
+make docker-clean
+```
+
+### 설정 옵션
+
+`config/bluegreen.conf`에서 다양한 옵션을 설정할 수 있습니다:
+
+```bash
+# 기본 설정
+BG_USE_PROXY=true                    # 프록시 사용 여부
+BG_PROXY_PORT=80                     # 프록시 포트
+BG_APP_PORT=8080                     # 애플리케이션 포트
+BG_BLUE_PORT=8080                    # Blue 환경 포트
+BG_GREEN_PORT=8081                   # Green 환경 포트
+
+# 헬스체크 설정
+BG_HEALTH_ENDPOINT=/health           # 헬스체크 엔드포인트
+BG_HEALTH_CHECK_ENABLED=true         # 헬스체크 활성화
+BG_HEALTH_CHECK_TIMEOUT=30           # 타임아웃 (초)
+BG_HEALTH_CHECK_RETRIES=5            # 재시도 횟수
+
+# 롤백 설정
+BG_ROLLBACK_HISTORY_SIZE=5           # 히스토리 보관 개수
+
+# 빌드 설정
+BG_BUILD_ARGS="--no-cache"           # 추가 빌드 인자
+```
+
+### 실제 사용 예시
+
+```bash
+# 1. 초기 설정
+make bg-init
+make bg-build VERSION=1.0.0
+make bg-deploy VERSION=1.0.0
+
+# 2. 새 버전 배포
+make bg-deploy VERSION=1.1.0
+
+# 3. 문제 발생 시 롤백
+make bg-rollback
+
+# 4. 정상 확인 후 이전 환경 정리
+make bg-clean
+```
+
+### 주의사항
+
+- **데이터베이스 마이그레이션**: Blue/Green 배포 시 데이터베이스 스키마 변경은 신중하게 계획해야 합니다
+- **세션 관리**: 스테이트풀 애플리케이션의 경우 세션 공유 방안을 고려해야 합니다
+- **리소스 사용량**: 두 환경을 동시에 운영하므로 리소스 사용량이 증가합니다
+- **설정 동기화**: 환경별 설정 파일(.env.blue, .env.green)을 적절히 관리해야 합니다
+
+### 문제 해결
+
+```bash
+# 헬스체크 실패 시
+make bg-health-blue    # Blue 환경 개별 확인
+make bg-health-green   # Green 환경 개별 확인
+
+# 프록시 문제 시
+make bg-health-proxy   # 프록시 상태 확인
+docker logs <project>-proxy  # 프록시 로그 확인
+
+# 컨테이너 상태 확인
+make bg-status         # 전체 상태
+docker ps              # 실행 중인 컨테이너
+```
+
 ## 📦 GitHub Release 프로세스
 
 ### 1) 기본 개념

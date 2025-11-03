@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.186
-Project: universal-makefile vv1.0.186
+📋 Universal Makefile System v1.0.187
+Project: universal-makefile vv1.0.187
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
@@ -58,6 +58,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   help-version         Version management commands help (auto, grouped)  [help.mk]
   help-env             Environment variable helpers help (auto, grouped)  [help.mk]
   help-system          Installer/system commands help (auto, grouped)  [help.mk]
+  help-bg              Blue/Green deployment commands help  [help.mk]
   list-targets         List all available targets  [help.mk]
   search-targets       Search targets by keyword (usage: make search-targets KEYWORD=docker)  [help.mk]
   help-md              Generate help.md file  [help.mk]
@@ -146,6 +147,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   make help-version    Version management commands
   make help-env        Environment variables helpers
   make help-system     Installer/system commands
+  make help-bg         Blue/Green deployment commands
 
 💡 Usage Examples:
   make build VERSION=v2.0 DEBUG=true
