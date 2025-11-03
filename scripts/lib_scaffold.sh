@@ -90,6 +90,7 @@ include $(MAKEFILE_DIR)/makefiles/compose.mk
 include $(MAKEFILE_DIR)/makefiles/git-flow.mk
 include $(MAKEFILE_DIR)/makefiles/cleanup.mk
 include $(MAKEFILE_DIR)/makefiles/git-file.mk
+include $(MAKEFILE_DIR)/makefiles/bluegreen.mk
 EOF_BODY
     log_success "${universal_makefile} created"
   fi
