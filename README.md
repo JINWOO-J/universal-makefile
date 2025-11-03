@@ -533,6 +533,118 @@ make bg-status         # 전체 상태
 docker ps              # 실행 중인 컨테이너
 ```
 
+## 🪝 배포 훅 시스템 (Deploy Hooks)
+
+Universal Makefile System은 배포 전후에 커스텀 로직을 실행할 수 있는 확장 가능한 훅 시스템을 제공합니다.
+
+### 주요 특징
+
+- **Pre/Post 배포 훅**: 배포 전후 자동 검증 및 작업 실행
+- **플러그인 시스템**: 프로젝트별 커스텀 훅 추가
+- **설정 기반**: YAML 설정으로 훅 관리
+- **원격 실행**: URL에서 스크립트 다운로드 실행
+- **보안**: 도메인 화이트리스트, 해시 검증
+
+### 기본 사용법
+
+```bash
+# 커스텀 훅 디렉토리 생성
+mkdir -p deploy_hooks
+
+# 커스텀 pre-deploy 훅 작성
+cat > deploy_hooks/custom_checks.py << 'EOF'
+from deploy_hooks import DeployHook
+
+class CustomDatabaseCheck(DeployHook):
+    hook_type = 'pre'
+    
+    @property
+    def name(self) -> str:
+        return "custom_database_check"
+    
+    def execute(self) -> bool:
+        self.logger.info("커스텀 데이터베이스 체크 실행")
+        # 커스텀 검증 로직
+        return True
+EOF
+
+# 훅 시스템으로 배포 실행
+make deploy ENV=production SERVICE_KIND=be DEPLOY_HOOKS_ENABLED=true
+```
+
+### Makefile 통합
+
+```makefile
+# project.mk에 추가
+DEPLOY_HOOKS_ENABLED ?= true
+
+pre-deploy-hooks: ## 🪝 Pre-deploy 훅 실행
+	@python $(MAKEFILE_DIR)/scripts/deploy_hooks.py pre $(ENV) $(SERVICE_KIND)
+
+post-deploy-hooks: ## 🪝 Post-deploy 훅 실행
+	@python $(MAKEFILE_DIR)/scripts/deploy_hooks.py post $(ENV) $(SERVICE_KIND)
+
+# 훅이 포함된 배포
+deploy-with-hooks: pre-deploy-hooks build push post-deploy-hooks
+```
+
+### 설정 기반 훅
+
+```yaml
+# deploy-hooks.yml
+pre_deploy:
+  - name: "environment_check"
+    type: "builtin"
+    enabled: true
+    config:
+      required_vars: ["DATABASE_URL", "API_KEY"]
+
+  - name: "custom_script"
+    type: "script"
+    enabled: true
+    config:
+      script_path: "./scripts/pre_deploy.sh"
+      args: ["${ENVIRONMENT}"]
+
+post_deploy:
+  - name: "slack_notification"
+    type: "webhook"
+    enabled: true
+    config:
+      url: "${SLACK_WEBHOOK_URL}"
+      payload:
+        text: "🚀 배포 완료: ${SERVICE_KIND} (${ENVIRONMENT})"
+```
+
+### 원격 훅 실행
+
+```bash
+# GitHub에서 스크립트 다운로드 실행
+python universal-makefile/scripts/remote_hook_executor.py \
+  production be \
+  "https://raw.githubusercontent.com/company/scripts/main/deploy.sh" \
+  --type bash \
+  --hash "sha256:abc123..."
+```
+
+### 기본 제공 훅
+
+**Pre-deploy 훅:**
+- 환경 변수 검증
+- Docker 환경 검사
+- 디스크 공간 검사
+- 네트워크 연결 검사
+- 데이터베이스 마이그레이션
+
+**Post-deploy 훅:**
+- 컨테이너 상태 확인
+- 서비스 응답 확인
+- 헬스체크 실행
+- 알림 전송 (Slack, 이메일)
+- 모니터링 시스템 등록
+
+자세한 내용은 [배포 훅 시스템 문서](docs/DEPLOY_HOOKS.md)를 참조하세요.
+
 ## 📦 GitHub Release 프로세스
 
 ### 1) 기본 개념

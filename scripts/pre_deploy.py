@@ -438,6 +438,12 @@ def main():
         help='네트워크 연결 검사 건너뛰기'
     )
     
+    parser.add_argument(
+        '--use-hooks',
+        action='store_true',
+        help='새로운 훅 시스템 사용'
+    )
+    
     args = parser.parse_args()
     
     # 환경 변수 설정
@@ -448,22 +454,41 @@ def main():
     logger = Logger("pre_deploy")
     
     try:
-        # PreDeployChecker 초기화
-        checker = PreDeployChecker(args.environment, args.service_kind)
+        # 새로운 훅 시스템 사용
+        if args.use_hooks:
+            try:
+                from deploy_hooks import run_pre_deploy_hooks
+                success = run_pre_deploy_hooks(args.environment, args.service_kind)
+                
+                if success:
+                    logger.info("Pre-deploy 훅 시스템 완료")
+                    print("SUCCESS: Pre-deployment hooks passed")
+                else:
+                    logger.error("Pre-deploy 훅 시스템 실패")
+                    sys.exit(1)
+                    
+            except ImportError:
+                logger.warning("훅 시스템을 찾을 수 없습니다. 기본 시스템 사용")
+                args.use_hooks = False
         
-        # 사전 배포 검사 실행
-        if not checker.run_all_checks():
-            logger.error("사전 배포 검사 실패")
-            sys.exit(1)
-        
-        # 데이터베이스 마이그레이션 실행
-        if not args.skip_migrations:
-            if not checker.run_database_migrations():
-                logger.error("데이터베이스 마이그레이션 실패")
+        # 기본 시스템 사용
+        if not args.use_hooks:
+            # PreDeployChecker 초기화
+            checker = PreDeployChecker(args.environment, args.service_kind)
+            
+            # 사전 배포 검사 실행
+            if not checker.run_all_checks():
+                logger.error("사전 배포 검사 실패")
                 sys.exit(1)
-        
-        logger.info("사전 배포 검사 완료")
-        print("SUCCESS: Pre-deployment checks passed")
+            
+            # 데이터베이스 마이그레이션 실행
+            if not args.skip_migrations:
+                if not checker.run_database_migrations():
+                    logger.error("데이터베이스 마이그레이션 실패")
+                    sys.exit(1)
+            
+            logger.info("사전 배포 검사 완료")
+            print("SUCCESS: Pre-deployment checks passed")
         
     except Exception as e:
         logger.error(f"사전 배포 검사 중 예외 발생: {str(e)}")

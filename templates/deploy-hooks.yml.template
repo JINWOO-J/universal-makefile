@@ -1,0 +1,175 @@
+# 배포 훅 설정 파일
+# 프로젝트별로 커스터마이징 가능
+
+# Pre-deploy 훅 설정
+pre_deploy:
+  # 환경 변수 검증
+  - name: "environment_check"
+    type: "builtin"
+    enabled: true
+    config:
+      required_vars:
+        - "ENVIRONMENT"
+        - "SERVICE_KIND"
+        - "DOCKER_REGISTRY"
+      service_specific:
+        fe:
+          - "NODE_ENV"
+          - "API_URL"
+        be:
+          - "DRIVE_DEFAULT_COMPANY"
+          - "DATABASE_URL"
+
+  # Docker 환경 검사
+  - name: "docker_check"
+    type: "builtin"
+    enabled: true
+    config:
+      timeout: 10
+
+  # 디스크 공간 검사
+  - name: "disk_space_check"
+    type: "builtin"
+    enabled: true
+    config:
+      min_free_gb: 5.0
+
+  # 네트워크 연결 검사
+  - name: "network_check"
+    type: "builtin"
+    enabled: true
+    config:
+      test_urls:
+        - "https://httpbin.org/status/200"
+      timeout: 10
+
+  # 커스텀 스크립트 실행
+  - name: "custom_pre_check"
+    type: "script"
+    enabled: false
+    config:
+      script_path: "./scripts/custom_pre_deploy.sh"
+      timeout: 60
+      args: ["${ENVIRONMENT}", "${SERVICE_KIND}"]
+
+  # 외부 URL 호출
+  - name: "webhook_pre_deploy"
+    type: "webhook"
+    enabled: false
+    config:
+      url: "https://api.example.com/pre-deploy"
+      method: "POST"
+      headers:
+        Authorization: "Bearer ${DEPLOY_TOKEN}"
+      payload:
+        environment: "${ENVIRONMENT}"
+        service: "${SERVICE_KIND}"
+        version: "${VERSION}"
+
+# Post-deploy 훅 설정
+post_deploy:
+  # 컨테이너 상태 확인
+  - name: "container_status_check"
+    type: "builtin"
+    enabled: true
+    config:
+      timeout: 30
+
+  # 서비스 응답 확인
+  - name: "service_response_check"
+    type: "builtin"
+    enabled: true
+    config:
+      health_urls:
+        fe:
+          - "http://localhost:3000/health"
+        be:
+          - "http://localhost:8000/health"
+          - "http://localhost:8000/api/status"
+      timeout: 30
+      retries: 3
+
+  # 데이터베이스 헬스 확인
+  - name: "database_health_check"
+    type: "builtin"
+    enabled: true
+    condition: "service_kind == 'be'"
+    config:
+      timeout: 10
+
+  # 로그 에러 확인
+  - name: "log_error_check"
+    type: "builtin"
+    enabled: true
+    config:
+      error_patterns:
+        - "fatal error"
+        - "panic:"
+        - "segmentation fault"
+        - "out of memory"
+      log_lines: 100
+
+  # 성능 테스트
+  - name: "performance_test"
+    type: "script"
+    enabled: false
+    config:
+      script_path: "./scripts/performance_test.sh"
+      timeout: 300
+      args: ["${ENVIRONMENT}"]
+
+  # Slack 알림
+  - name: "slack_notification"
+    type: "webhook"
+    enabled: true
+    config:
+      url: "${SLACK_WEBHOOK_URL}"
+      method: "POST"
+      payload:
+        text: "🚀 배포 완료: ${SERVICE_KIND} (${ENVIRONMENT}) - ${VERSION}"
+        channel: "#deployments"
+
+  # 모니터링 시스템 등록
+  - name: "monitoring_registration"
+    type: "webhook"
+    enabled: false
+    config:
+      url: "https://monitoring.example.com/register"
+      method: "POST"
+      headers:
+        Authorization: "Bearer ${MONITORING_TOKEN}"
+      payload:
+        service: "${SERVICE_KIND}"
+        environment: "${ENVIRONMENT}"
+        version: "${VERSION}"
+        health_url: "http://localhost:${PORT}/health"
+
+# 전역 설정
+global:
+  # 실패 시 동작
+  on_failure:
+    stop_on_first_failure: true
+    send_notification: true
+    auto_rollback: false
+
+  # 재시도 설정
+  retry:
+    max_attempts: 3
+    delay_seconds: 30
+
+  # 타임아웃 설정
+  timeout:
+    default: 60
+    max: 300
+
+  # 환경별 설정 오버라이드
+  environment_overrides:
+    production:
+      retry:
+        max_attempts: 5
+      on_failure:
+        auto_rollback: true
+    
+    development:
+      on_failure:
+        stop_on_first_failure: false
