@@ -105,8 +105,23 @@ BUILD_REVISION := $(CURRENT_BRANCH)-$(CURRENT_COMMIT_SHORT)$(GIT_DIRTY_SUFFIX)
 
 IMAGE_NAME := $(REPO_HUB)/$(NAME)
 APP_IMAGE_NAME := $(REPO_HUB)/$(NAME)
-FULL_TAG := $(APP_IMAGE_NAME):$(TAGNAME)
-LATEST_TAG := $(APP_IMAGE_NAME):latest
+
+# SERVICE_KIND를 태그에 포함할지 결정
+# 자동 감지: UMF_MODE=global이고 SERVICE_KIND가 있으면 자동 활성화
+USE_SERVICE_KIND_IN_TAG ?= $(if $(filter global,$(UMF_MODE)),$(if $(SERVICE_KIND),true,false),false)
+
+ifeq ($(USE_SERVICE_KIND_IN_TAG),true)
+  ifneq ($(SERVICE_KIND),)
+    FULL_TAG := $(APP_IMAGE_NAME):$(SERVICE_KIND)-$(TAGNAME)
+    LATEST_TAG := $(APP_IMAGE_NAME):$(SERVICE_KIND)-latest
+  else
+    FULL_TAG := $(APP_IMAGE_NAME):$(TAGNAME)
+    LATEST_TAG := $(APP_IMAGE_NAME):latest
+  endif
+else
+  FULL_TAG := $(APP_IMAGE_NAME):$(TAGNAME)
+  LATEST_TAG := $(APP_IMAGE_NAME):latest
+endif
 
 # Git 워킹 디렉토리의 상태를 확인 (커밋되지 않은 변경사항이 있으면 출력 내용이 생김)
 GIT_STATUS := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git status --porcelain 2>/dev/null)
@@ -116,14 +131,6 @@ ifeq ($(strip $(GIT_STATUS)),)
 else
 	GIT_DIRTY_SUFFIX := -dirty
 endif
-
-COMMIT_TAG := $(CURRENT_COMMIT_SHORT)$(GIT_DIRTY_SUFFIX)
-BUILD_REVISION := $(CURRENT_BRANCH)-$(CURRENT_COMMIT_SHORT)$(GIT_DIRTY_SUFFIX)
-
-IMAGE_NAME := $(REPO_HUB)/$(NAME)
-APP_IMAGE_NAME := $(REPO_HUB)/$(NAME)
-FULL_TAG := $(APP_IMAGE_NAME):$(TAGNAME)
-LATEST_TAG := $(APP_IMAGE_NAME):latest
 
 # Docker 빌드 옵션
 DOCKER_BUILDKIT ?= 1
