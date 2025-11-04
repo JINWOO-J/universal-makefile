@@ -254,7 +254,9 @@ build-legacy: check-docker make-build-args ## 🎯 Build the Docker image
 
 
 
-ensure-image:
+ensure-image: prepare-env
+	$(eval FULL_TAG := $(shell grep '^DEPLOY_IMAGE=' .env 2>/dev/null | cut -d= -f2 || echo $(FULL_TAG)))
+	@echo "🔍 Using image: $(FULL_TAG)"
 	@docker image inspect $(FULL_TAG) >/dev/null 2>&1 || { \
 		echo "❌ image not found: $(FULL_TAG). Run 'make build' first."; exit 1; }
 
