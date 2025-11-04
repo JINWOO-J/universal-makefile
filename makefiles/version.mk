@@ -287,20 +287,21 @@ version-sync-ts: ## 🔧 Sync version.ts placeholders (@VERSION, @VERSION_DETAIL
 	@$(call print_var, VERSION_DETAIL, $(VERSION_DETAIL))
 	@$(call print_var, VERSION_NAME, $(VERSION_NAME))
 	@$(ECHO_CMD) "$(BLUE)🔎 Before:$(RESET)"
-	@grep -nE "@VERSION \*/ '|@VERSION_DETAIL \*/ '|@VERSION_NAME \*/ '" "$(VERSION_TS_FILE)" || true
+	@grep -nE "@VERSION \*/ [\"']|@VERSION_DETAIL \*/ [\"']|@VERSION_NAME \*/ [\"']" "$(VERSION_TS_FILE)" || true
+
 ifeq ($(UNAME_S),Darwin)
-	@$(call colorecho, 🛠️  Applying replacements (Darwin/sed -E))
-	@$(SED) "s/(\/\* @VERSION \*\/ ')[^']*(')/\1$(VERSION)\2/" "$(VERSION_TS_FILE)"
-	@$(SED) "s/(\/\* @VERSION_DETAIL \*\/ ')[^']*(')/\1$(VERSION_DETAIL)\2/" "$(VERSION_TS_FILE)"
-	@$(SED) "s/(\/\* @VERSION_NAME \*\/ ')[^']*(')/\1$(VERSION_NAME)\2/" "$(VERSION_TS_FILE)"
+	@$(call colorecho, 🛠️  Applying replacements (Darwin / sed -E))
+	@$(SED) -E "s|(\/\* @VERSION \*\/ )([\"'])[^\"]*[^']*\2|\1\2$(VERSION)\2|" "$(VERSION_TS_FILE)"
+	@$(SED) -E "s|(\/\* @VERSION_DETAIL \*\/ )([\"'])[^\"']*\2|\1\2$(VERSION_DETAIL)\2|" "$(VERSION_TS_FILE)"
+	@$(SED) -E "s|(\/\* @VERSION_NAME \*\/ )([\"'])[^\"']*\2|\1\2$(VERSION_NAME)\2|" "$(VERSION_TS_FILE)"
 else
-	@$(call colorecho, 🛠️  Applying replacements (GNU sed -r))
-	@$(SED) "s/\(\/\* @VERSION \*\/ '\)[^']*\('\)/\1$(VERSION)\2/" "$(VERSION_TS_FILE)"
-	@$(SED) "s/\(\/\* @VERSION_DETAIL \*\/ '\)[^']*\('\)/\1$(VERSION_DETAIL)\2/" "$(VERSION_TS_FILE)"
-	@$(SED) "s/\(\/\* @VERSION_NAME \*\/ '\)[^']*\('\)/\1$(VERSION_NAME)\2/" "$(VERSION_TS_FILE)"
+	@$(call colorecho, 🛠️  Applying replacements (GNU sed -r not used; BRE))
+	@$(SED) "s/\(\/\* @VERSION \*\/ \)\([\"']\)[^\"']*\2/\1\2$(VERSION)\2/" "$(VERSION_TS_FILE)"
+	@$(SED) "s/\(\/\* @VERSION_DETAIL \*\/ \)\([\"']\)[^\"']*\2/\1\2$(VERSION_DETAIL)\2/" "$(VERSION_TS_FILE)"
+	@$(SED) "s/\(\/\* @VERSION_NAME \*\/ \)\([\"']\)[^\"']*\2/\1\2$(VERSION_NAME)\2/" "$(VERSION_TS_FILE)"
 endif
 	@$(ECHO_CMD) "$(BLUE)🔎 After:$(RESET)"
-		@grep -nE "@VERSION \*/ '|@VERSION_DETAIL \*/ '|@VERSION_NAME \*/ '" "$(VERSION_TS_FILE)" || true
+	@grep -nE "@VERSION \*/ [\"']|@VERSION_DETAIL \*/ [\"']|@VERSION_NAME \*/ [\"']" "$(VERSION_TS_FILE)" || true
 	@$(call success, version.ts synced successfully)
 
 
