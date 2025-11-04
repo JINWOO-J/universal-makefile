@@ -272,38 +272,92 @@ update-version-file:
 			$(VERSION_HOOK_ARGS); \
 	fi
 
+# version-sync-ts: ## 🔧 Sync version.ts placeholders (@VERSION, @VERSION_DETAIL, @VERSION_NAME)
+# 	@$(call colorecho, 🧩 Syncing $(VERSION_TS_FILE))
+# 	@if [ ! -f "$(VERSION_TS_FILE)" ]; then \
+# 		$(call fail, File not found: $(VERSION_TS_FILE)); \
+# 		exit 1; \
+# 	fi
+# 	@if [ -z "$(VERSION)" ]; then \
+# 		$(call fail, VERSION is empty. ex: make version-sync-ts VERSION=v1.2.3); \
+# 		exit 1; \
+# 	fi
+# 	@$(call print_var, Target File, $(VERSION_TS_FILE))
+# 	@$(call print_var, VERSION, $(VERSION))
+# 	@$(call print_var, VERSION_DETAIL, $(VERSION_DETAIL))
+# 	@$(call print_var, VERSION_NAME, $(VERSION_NAME))
+# 	@$(ECHO_CMD) "$(BLUE)🔎 Before:$(RESET)"
+# 	@grep -nE "@VERSION \*/ [\"']|@VERSION_DETAIL \*/ [\"']|@VERSION_NAME \*/ [\"']" "$(VERSION_TS_FILE)" || true
+
+# ifeq ($(UNAME_S),Darwin)
+# 	@$(call colorecho, 🛠️  Applying replacements (Darwin / sed -E))
+# 	@$(SED) -E "s|(\/\* @VERSION \*\/ )([\"'])[^\"]*[^']*\2|\1\2$(VERSION)\2|" "$(VERSION_TS_FILE)"
+# 	@$(SED) -E "s|(\/\* @VERSION_DETAIL \*\/ )([\"'])[^\"']*\2|\1\2$(VERSION_DETAIL)\2|" "$(VERSION_TS_FILE)"
+# 	@$(SED) -E "s|(\/\* @VERSION_NAME \*\/ )([\"'])[^\"']*\2|\1\2$(VERSION_NAME)\2|" "$(VERSION_TS_FILE)"
+# 	@$(SED) -E "s|(\/\* @MIN_VERSION_WEB \*\/ )([\"'])[^\"']*\2|\1\2$(MIN_VERSION_WEB)\2|" "$(VERSION_TS_FILE)"
+# else
+# 	@$(call colorecho, 🛠️  Applying replacements (GNU sed -r not used; BRE))
+# 	@$(SED) "s/\(\/\* @VERSION \*\/ \)\([\"']\)[^\"']*\2/\1\2$(VERSION)\2/" "$(VERSION_TS_FILE)"
+# 	@$(SED) "s/\(\/\* @VERSION_DETAIL \*\/ \)\([\"']\)[^\"']*\2/\1\2$(VERSION_DETAIL)\2/" "$(VERSION_TS_FILE)"
+# 	@$(SED) "s/\(\/\* @VERSION_NAME \*\/ \)\([\"']\)[^\"']*\2/\1\2$(VERSION_NAME)\2/" "$(VERSION_TS_FILE)"
+# 	@$(SED) "s/\(\/\* @MIN_VERSION_WEB \*\/ \)\([\"']\)[^\"']*\2/\1\2$(MIN_VERSION_WEB)\2/" "$(VERSION_TS_FILE)"
+
+# endif
+# 	@$(ECHO_CMD) "$(BLUE)🔎 After:$(RESET)"
+# 	@grep -nE "@VERSION \*/ [\"']|@VERSION_DETAIL \*/ [\"']|@VERSION_NAME \*/ [\"']" "$(VERSION_TS_FILE)" || true
+# 	@$(call success, version.ts synced successfully)
+
+
+define SED_REPLACE_IF_SET_BSD
+@if [ -n "$($(2))" ]; then \
+	$(SED) -E "s|(\/\* $(1) \*\/ )([\"'])[^\"']*\2|\1\2$($(2))\2|" "$(VERSION_TS_FILE)"; \
+else \
+	echo "skip $(1) (empty $(2))"; \
+fi
+endef
+
+define SED_REPLACE_IF_SET_GNU
+@if [ -n "$($(2))" ]; then \
+	$(SED) "s/\(\/\* $(1) \*\/ \)\([\"']\)[^\"']*\2/\1\2$($(2))\2/" "$(VERSION_TS_FILE)"; \
+else \
+	echo "skip $(1) (empty $(2))"; \
+fi
+endef
+# ===========================
+
 version-sync-ts: ## 🔧 Sync version.ts placeholders (@VERSION, @VERSION_DETAIL, @VERSION_NAME)
 	@$(call colorecho, 🧩 Syncing $(VERSION_TS_FILE))
 	@if [ ! -f "$(VERSION_TS_FILE)" ]; then \
-		$(call fail, File not found: $(VERSION_TS_FILE)); \
-		exit 1; \
+		$(call fail, File not found: $(VERSION_TS_FILE)); exit 1; \
 	fi
 	@if [ -z "$(VERSION)" ]; then \
-		$(call fail, VERSION is empty. ex: make version-sync-ts VERSION=v1.2.3); \
-		exit 1; \
+		$(call fail, VERSION is empty. ex: make version-sync-ts VERSION=v1.2.3); exit 1; \
 	fi
 	@$(call print_var, Target File, $(VERSION_TS_FILE))
 	@$(call print_var, VERSION, $(VERSION))
 	@$(call print_var, VERSION_DETAIL, $(VERSION_DETAIL))
 	@$(call print_var, VERSION_NAME, $(VERSION_NAME))
+	@$(call print_var, MIN_VERSION_WEB, $(MIN_VERSION_WEB))
 	@$(ECHO_CMD) "$(BLUE)🔎 Before:$(RESET)"
-	@grep -nE "@VERSION \*/ [\"']|@VERSION_DETAIL \*/ [\"']|@VERSION_NAME \*/ [\"']" "$(VERSION_TS_FILE)" || true
+	@grep -nE "@VERSION(_DETAIL|_NAME)? \*/ [\"']|@MIN_VERSION_WEB \*/ [\"']" "$(VERSION_TS_FILE)" || true
 
 ifeq ($(UNAME_S),Darwin)
 	@$(call colorecho, 🛠️  Applying replacements (Darwin / sed -E))
-	@$(SED) -E "s|(\/\* @VERSION \*\/ )([\"'])[^\"]*[^']*\2|\1\2$(VERSION)\2|" "$(VERSION_TS_FILE)"
-	@$(SED) -E "s|(\/\* @VERSION_DETAIL \*\/ )([\"'])[^\"']*\2|\1\2$(VERSION_DETAIL)\2|" "$(VERSION_TS_FILE)"
-	@$(SED) -E "s|(\/\* @VERSION_NAME \*\/ )([\"'])[^\"']*\2|\1\2$(VERSION_NAME)\2|" "$(VERSION_TS_FILE)"
+	@$(SED) -E "s|(\/\* @VERSION \*\/ )([\"'])[^\"']*\2|\1\2$(VERSION)\2|" "$(VERSION_TS_FILE)"
+	$(call SED_REPLACE_IF_SET_BSD,@VERSION_DETAIL,VERSION_DETAIL)
+	$(call SED_REPLACE_IF_SET_BSD,@VERSION_NAME,VERSION_NAME)
+	$(call SED_REPLACE_IF_SET_BSD,@MIN_VERSION_WEB,MIN_VERSION_WEB)
 else
-	@$(call colorecho, 🛠️  Applying replacements (GNU sed -r not used; BRE))
+	@$(call colorecho, 🛠️  Applying replacements (GNU sed / BRE))
 	@$(SED) "s/\(\/\* @VERSION \*\/ \)\([\"']\)[^\"']*\2/\1\2$(VERSION)\2/" "$(VERSION_TS_FILE)"
-	@$(SED) "s/\(\/\* @VERSION_DETAIL \*\/ \)\([\"']\)[^\"']*\2/\1\2$(VERSION_DETAIL)\2/" "$(VERSION_TS_FILE)"
-	@$(SED) "s/\(\/\* @VERSION_NAME \*\/ \)\([\"']\)[^\"']*\2/\1\2$(VERSION_NAME)\2/" "$(VERSION_TS_FILE)"
+	$(call SED_REPLACE_IF_SET_GNU,@VERSION_DETAIL,VERSION_DETAIL)
+	$(call SED_REPLACE_IF_SET_GNU,@VERSION_NAME,VERSION_NAME)
+	$(call SED_REPLACE_IF_SET_GNU,@MIN_VERSION_WEB,MIN_VERSION_WEB)
 endif
-	@$(ECHO_CMD) "$(BLUE)🔎 After:$(RESET)"
-	@grep -nE "@VERSION \*/ [\"']|@VERSION_DETAIL \*/ [\"']|@VERSION_NAME \*/ [\"']" "$(VERSION_TS_FILE)" || true
-	@$(call success, version.ts synced successfully)
 
+	@$(ECHO_CMD) "$(BLUE)🔎 After:$(RESET)"
+	@grep -nE "@VERSION(_DETAIL|_NAME)? \*/ [\"']|@MIN_VERSION_WEB \*/ [\"']" "$(VERSION_TS_FILE)" || true
+	@$(call success, version.ts synced successfully)
 
 .PHONY: update-version-file version-sync-ts
 
