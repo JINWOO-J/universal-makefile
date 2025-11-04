@@ -17,6 +17,8 @@ TP    := $(strip $(TAG_PREFIX))
 BUMPK := $(strip $(BUMP))
 SCRIPTS_DIR = $(MAKEFILE_DIR)/scripts
 
+REMOTE_BRANCH ?= origin
+LOCAL_BRANCH ?= main
 
 .PHONY: git-status sync-develop start-release list-old-branches clean-old-branches
 .PHONY: bump-version create-release-branch push-release-branch finish-release auto-release push-release push-release-clean
@@ -56,7 +58,13 @@ define RESET_TO_REMOTE
     git reset --hard "origin/$$branch"
 endef
 
-.PHONY: reset-branch reset-main reset-develop
+.PHONY: reset-branch reset-main reset-develop sync-remote-dry sync-remote _git-check
+
+_git-check:
+	@# git repo 여부 확인
+	@if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+		echo "Not a git repository."; exit 1; \
+	fi
 
 git-fetch: ## 🔧 소스 코드 가져오기 (사용법: make git-fetch SOURCE_REPO=owner/repo REF=main)
 	@if [ -z "$(SOURCE_REPO)" ]; then \
@@ -205,6 +213,31 @@ git-branches: ## 🌿 Show all branches with status
 # ================================================================
 # 브랜치 관리
 # ================================================================
+
+sync-remote-dry: _git-check
+	@echo "$(BLUE)>>> DRY RUN: $(REMOTE_BRANCH)/$(LOCAL_BRANCH) 기준으로 동기화시 삭제/변경될 항목 미리보기 $(RESET)"
+	@git fetch $(REMOTE_BRANCH)
+	@echo "---- [git diff --name-status HEAD..$(REMOTE_BRANCH)/$(LOCAL_BRANCH)] ----"
+	@git diff --name-status HEAD..$(REMOTE_BRANCH)/$(LOCAL_BRANCH) || true
+	@echo "$(RED)---- [git clean -fdxn] ----$(RESET)"
+	@git clean -fdxn
+
+sync-remote: _git-check
+	@if [ "$(CONFIRM)" != "1" ]; then \
+		echo "This will DISCARD ALL local changes and untracked files."; \
+		echo "Run: make sync-remote CONFIRM=1"; \
+		exit 1; \
+	fi
+	@set -e; \
+	echo "$(GREEN)>>> Fetching $(REMOTE_BRANCH) $(RESET)"; \
+	git fetch $(REMOTE_BRANCH); \
+	echo "$(GREEN)>>> Hard reset to $(REMOTE_BRANCH)/$(LOCAL_BRANCH)$(RESET)"; \
+	git reset --hard $(REMOTE_BRANCH)/$(LOCAL_BRANCH); \
+	echo "$(GREEN)>>> Cleaning untracked files/folders (.gitignore 제외)$(RESET)"; \
+	git clean -fd; \
+	echo "$(GREEN)Done. Current HEAD -> $(REMOTE_BRANCH)/$(LOCAL_BRANCH)$(RESET)"; \
+	git status -sb
+
 
 sync-develop: ## 🌿 Sync current branch to develop branch
 ifeq ($(CURRENT_BRANCH),$(DEVELOP_BRANCH))
