@@ -1,6 +1,6 @@
 include $(MAKEFILE_DIR)/makefiles/colors.mk
 
-ENV_MANAGER := python $(SCRIPTS_DIR)/env_manager.py
+ENV_MANAGER := python3 $(SCRIPTS_DIR)/env_manager.py
 ENVIRONMENT := $(ENV)
 SHOW_OVERRIDE := true
 
