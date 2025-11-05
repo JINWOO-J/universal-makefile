@@ -84,9 +84,10 @@ define print_error
 	$(ECHO_CMD) "$(RED) ❌ $(1)$(RESET)"
 endef
 
-
-
-
+# 파싱 시점에서의 print
+define pdebug_print
+$(if $(filter true,$(strip $(DEBUG))),$(info [DEBUG] $(strip $(1))))
+endef
 
 define colorecho
 @if [ -n "$(GREEN)" ]; then \
