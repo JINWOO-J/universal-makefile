@@ -1,6 +1,6 @@
 REPO_HUB=jinwoo
 NAME=universal-makefile
-VERSION = v1.0.195
+VERSION = v1.0.196
 IGNORE_TAG_RE = cache
 DOCKERFILE_CONTEXT = .
 DOCKERFILE_PATH = Dockerfile
