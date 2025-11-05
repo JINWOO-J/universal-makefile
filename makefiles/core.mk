@@ -23,23 +23,32 @@ SOURCE_REPO ?= ""
 
 # UMF_MODE에 따라 버전 자동 파싱
 ifeq ($(UMF_MODE),global)
+  $(call pdebug_print,UMF_MODE = $(UMF_MODE))
   ifneq ($(VERSION_FILE),)
-    _VERSION_FILE_PATH := $(SOURCE_DIR)/$(VERSION_FILE)
-    ifneq ($(wildcard $(_VERSION_FILE_PATH)),)
+    $(call pdebug_print,VERSION_FILE = $(VERSION_FILE))
+    ifneq ($(wildcard $(VERSION_FILE)),)
+      $(call pdebug_print,VERSION file exists: $(VERSION_FILE))
       # VERSION_FILE이 존재하면 파싱
-      _PARSED_VERSION := $(shell bash $(MAKEFILE_DIR)/scripts/parse_version.sh "$(_VERSION_FILE_PATH)" 2>/dev/null)
+      _PARSED_VERSION := $(shell bash $(MAKEFILE_DIR)/scripts/parse_version.sh "$(VERSION_FILE)" 2>/dev/null)
+      $(call pdebug_print,_PARSED_VERSION = $(_PARSED_VERSION))
       ifneq ($(_PARSED_VERSION),)
         # v 접두사가 없으면 추가
         ifeq ($(findstring v,$(_PARSED_VERSION)),)
           override VERSION := v$(_PARSED_VERSION)
+          $(call pdebug_print,Added 'v' prefix → VERSION = $(VERSION))
         else
           override VERSION := $(_PARSED_VERSION)
+          $(call pdebug_print,VERSION already has 'v' prefix → VERSION = $(VERSION))
         endif
-        ifndef SILENT_MODE
-          $(info [INFO] VERSION 자동 파싱: $(VERSION) (from $(VERSION_FILE)))
-        endif
+        $(call pdebug_print,VERSION 자동 파싱: $(VERSION) (from $(VERSION_FILE)))
+      else
+        $(call pdebug_print,VERSION 파싱 실패: $(VERSION_FILE))
       endif
+    else
+      $(call pdebug_print,VERSION_FILE not found: $(VERSION_FILE))
     endif
+  else
+    $(call pdebug_print,VERSION_FILE is not set)
   endif
 endif
 
