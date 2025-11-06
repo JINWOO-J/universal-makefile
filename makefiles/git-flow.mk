@@ -214,7 +214,7 @@ git-branches: ## 🌿 Show all branches with status
 # 브랜치 관리
 # ================================================================
 
-sync-remote-dry: _git-check
+sync-remote-dry: _git-check ## 🌿 Dry run: preview changes before sync-remote (REMOTE_BRANCH, LOCAL_BRANCH)
 	@echo "$(BLUE)>>> DRY RUN: $(REMOTE_BRANCH)/$(LOCAL_BRANCH) 기준으로 동기화시 삭제/변경될 항목 미리보기 $(RESET)"
 	@git fetch $(REMOTE_BRANCH)
 	@echo "---- [git diff --name-status HEAD..$(REMOTE_BRANCH)/$(LOCAL_BRANCH)] ----"
@@ -222,7 +222,7 @@ sync-remote-dry: _git-check
 	@echo "$(RED)---- [git clean -fdxn] ----$(RESET)"
 	@git clean -fdxn
 
-sync-remote: _git-check
+sync-remote: _git-check ## 🌿 Hard reset to remote branch (CONFIRM=1, REMOTE_BRANCH, LOCAL_BRANCH)
 	@if [ "$(CONFIRM)" != "1" ]; then \
 		echo "This will DISCARD ALL local changes and untracked files."; \
 		echo "Run: make sync-remote CONFIRM=1"; \
@@ -634,7 +634,7 @@ push-release-clean: push-release ## 🧹 Also delete remote release/* branch (op
 
 
 
-github-release:
+github-release: ## 🚀 Create GitHub release from version tag
 	@TAG=$$(cat .NEW_VERSION.tmp); \
 	echo "$(GREEN)🚀 Starting GitHub Release for $$TAG$(RESET)"; \
 	set -euo pipefail; \

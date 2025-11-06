@@ -95,7 +95,7 @@ print-env: ## 🔧 환경 변수 출력 (SILENT_MODE=1로 로그 숨김 가능)
 print-env-quiet: ## 🔧 환경 변수 출력 (로그 없이)
 	@$(MAKE) --no-print-directory print-env SILENT_MODE=1
 
-show-umf-version:
+show-umf-version: ## 🔧 Show Universal Makefile Framework version information
 	@$(ECHO_CMD) "$(MAGENTA)🐰 Universal Makefile Information:$(RESET)"
 	@$(call print_var, UMF Installed, $$(cat $(UM_VERSION_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none'))
 	@$(call print_var, UMF Pinned, $$(cat $(UMS_PIN_FILE) 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'none'))
@@ -223,7 +223,7 @@ _bump_version_from_variable:
 # 버전 파일 관리
 # ================================================================
 
-update-version-file:
+update-version-file: ## 🚀 Update version in project files
 	@$(eval VERSION_TO_UPDATE := $(or $(NEW_VERSION),$(shell cat .NEW_VERSION.tmp 2>/dev/null)))
 	@echo "$(BLUE)📝 Updating version to $(VERSION_TO_UPDATE)...$(RESET)"
 	@success=false; \
