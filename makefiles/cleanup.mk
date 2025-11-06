@@ -101,7 +101,7 @@ clean-python: ## 🧹 Clean Python specific files
 	@$(call SAFE_RM,*.egg-info/)
 	@$(call success, Python files cleaned)
 
-clean-java: ## ☕ Cleaning Java specific files
+clean-java: ## 🧹 Clean Java specific files
 	@$(call colorecho, ☕ Cleaning Java files...)
 	@$(call SAFE_RM,target/)
 	@$(call SAFE_RM,build/)
@@ -151,7 +151,7 @@ clean-secrets: ## 🧹 Clean potential secret files (BE CAREFUL!)
 	@find . -name "*.pfx" -type f -print0 | xargs -0 sh -c 'if [ "$${DRY_RUN:-}" = "true" ]; then echo "[Dry run]: Would remove: $$@"; else rm -rf "$$@"; fi' sh
 	@$(call success, Secret files cleaned)
 
-reclone: ## 🔄 Reset to remote state (discard local changes, re-fetch source)
+reclone: ## 🧹 Reset to remote state (discard local changes, re-fetch source)
 	@echo "$(RED)⚠️  WARNING: This will reset your deployment to remote state$(RESET)"
 	@echo "$(YELLOW)This will:$(RESET)"
 	@echo "  - Remove .build-info (빌드 정보 초기화)"

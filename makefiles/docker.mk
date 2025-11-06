@@ -163,7 +163,7 @@ _compute-build-tag:
 	@echo "  Tag: $(BUILD_TAG_COMPUTED)"
 	@echo ""
 
-docker-build:   ## 소스 fetch 후 Docker 명령어로 직접 빌드
+docker-build:   ## 🎯 소스 fetch 후 Docker 명령어로 직접 빌드
 	$(call log_info,"Docker 직접 빌드 시작...")
 
 	@if [ ! -d "$(SOURCE_DIR)" ]; then \
@@ -370,7 +370,7 @@ docker-logs: ## 🔧 Show Docker container logs
 # 보안 스캔 (선택적)
 # ================================================================
 
-security-scan: build ## 🔒 Run security scan on the image
+security-scan: build ## � RRun security scan on the image
 	@$(call colorecho, 🔒 Running security scan...)
 	@if command -v trivy >/dev/null 2>&1; then \
 		trivy image $(FULL_TAG); \
@@ -420,11 +420,11 @@ update-deploy-info: ## 🔧 수동으로 배포 정보 업데이트 (IMAGE, REF,
 		--deployed-by "$(DEPLOYED_BY)"
 	@$(call print_color, $(GREEN),✓ 배포 정보가 수동으로 업데이트되었습니다)
 
-deploy-status: ## 📊 현재 배포 상태 조회
+deploy-status: ## � 현재재 배포 상태 조회
 	@echo "📊 $(ENVIRONMENT) 환경 배포 상태:"
 	@python3 $(MAKEFILE_DIR)/scripts/env_manager.py status --environment $(ENVIRONMENT)
 
-deploy-history: ## 📈 배포 히스토리 조회 (Git 로그 기반)
+deploy-history: ## � 배포포 히스토리 조회 (Git 로그 기반)
 	@echo "📈 최근 배포 히스토리:"
 	@git log --oneline --grep="deploy:" -10 || echo "배포 관련 커밋이 없습니다."
 
@@ -483,7 +483,7 @@ update-deploy-from-previous: ## 🔧 이전 배포 정보를 기반으로 업데
 # 레지스트리 관리
 # ================================================================
 
-login: ## 🔑 Login to Docker registry
+login: ## � LLogin to Docker registry
 	@$(call colorecho, 🔑 Logging in to Docker registry...)
 	@if [ -n "$(DOCKER_REGISTRY_USER)" ] && [ -n "$(DOCKER_REGISTRY_PASS)" ]; then \
 		echo "$(DOCKER_REGISTRY_PASS)" | docker login -u "$(DOCKER_REGISTRY_USER)" --password-stdin $(DOCKER_REGISTRY_URL); \
@@ -491,7 +491,7 @@ login: ## 🔑 Login to Docker registry
 		docker login $(DOCKER_REGISTRY_URL); \
 	fi
 
-logout: ## 🔓 Logout from Docker registry
+logout: ## � LLogout from Docker registry
 	@$(call colorecho, 🔓 Logging out from Docker registry...)
 	@docker logout $(DOCKER_REGISTRY_URL)
 
@@ -499,7 +499,7 @@ logout: ## 🔓 Logout from Docker registry
 # 이미지 분석
 # ================================================================
 
-image-size: build ## 📊 Show image size information
+image-size: build ## �  Show image size information
 	@echo "$(BLUE)Image Size Analysis:$(RESET)"
 	@docker images $(FULL_TAG) --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
 	@echo ""
@@ -510,7 +510,7 @@ image-size: build ## 📊 Show image size information
 		$(call warn, Install 'dive' for detailed layer analysis: https://github.com/wagoodman/dive); \
 	fi
 
-image-history: build ## 📈 Show image build history
+image-history: build ## � Showw image build history
 	@echo "$(BLUE)Image Build History:$(RESET)"
 	@docker history $(FULL_TAG)
 
@@ -524,13 +524,13 @@ clear-build-cache: ## 🧹 Clear Docker build cache
 	@$(call success, Build cache cleared)
 
 
-list-tags: ## 🔖 List tags from registry (supports private)
+list-tags: ## � List ttags from registry (supports private)
 	@IGNORE_TAG="$(IGNORE_TAG)" REPO_HUB="$(REPO_HUB)" NAME="$(NAME)" PRIVATE="$(PRIVATE)" PAGE_SIZE="$(PAGE_SIZE)" AUTHFILE="$(AUTHFILE)" \
 	DOCKER_USERNAME="$(DOCKER_USERNAME)" DOCKER_PASSWORD="$(DOCKER_PASSWORD)" \
 	REG_USER="$(REG_USER)" REG_PASS="$(REG_PASS)" \
 	"$(LIST_TAGS_SCRIPT)"
 
 
-latest-tag: ## 🔖 Show latest SemVer tag
+latest-tag: ## � Show lattest SemVer tag
 	@$(MAKE) --no-print-directory list-tags REPO_HUB="$(REPO_HUB)" NAME="$(NAME)" | \
 	grep -E '^[0-9]+(\.[0-9]+){1,2}(-[0-9A-Za-z.-]+)?$$' | sort -Vr | head -n1

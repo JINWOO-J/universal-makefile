@@ -13,7 +13,7 @@ CAT_CLEAN  := 🧹
 # 메인 Help 시스템
 # ================================================================
 
-help: ## 🏠 Show this help message
+help: ## 🔧 Show this help message
 	@echo ""
 	@echo "$(BLUE)📋 Universal Makefile System $(VERSION)$(RESET)"
 	@echo "$(BLUE)Project: $(NAME) v$(VERSION)$(RESET)"

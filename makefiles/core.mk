@@ -515,12 +515,12 @@ make-build-args:
 # ================================================================
 # universal makefile 설정
 # ================================================================
-self-install:   ## ✨ Run 'install' command from install.sh
-self-update:    ## ✨ Run 'update' command from install.sh
-self-check:     ## ✨ Run 'check' command from install.sh
-self-help:      ## ✨ Run 'help' command from install.sh
-self-uninstall: ## ✨ Run 'uninstall' command from install.sh
-self-app:       ## ✨ Run 'app' command from install.sh
+self-install:   ## 🔧 Run 'install' command from install.sh
+self-update:    ## 🔧 Run 'update' command from install.sh
+self-check:     ## 🔧 Run 'check' command from install.sh
+self-help:      ## 🔧 Run 'help' command from install.sh
+self-uninstall: ## 🔧 Run 'uninstall' command from install.sh
+self-app:       ## 🔧 Run 'app' command from install.sh
 
 # 'self-'로 시작하는 모든 타겟을 처리하는 패턴 규칙
 # 예: 'make self-install'은 이 규칙을 통해 실행됩니다.
@@ -594,7 +594,7 @@ info: debug-vars
 # GitHub Actions 워크플로우 관리
 # ================================================================
 
-list-workflows: ## � 사용 가능한 워크플로c우 목록 보기
+list-workflows: ## 🔧 사용 가능한 워크플로우 목록 보기
 	@echo "$(BLUE)📋 사용 가능한 워크플로우:$(RESET)"
 	@echo ""
 	@if [ -d "$(MAKEFILE_DIR)/github/workflows" ]; then \
