@@ -65,7 +65,7 @@ _show-category:
 
 # Find which file defines a specific target (usage: make where TARGET=<name>)
 .PHONY: where
-where:
+where: ## 🔧 Find which file defines a target (usage: make where TARGET=<name>)
 	@awk -v tgt="$(TARGET)" 'function base(p,a,n){n=split(p,a,"/");return a[n]} /^[A-Za-z0-9_.-]+:[[:space:]]/ { split($$0,p,":"); if(p[1]==tgt) print "• " tgt "  ->  " base(FILENAME) }' $(MAKEFILE_LIST)
 
 

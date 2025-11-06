@@ -99,7 +99,7 @@ ensure-source: ## 🔧 소스 코드 확인 및 자동 fetch (UMF_MODE=global일
 		echo "$(GRAY)ℹ️  UMF_MODE=local, 소스 fetch 건너뜀$(NC)"; \
 	fi
 
-validate-dockerfile:
+validate-dockerfile: ## 🔧 Validate Dockerfile exists and is readable
 	@if [ -z "$(strip $(DOCKERFILE_PATH))" ]; then \
 		echo "[ERROR] DOCKERFILE_PATH가 비어 있습니다. 예: DOCKERFILE_PATH=./Dockerfile"; \
 		exit 1; \
@@ -263,7 +263,7 @@ build-legacy: check-docker make-build-args ## 🎯 Build the Docker image
 
 
 
-ensure-image: prepare-env
+ensure-image: prepare-env ## 🔧 Ensure Docker image exists for operations
 	$(eval FULL_TAG := $(shell grep '^DEPLOY_IMAGE=' .env 2>/dev/null | cut -d= -f2 || echo $(FULL_TAG)))
 	@echo "🔍 Using image: $(FULL_TAG)"
 	@docker image inspect $(FULL_TAG) >/dev/null 2>&1 || { \

@@ -588,7 +588,7 @@ debug-vars: ## 🔧 Show all Makefile variables in a structured way
 	@$(MAKE) show-umf-version
 
 
-info: debug-vars
+info: debug-vars ## 🔧 Show comprehensive system information
 
 # ================================================================
 # GitHub Actions 워크플로우 관리
