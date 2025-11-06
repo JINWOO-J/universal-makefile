@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.195
-Project: universal-makefile vv1.0.195
+📋 Universal Makefile System v1.0.196
+Project: universal-makefile vv1.0.196
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
@@ -13,6 +13,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   build-local          Build locally without any cache (for testing)  [docker.mk]
   build-legacy         Build the Docker image  [docker.mk]
   build-multi          Build multi-platform image (amd64, arm64)  [docker.mk]
+  build-and-prepare    빌드 후 배포 정보 자동 업데이트  [docker.mk]
 
 🚀 Release & Deploy:
   release              Full release process (build + push + tag latest)  [Makefile]
@@ -21,6 +22,9 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   build-push           Build then push  [docker.mk]
   push-latest          Push 'latest' tag only  [docker.mk]
   publish-all          Publish versioned + latest  [docker.mk]
+  prepare-deploy       현재 빌드된 이미지로 배포 정보 업데이트  [docker.mk]
+  deploy               배포 실행 (환경 준비 후 서비스 시작)  [compose.mk]
+  deploy-zero-downtime 무중단 배포 (단일 컨테이너)  [compose.mk]
   up                   Start services (자동으로 .env 갱신 체크)	  [compose.mk]
   bump-and-push-tag-remote One-shot: compute next (remote) + create + push (BUMP=patch|minor|major)  [git-flow.mk]
   finish-release       Complete release process (merge to main and develop, create tag)  [git-flow.mk]
@@ -93,6 +97,10 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   exec                 Execute command in running container  [docker.mk]
   docker-info          Show Docker and image information  [docker.mk]
   docker-logs          Show Docker container logs  [docker.mk]
+  update-deploy-info   수동으로 배포 정보 업데이트 (IMAGE, REF, VERSION, COMMIT_SHA, DEPLOYED_BY 필요)  [docker.mk]
+  update-deploy-from-image 이미지 태그에서 배포 정보 자동 추출 및 업데이트 (IMAGE=이미지태그 필요)  [docker.mk]
+  update-deploy-from-registry Registry에서 최신 이미지 정보로 배포 정보 업데이트  [docker.mk]
+  update-deploy-from-previous 이전 배포 정보를 기반으로 업데이트 (대화형)  [docker.mk]
   up-force             Start services (.env 강제 갱신)  [compose.mk]
   up-quick             Start services (.env 갱신 없이 빠른 시작)  [compose.mk]
   restart              Restart services for the current ENV  [compose.mk]
