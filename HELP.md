@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.198
-Project: universal-makefile vv1.0.198
+📋 Universal Makefile System v1.0.199
+Project: universal-makefile vv1.0.199
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
@@ -18,6 +18,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
 
 🚀 Release & Deploy:
   release              Full release process (build + push + tag latest)  [Makefile]
+  update-version-file  Update version in project files  [version.mk]
   tag-latest           Tag image as 'latest' and push  [docker.mk]
   push                 Push image to registry  [docker.mk]
   build-push           Build then push  [docker.mk]
@@ -30,6 +31,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   up                   Start services (자동으로 .env 갱신 체크)	  [compose.mk]
   bump-and-push-tag-remote One-shot: compute next (remote) + create + push (BUMP=patch|minor|major)  [git-flow.mk]
   finish-release       Complete release process (merge to main and develop, create tag)  [git-flow.mk]
+  github-release       Create GitHub release from version tag  [git-flow.mk]
   auto-release         Automated release process  [git-flow.mk]
   update-and-release   Update version, then run auto-release (alias: ur)  [git-flow.mk]
   ur                   Alias for 'update-and-release'  [git-flow.mk]
@@ -39,6 +41,8 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   ensure-clean         Ensure clean working directory  [git-flow.mk]
   git-status           Show comprehensive git status  [git-flow.mk]
   git-branches         Show all branches with status  [git-flow.mk]
+  sync-remote-dry      Dry run: preview changes before sync-remote (REMOTE_BRANCH, LOCAL_BRANCH)  [git-flow.mk]
+  sync-remote          Hard reset to remote branch (CONFIRM=1, REMOTE_BRANCH, LOCAL_BRANCH)  [git-flow.mk]
   sync-develop         Sync current branch to develop branch  [git-flow.mk]
   push-all-branches    Push all local branches to remote ($(REMOTE))  [git-flow.mk]
   start-release        Start new release branch from develop  [git-flow.mk]
@@ -63,9 +67,11 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   self-uninstall       Run 'uninstall' command from install.sh  [core.mk]
   self-app             Run 'app' command from install.sh  [core.mk]
   debug-vars           Show all Makefile variables in a structured way  [core.mk]
+  info                 Show comprehensive system information  [core.mk]
   list-workflows       사용 가능한 워크플로우 목록 보기  [core.mk]
   install-workflow     워크플로우 설치 (사용법: make install-workflow WORKFLOW=파일명)  [core.mk]
   help                 Show this help message  [help.mk]
+  where                Find which file defines a target (usage: make where TARGET=<name>)  [help.mk]
   help-git             Git workflow commands help (auto, grouped)  [help.mk]
   help-compose         Docker Compose commands help (auto, grouped)  [help.mk]
   help-cleanup         Cleanup commands help (auto, grouped)  [help.mk]
@@ -81,6 +87,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   show-version         Show current version	  [version.mk]
   print-env            환경 변수 출력 (SILENT_MODE=1로 로그 숨김 가능)  [version.mk]
   print-env-quiet      환경 변수 출력 (로그 없이)  [version.mk]
+  show-umf-version     Show Universal Makefile Framework version information  [version.mk]
   uv                   Update version (shortcut)  [version.mk]
   update-version       Bump & sync from project.mk VERSION (prefix-aware)  [version.mk]
   version-sync-ts      Sync version.ts placeholders (@VERSION, @VERSION_DETAIL, @VERSION_NAME)  [version.mk]
@@ -102,6 +109,8 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   export-version-info  Export version information to file  [version.mk]
   version-help         Show version management help  [version.mk]
   ensure-source        소스 코드 확인 및 자동 fetch (UMF_MODE=global일 때, SKIP_FETCH=true로 비활성화 가능)  [docker.mk]
+  validate-dockerfile  Validate Dockerfile exists and is readable  [docker.mk]
+  ensure-image         Ensure Docker image exists for operations  [docker.mk]
   bash                 Run bash in the container  [docker.mk]
   run                  Run the container interactively  [docker.mk]
   exec                 Execute command in running container  [docker.mk]
