@@ -68,6 +68,7 @@ CURRENT_COMMIT_LONG := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse H
 
 # 날짜(브랜치 태그 구성에 필요)
 DATE ?= $(shell date -u +%Y%m%d)
+BUILD_TIME ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 
 # 계산된 변수들
 # UMF_MODE=global이고 REF가 지정되면 REF에서 브랜치명 추출
@@ -427,7 +428,8 @@ BUILD_ARG_VARS := \
     VERSION \
     TAGNAME \
     BUILD_REVISION \
-    ENV
+    ENV \
+	BUILD_TIME
 
 
 BUILD_ARGS_CONTENT := $(foreach var,$(BUILD_ARG_VARS),--build-arg $(var)='$($(var))'$(newline))
