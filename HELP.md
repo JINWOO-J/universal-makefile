@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.196
-Project: universal-makefile vv1.0.196
+📋 Universal Makefile System v1.0.198
+Project: universal-makefile vv1.0.198
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
@@ -9,6 +9,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
 🎯 Main Build Targets:
   all                  Build everything (env + version + build)  [Makefile]
   build                Build the Docker image  [docker.mk]
+  docker-build         소스 fetch 후 Docker 명령어로 직접 빌드  [docker.mk]
   build-clean          Build without cache  [docker.mk]
   build-local          Build locally without any cache (for testing)  [docker.mk]
   build-legacy         Build the Docker image  [docker.mk]
@@ -24,6 +25,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   publish-all          Publish versioned + latest  [docker.mk]
   prepare-deploy       현재 빌드된 이미지로 배포 정보 업데이트  [docker.mk]
   deploy               배포 실행 (환경 준비 후 서비스 시작)  [compose.mk]
+  deploy-rollback      이전 버전으로 롤백 (무중단)  [compose.mk]
   deploy-zero-downtime 무중단 배포 (단일 컨테이너)  [compose.mk]
   up                   Start services (자동으로 .env 갱신 체크)	  [compose.mk]
   bump-and-push-tag-remote One-shot: compute next (remote) + create + push (BUMP=patch|minor|major)  [git-flow.mk]
@@ -54,8 +56,16 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   check-deps           Check if required tools are installed  [core.mk]
   check-docker         Check if Docker is running  [core.mk]
   check-git-clean      Check if working directory is clean  [core.mk]
+  self-install         Run 'install' command from install.sh  [core.mk]
+  self-update          Run 'update' command from install.sh  [core.mk]
+  self-check           Run 'check' command from install.sh  [core.mk]
+  self-help            Run 'help' command from install.sh  [core.mk]
+  self-uninstall       Run 'uninstall' command from install.sh  [core.mk]
+  self-app             Run 'app' command from install.sh  [core.mk]
   debug-vars           Show all Makefile variables in a structured way  [core.mk]
+  list-workflows       사용 가능한 워크플로우 목록 보기  [core.mk]
   install-workflow     워크플로우 설치 (사용법: make install-workflow WORKFLOW=파일명)  [core.mk]
+  help                 Show this help message  [help.mk]
   help-git             Git workflow commands help (auto, grouped)  [help.mk]
   help-compose         Docker Compose commands help (auto, grouped)  [help.mk]
   help-cleanup         Cleanup commands help (auto, grouped)  [help.mk]
@@ -103,6 +113,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   update-deploy-from-previous 이전 배포 정보를 기반으로 업데이트 (대화형)  [docker.mk]
   up-force             Start services (.env 강제 갱신)  [compose.mk]
   up-quick             Start services (.env 갱신 없이 빠른 시작)  [compose.mk]
+  down                 Stop services for the current ENV  [compose.mk]
   restart              Restart services for the current ENV  [compose.mk]
   rebuild              Rebuild services for the current ENV  [compose.mk]
   dev-up               Start development environment  [compose.mk]
@@ -111,6 +122,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   dev-logs             Show development environment logs  [compose.mk]
   logs                 Show service logs  [compose.mk]
   logs-tail            Show last 100 lines of logs  [compose.mk]
+  status               Show status of services  [compose.mk]
   dev-status           Show development services status  [compose.mk]
   exec-service         특정 서비스에서 명령어 실행 (사용법: make exec-service SERVICE=web COMMAND="ls -la")  [compose.mk]
   restart-service      특정 서비스 재시작 (사용법: make restart-service SERVICE=web)  [compose.mk]
@@ -142,10 +154,12 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   env-clean            Clean environment files  [cleanup.mk]
   clean-node           Clean Node.js specific files  [cleanup.mk]
   clean-python         Clean Python specific files  [cleanup.mk]
+  clean-java           Clean Java specific files  [cleanup.mk]
   clean-ide            Clean IDE and editor files  [cleanup.mk]
   clean-test           Clean test artifacts  [cleanup.mk]
   clean-recursively    Clean recursively in all subdirectories  [cleanup.mk]
   clean-secrets        Clean potential secret files (BE CAREFUL!)  [cleanup.mk]
+  reclone              Reset to remote state (discard local changes, re-fetch source)  [cleanup.mk]
 
 📖 Detailed Help:
   make help-docker     Docker-related commands

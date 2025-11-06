@@ -54,7 +54,7 @@ deploy: prepare-env ## 🚀 배포 실행 (환경 준비 후 서비스 시작)
 	@$(call colorecho, ✅ $(ENVIRONMENT) 환경 배포 완료)
 	@$(MAKE) status
 
-deploy-rollback: ## 🔄 이전 버전으로 롤백 (무중단)
+deploy-rollback: ## 🚀 이전 버전으로 롤백 (무중단)
 	@echo "🔄 롤백 시작..."
 	@echo "⚠️  현재 구현되지 않음. 수동으로 이전 이미지 태그를 지정하여 배포하세요."
 	@echo "예: make update-deploy-info IMAGE=mycompany/app:previous-version ..."
@@ -94,7 +94,7 @@ up-quick:  ## 🔧 Start services (.env 갱신 없이 빠른 시작)
 	@$(MAKE) status
 
 
-down: ## 🛑 Stop services for the current ENV
+down: ## 🔧 Stop services for the current ENV
 	@$(call colorecho, 🛑 Stopping services for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]...)
 	@$(call timed_command, Stopping $(COMPOSE_FILE_TO_USE), \
 		$(COMPOSE_COMMAND) down --remove-orphans)
@@ -160,7 +160,7 @@ logs-tail: ## 🔧 Show last 100 lines of logs
 	@$(call colorecho, 📋 Showing last 100 lines of logs...)
 	@$(COMPOSE_COMMAND) logs -f --tail=100
 
-status: ## 📊 Show status of services
+status: ## 🔧 Show status of services
 	@$(call colorecho, 📊 Status for [$(ENV)] environment using [$(COMPOSE_FILE_TO_USE)]:)
 	@$(COMPOSE_COMMAND) ps
 
