@@ -117,6 +117,7 @@ build: validate-dockerfile check-docker make-build-args ensure-source _compute-b
 	@echo "  Environment: $(if $(CI),GitHub Actions,Local)"
 	@echo "  CACHE_SCOPE: $(CACHE_SCOPE)"
 	@echo "  DISABLE_CACHE: $(DISABLE_CACHE)"
+	@echo "  BUILD_ARGS_CONTENT: $(BUILD_ARGS_CONTENT)"
 	@$(if $(DISABLE_CACHE),echo "  CACHE: DISABLED",echo "  CACHE_IMAGE: $(CACHE_IMAGE)")
 	@$(if $(DISABLE_CACHE),,echo "  CACHE_FALLBACK: $(CACHE_IMAGE_MAIN)")
 	@echo ""
@@ -134,7 +135,14 @@ build: validate-dockerfile check-docker make-build-args ensure-source _compute-b
 	@docker images $(BUILD_TAG_COMPUTED)
 	@echo "$(BUILD_TAG_COMPUTED)" > .build-info
 	@$(call print_color, $(GREEN),✓ 빌드 정보 저장됨: .build-info)
-	@$(call print_color, $(GRAY),💡 다음 'make prepare-env'는 이 이미지를 자동으로 사용합니다)
+	@if [ "$(AUTO_UPDATE_DEPLOY)" = "true" ]; then \
+		echo ""; \
+		$(call print_color, $(BLUE),🔄 배포 정보 자동 업데이트 중...); \
+		$(MAKE) prepare-deploy ENVIRONMENT=$(ENVIRONMENT) 2>/dev/null || true; \
+	else \
+		$(call print_color, $(GRAY),💡 배포 정보 업데이트: make prepare-deploy ENVIRONMENT=$(ENVIRONMENT)); \
+		$(call print_color, $(GRAY),💡 자동 업데이트: make build AUTO_UPDATE_DEPLOY=true ENVIRONMENT=$(ENVIRONMENT)); \
+	fi
 
 _compute-build-tag:
 	@# UMF_MODE=global일 때 스크립트로 동적 태그 계산
@@ -371,6 +379,105 @@ security-scan: build ## 🔒 Run security scan on the image
 	else \
 		$(call warn, No security scanner found. Install trivy or docker-security-scan); \
 	fi
+
+# ================================================================
+# 배포 정보 관리
+# ================================================================
+
+prepare-deploy: ## 🚀 현재 빌드된 이미지로 배포 정보 업데이트
+	@if [ ! -f .build-info ]; then \
+		echo "❌ 빌드 정보가 없습니다. 먼저 'make build'를 실행하세요."; \
+		exit 1; \
+	fi
+	@IMAGE_TAG=$$(cat .build-info); \
+	CURRENT_USER=$$(whoami); \
+	echo "🔄 배포 정보 업데이트 중..."; \
+	echo "  이미지: $$IMAGE_TAG"; \
+	echo "  환경: $(ENVIRONMENT)"; \
+	echo "  배포자: $$CURRENT_USER"; \
+	python3 $(MAKEFILE_DIR)/scripts/env_manager.py update \
+		--environment $(ENVIRONMENT) \
+		--image "$$IMAGE_TAG" \
+		--ref "$(CURRENT_BRANCH)" \
+		--version "$(VERSION)" \
+		--commit-sha "$(CURRENT_COMMIT_LONG)" \
+		--deployed-by "$$CURRENT_USER"
+	@$(call print_color, $(GREEN),✓ 배포 정보가 .env.$(ENVIRONMENT)에 업데이트되었습니다)
+
+update-deploy-info: ## 🔧 수동으로 배포 정보 업데이트 (IMAGE, REF, VERSION, COMMIT_SHA, DEPLOYED_BY 필요)
+	@if [ -z "$(IMAGE)" ] || [ -z "$(REF)" ] || [ -z "$(VERSION)" ] || [ -z "$(COMMIT_SHA)" ] || [ -z "$(DEPLOYED_BY)" ]; then \
+		echo "❌ 필수 변수가 누락되었습니다."; \
+		echo "사용법: make update-deploy-info IMAGE=42tape/app:v1.0.0 REF=main VERSION=v1.0.0 COMMIT_SHA=abc123 DEPLOYED_BY=jinwoo"; \
+		exit 1; \
+	fi
+	@echo "🔄 수동 배포 정보 업데이트 중..."; \
+	python3 $(MAKEFILE_DIR)/scripts/env_manager.py update \
+		--environment $(ENVIRONMENT) \
+		--image "$(IMAGE)" \
+		--ref "$(REF)" \
+		--version "$(VERSION)" \
+		--commit-sha "$(COMMIT_SHA)" \
+		--deployed-by "$(DEPLOYED_BY)"
+	@$(call print_color, $(GREEN),✓ 배포 정보가 수동으로 업데이트되었습니다)
+
+deploy-status: ## 📊 현재 배포 상태 조회
+	@echo "📊 $(ENVIRONMENT) 환경 배포 상태:"
+	@python3 $(MAKEFILE_DIR)/scripts/env_manager.py status --environment $(ENVIRONMENT)
+
+deploy-history: ## 📈 배포 히스토리 조회 (Git 로그 기반)
+	@echo "📈 최근 배포 히스토리:"
+	@git log --oneline --grep="deploy:" -10 || echo "배포 관련 커밋이 없습니다."
+
+build-and-prepare: build prepare-deploy ## 🎯 빌드 후 배포 정보 자동 업데이트
+
+update-deploy-from-image: ## 🔧 이미지 태그에서 배포 정보 자동 추출 및 업데이트 (IMAGE=이미지태그 필요)
+	@if [ -z "$(IMAGE)" ]; then \
+		echo "❌ IMAGE 변수가 필요합니다."; \
+		echo "사용법: make update-deploy-from-image IMAGE=42tape/app:be-v0.0.0-develop-20251106-fbc4d2f8 ENVIRONMENT=prod"; \
+		exit 1; \
+	fi
+	@echo "🔍 이미지 태그에서 정보 추출 중: $(IMAGE)"; \
+	TAG_PART=$$(echo "$(IMAGE)" | cut -d: -f2); \
+	COMMIT_SHA=$$(echo "$$TAG_PART" | grep -oE '[a-f0-9]{8}$$' || echo "unknown"); \
+	VERSION=$$(echo "$$TAG_PART" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || echo "v0.0.0"); \
+	REF=$$(echo "$$TAG_PART" | grep -oE '(main|develop|stage|test)' || echo "unknown"); \
+	DEPLOYED_BY=$$(whoami); \
+	echo "  버전: $$VERSION"; \
+	echo "  브랜치: $$REF"; \
+	echo "  커밋: $$COMMIT_SHA"; \
+	echo "  배포자: $$DEPLOYED_BY"; \
+	python3 $(MAKEFILE_DIR)/scripts/env_manager.py update \
+		--environment $(ENVIRONMENT) \
+		--image "$(IMAGE)" \
+		--ref "$$REF" \
+		--version "$$VERSION" \
+		--commit-sha "$$COMMIT_SHA" \
+		--deployed-by "$$DEPLOYED_BY"
+	@$(call print_color, $(GREEN),✓ 배포 정보가 이미지 태그에서 추출되어 업데이트되었습니다)
+
+update-deploy-from-registry: ## 🔧 Registry에서 최신 이미지 정보로 배포 정보 업데이트
+	@echo "🔍 Registry에서 최신 이미지 조회 중..."
+	@LATEST_TAG=$$($(MAKE) --no-print-directory list-tags REPO_HUB="$(REPO_HUB)" NAME="$(NAME)" | grep -E "$(ENVIRONMENT)|main|develop" | head -1); \
+	if [ -z "$$LATEST_TAG" ]; then \
+		echo "❌ Registry에서 이미지를 찾을 수 없습니다."; \
+		exit 1; \
+	fi; \
+	FULL_IMAGE="$(REPO_HUB)/$(NAME):$$LATEST_TAG"; \
+	echo "  최신 이미지: $$FULL_IMAGE"; \
+	$(MAKE) update-deploy-from-image IMAGE="$$FULL_IMAGE" ENVIRONMENT=$(ENVIRONMENT)
+
+update-deploy-from-previous: ## 🔧 이전 배포 정보를 기반으로 업데이트 (대화형)
+	@if [ ! -f .env.$(ENVIRONMENT) ]; then \
+		echo "❌ .env.$(ENVIRONMENT) 파일이 없습니다."; \
+		exit 1; \
+	fi
+	@PREV_IMAGE=$$(grep '^DEPLOY_IMAGE=' .env.$(ENVIRONMENT) | cut -d= -f2); \
+	echo "🔍 이전 배포 이미지: $$PREV_IMAGE"; \
+	echo ""; \
+	echo "새 이미지를 입력하세요 (Enter로 이전 이미지 유지):"; \
+	read NEW_IMAGE; \
+	IMAGE=$${NEW_IMAGE:-$$PREV_IMAGE}; \
+	$(MAKE) update-deploy-from-image IMAGE="$$IMAGE" ENVIRONMENT=$(ENVIRONMENT)
 
 # ================================================================
 # 레지스트리 관리

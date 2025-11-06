@@ -44,21 +44,36 @@ endef
 # 환경별 타겟들
 # ================================================================
 
-deploy: ## 무중단 배포 (단일 컨테이너)
-	@echo "🚀 배포 시작..."
+deploy: prepare-env ## 🚀 배포 실행 (환경 준비 후 서비스 시작)
+	@$(call colorecho, 🚀 $(ENVIRONMENT) 환경으로 배포 시작...)
+	@echo "📋 배포 정보:"
+	@python3 $(MAKEFILE_DIR)/scripts/env_manager.py status --environment $(ENVIRONMENT) 2>/dev/null || echo "  배포 정보 없음"
+	@echo ""
+	@$(call timed_command, 배포 실행, \
+		$(COMPOSE_COMMAND) up -d --remove-orphans)
+	@$(call colorecho, ✅ $(ENVIRONMENT) 환경 배포 완료)
+	@$(MAKE) status
+
+deploy-rollback: ## 🔄 이전 버전으로 롤백 (무중단)
+	@echo "🔄 롤백 시작..."
+	@echo "⚠️  현재 구현되지 않음. 수동으로 이전 이미지 태그를 지정하여 배포하세요."
+	@echo "예: make update-deploy-info IMAGE=42tape/app:previous-version ..."
+
+deploy-zero-downtime: ## 🚀 무중단 배포 (단일 컨테이너)
+	@echo "🚀 무중단 배포 시작..."
 	
 	# 1. 새 이미지 pull
-	@docker-compose pull app
+	@$(COMPOSE_COMMAND) pull
 	
 	# 2. 무중단 재시작
-	@docker-compose up -d --no-deps --build app
+	@$(COMPOSE_COMMAND) up -d --no-deps
 	# --no-deps: 의존성 재시작 안함
 	# docker-compose가 자동으로:
 	#   - 새 컨테이너 시작
 	#   - 헬스체크 통과 대기
 	#   - 구 컨테이너 종료
 	
-	@echo "✅ 배포 완료"
+	@echo "✅ 무중단 배포 완료"
 
 
 up: prepare-env ## 🚀 Start services (자동으로 .env 갱신 체크)	
@@ -183,46 +198,6 @@ logs-service: ## 🔧 특정 서비스 로그 보기 (사용법: make logs-servi
 	fi
 	@echo "📋 [$(SERVICE)] 서비스의 로그를 표시합니다..."
 	@$(COMPOSE_COMMAND) logs -f $(SERVICE)
-
-
-# ================================================================
-# 환경 관리
-# ================================================================
-# env: ## 🔧 Create .env file from current configuration
-# 	@$(call colorecho, 📝 Creating .env file...)
-# 	@echo "# Generated .env file - $(shell date)" > .env
-# 	@echo "REPO_HUB=$(REPO_HUB)" >> .env
-# 	@echo "NAME=$(NAME)" >> .env
-# 	@echo "VERSION=$(VERSION)" >> .env
-# 	@echo "TAGNAME=$(TAGNAME)" >> .env
-# 	@echo "ENV=$(ENV)" >> .env
-# 	@echo "COMPOSE_FILE=$(ACTIVE_COMPOSE_FILE)" >> .env
-# 	@echo "CURRENT_COMMIT_LONG=$(CURRENT_COMMIT_LONG)" >> .env
-# 	@echo "CURRENT_COMMIT_SHORT=$(CURRENT_COMMIT_SHORT)" >> .env
-# 	@echo "CURRENT_BRANCH=$(CURRENT_BRANCH)" >> .env
-# 	@echo "BUILD_REVISION=$(BUILD_REVISION)" >> .env
-# 	@$(call success, .env file created successfully)
-
-# env-show: env ## 🧐 Show current environment variables
-# 	@echo "$(BLUE)Current Environment Configuration:$(RESET)"
-# 	@echo "  Environment (ENV)   : $(ENV)"
-# 	@echo "  Compose CLI         : $(COMPOSE_CLI)"
-# 	@echo "  Active Compose File : $(COMPOSE_FILE_TO_USE)"
-# 	@echo "  Project Name (NAME) : $(NAME)"
-# 	@echo "  Version (VERSION)   : $(VERSION)"
-# 	@echo "  Image Tag (TAGNAME) : $(TAGNAME)"
-# 	@echo "  Build Revision (BUILD_REVISION) : $(BUILD_REVISION)"
-# 	@echo "  Current Commit Long (CURRENT_COMMIT_LONG) : $(CURRENT_COMMIT_LONG)"
-# 	@echo "  Current Commit Short (CURRENT_COMMIT_SHORT) : $(CURRENT_COMMIT_SHORT)"
-# 	@echo "  Current Branch (CURRENT_BRANCH) : $(CURRENT_BRANCH)"
-# 	@echo ""
-# 	@if [ -f .env ]; then \
-# 		echo "$(BLUE).env file contents:$(RESET)"; \
-# 		cat .env | sed 's/^/  /'; \
-# 	else \
-# 		echo "$(YELLOW)NOTE: .env file not found. Create one with 'make env'.$(RESET)"; \
-# 	fi
-
 
 
 # ================================================================
