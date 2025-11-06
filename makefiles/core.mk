@@ -67,8 +67,8 @@ CURRENT_COMMIT_SHORT := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse 
 CURRENT_COMMIT_LONG := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
 
 # 날짜(브랜치 태그 구성에 필요)
-DATE ?= $(shell date -u +%Y%m%d)
-BUILD_TIME ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
+DATE ?= $(shell date +%Y%m%d)
+BUILD_TIME ?= $(shell date +'%Y-%m-%dT%H:%M:%SZ')
 
 # 계산된 변수들
 # UMF_MODE=global이고 REF가 지정되면 REF에서 브랜치명 추출

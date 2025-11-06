@@ -627,7 +627,7 @@ export-version-info: ## 🔧 Export version information to file
 	@echo '  "commit": "'$$(git rev-parse HEAD 2>/dev/null || echo 'unknown')'",' >> version-info.json
 	@echo '  "shortCommit": "'$$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')'",' >> version-info.json
 	@echo '  "lastTag": "'$$(git describe --tags --abbrev=0 2>/dev/null || echo 'none')'",' >> version-info.json
-	@echo '  "buildDate": "'$$(date -u +%Y-%m-%dT%H:%M:%SZ)'",' >> version-info.json
+	@echo '  "buildDate": "'$$(date +%Y-%m-%dT%H:%M:%SZ)'",' >> version-info.json
 	@echo '  "project": "$(NAME)",' >> version-info.json
 	@echo '  "umVersionInstalled": "'$$(cat $(UM_VERSION_FILE) 2>/dev/null || cat ./.ums-release-version 2>/dev/null || cat ./.ums-version 2>/dev/null || echo 'unknown')'",' >> version-info.json
 	@echo '  "umVersionPinned": "'$$(cat $(UMS_PIN_FILE) 2>/dev/null || cat ./.ums-version 2>/dev/null || echo '')'",' >> version-info.json
