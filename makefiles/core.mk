@@ -4,6 +4,9 @@ SHELL := /bin/bash
 # ================================================================
 
 include $(MAKEFILE_DIR)/makefiles/colors.mk
+# 날짜(브랜치 태그 구성에 필요)
+DATE := $(shell date +%Y%m%d)
+BUILD_TIME := $(shell date +'%Y-%m-%dT%H:%M:%SZ')
 
 # 기본 변수들 (project.mk에서 오버라이드 가능)
 REPO_HUB ?= defaultrepo
@@ -65,10 +68,6 @@ endif
 # 현재 짧은/긴 커밋 해시 (TAGNAME 계산 전에 필요)
 CURRENT_COMMIT_SHORT := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse --short HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
 CURRENT_COMMIT_LONG := $(shell cd $(GIT_WORK_DIR) 2>/dev/null && git rev-parse HEAD 2>/dev/null | tr -d ' ' || echo "unknown")
-
-# 날짜(브랜치 태그 구성에 필요)
-DATE ?= $(shell date +%Y%m%d)
-BUILD_TIME ?= $(shell date +'%Y-%m-%dT%H:%M:%SZ')
 
 # 계산된 변수들
 # UMF_MODE=global이고 REF가 지정되면 REF에서 브랜치명 추출
@@ -422,15 +421,13 @@ define newline
 
 endef
 
-BUILD_ARG_VARS := \
-    REPO_HUB \
-    NAME \
-    VERSION \
-    TAGNAME \
-    BUILD_REVISION \
-    ENV \
-	BUILD_TIME
+# project.mk에서 BUILD_ARG_VARS를 오버라이드하지 않았다면 기본값 사용
+BUILD_ARG_VARS ?= REPO_HUB NAME VERSION TAGNAME BUILD_REVISION ENV BUILD_TIME
 
+# project.mk에서 정의한 EXTRA_BUILD_ARGS를 추가
+ifneq ($(EXTRA_BUILD_ARGS),)
+    BUILD_ARG_VARS += $(EXTRA_BUILD_ARGS)
+endif
 
 BUILD_ARGS_CONTENT := $(foreach var,$(BUILD_ARG_VARS),--build-arg $(var)='$($(var))'$(newline))
 DEBUG_ARGS_CONTENT := $(BUILD_ARGS_CONTENT)

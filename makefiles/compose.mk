@@ -6,7 +6,7 @@
 .PHONY: dev-up dev-down dev-restart dev-logs
 
 # Docker Compose 파일 설정 (project.mk에서 오버라이드 가능)
-COMPOSE_CLI = docker compose
+COMPOSE_CLI ?= docker compose
 
 # COMPOSE_FILE_DEFAULT ?= docker-compose.yml
 # COMPOSE_FILE_DEV ?= docker-compose.dev.yml
