@@ -17,8 +17,20 @@ TP    := $(strip $(TAG_PREFIX))
 BUMPK := $(strip $(BUMP))
 SCRIPTS_DIR = $(MAKEFILE_DIR)/scripts
 
+# sync-remote 타겟용 변수 (remote name과 local branch name)
 REMOTE_BRANCH ?= origin
 LOCAL_BRANCH ?= main
+
+USE_PAGER ?= 0
+GIT_PAGER_OPT := $(if $(filter 1,$(USE_PAGER)),,--no-pager)
+GIT_COMMAND := git $(GIT_PAGER_OPT)
+
+GIT_TARGET ?= project
+GIT_INFO_DIR = $(strip \
+  $(if $(filter source,$(GIT_TARGET)), \
+    $(if $(SOURCE_DIR),$(SOURCE_DIR),$(error GIT_TARGET=source requires SOURCE_DIR to be set)), \
+  $(if $(filter system,$(GIT_TARGET)),$(MAKEFILE_DIR), \
+  .)))
 
 .PHONY: git-status sync-develop start-release list-old-branches clean-old-branches
 .PHONY: bump-version create-release-branch push-release-branch finish-release auto-release push-release push-release-clean
@@ -60,6 +72,9 @@ endef
 
 .PHONY: reset-branch reset-main reset-develop sync-remote-dry sync-remote _git-check
 
+print-git-dir:
+	@echo "📦 Git Directory: $(GIT_INFO_DIR)"
+
 _git-check:
 	@# git repo 여부 확인
 	@if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
@@ -98,32 +113,39 @@ scan-secrets: ## 🔒 Lightweight secret scan (regex) — no deps
 	  -E '(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35}|xox[baprs]-[0-9A-Za-z-]{10,}|-----BEGIN (OPENSSH|RSA|EC) PRIVATE KEY-----)' . || true; \
 	echo "$(YELLOW)Heuristic only; consider dedicated tooling for CI (git-secrets/trufflehog)$(RESET)"
 
-compare-with-remote: ## 🔍 Compare content of BRANCH vs $(REMOTE)/REMOTE_BRANCH (tree equality + changed files)
+compare-with-remote: ## 🔍 Compare BRANCH vs $(REMOTE)/COMPARE_BRANCH (GIT_TARGET=..., BRANCH=..., COMPARE_BRANCH=...)
 	@set -Eeuo pipefail; \
-	if ! git rev-parse --git-dir >/dev/null 2>&1; then \
+	GDIR="$(GIT_INFO_DIR)"; \
+	if [ ! -d "$$GDIR/.git" ]; then \
+		echo "$(RED)Error: $$GDIR is not a git repository$(RESET)"; exit 1; \
+	fi; \
+	echo "$(CYAN)Git target: $(GIT_TARGET) → $$GDIR$(RESET)"; \
+	cd "$$GDIR"; \
+	if ! $(GIT_COMMAND) rev-parse --git-dir >/dev/null 2>&1; then \
 	  echo "$(RED)Error: Not a git repository$(RESET)"; exit 1; \
 	fi; \
-	if ! git remote get-url $(REMOTE) >/dev/null 2>&1; then \
+	if ! $(GIT_COMMAND) remote get-url $(REMOTE) >/dev/null 2>&1; then \
 	  echo "$(RED)Error: remote '$(REMOTE)' not found$(RESET)"; exit 1; \
 	fi; \
-	BRANCH="$(if $(BRANCH),$(BRANCH),$$(git rev-parse --abbrev-ref HEAD))"; \
-	RB="$${REMOTE_BRANCH:-$$BRANCH}"; \
+	BRANCH="$(if $(BRANCH),$(BRANCH),$$($(GIT_COMMAND) rev-parse --abbrev-ref HEAD))"; \
+	RB="$(strip $(COMPARE_BRANCH))"; \
+	if [ -z "$$RB" ]; then RB="$$BRANCH"; fi; \
 	echo "$(BLUE)🔎 Comparing content: $$BRANCH  ⇄  $(REMOTE)/$$RB$(RESET)"; \
-	git fetch $(REMOTE) "$$RB" >/dev/null 2>&1 || true; \
-	if ! git rev-parse --verify "$(REMOTE)/$$RB^{commit}" >/dev/null 2>&1; then \
+	$(GIT_COMMAND) fetch $(REMOTE) "$$RB" >/dev/null 2>&1 || true; \
+	if ! $(GIT_COMMAND) rev-parse --verify "$(REMOTE)/$$RB^{commit}" >/dev/null 2>&1; then \
 	  echo "$(RED)Error: $(REMOTE)/$$RB not found$(RESET)"; exit 1; \
 	fi; \
-	LT=$$(git rev-parse "$$BRANCH^{tree}" 2>/dev/null) || { echo "$(RED)Error: unknown local branch '$$BRANCH'$(RESET)"; exit 1; }; \
-	RT=$$(git rev-parse "$(REMOTE)/$$RB^{tree}" 2>/dev/null); \
+	LT=$$($(GIT_COMMAND) rev-parse "$$BRANCH^{tree}" 2>/dev/null) || { echo "$(RED)Error: unknown local branch '$$BRANCH'$(RESET)"; exit 1; }; \
+	RT=$$($(GIT_COMMAND) rev-parse "$(REMOTE)/$$RB^{tree}" 2>/dev/null); \
 	if [ "$$LT" = "$$RT" ]; then \
 	  echo "$(GREEN)✔ No content differences (trees are identical)$(RESET)"; \
 	  exit 0; \
 	fi; \
 	echo "$(YELLOW)↕ Content differs. Changed files (remote → local):$(RESET)"; \
-	git diff --name-status --find-renames "$(REMOTE)/$$RB" "$$BRANCH"; \
+	$(GIT_COMMAND) diff --name-status --find-renames "$(REMOTE)/$$RB" "$$BRANCH"; \
 	if [ "$(SHOW_PATCH)" = "1" ]; then \
 	  echo ""; echo "$(BLUE)--- Unified diff ---$(RESET)"; \
-	  git diff --find-renames "$(REMOTE)/$$RB" "$$BRANCH"; \
+	  $(GIT_COMMAND) diff --find-renames "$(REMOTE)/$$RB" "$$BRANCH"; \
 	fi; \
 	[ "$(FAIL_ON_DIFF)" = "1" ] && exit 2 || true
 
@@ -181,46 +203,63 @@ ensure-clean: ## 🌿 Ensure clean working directory
 		exit 1; \
 	fi
 
-git-status: ## 🌿 Show comprehensive git status
-	@echo "$(BLUE)Git Repository Status:$(RESET)"
-	@echo "  Current Branch: $(CURRENT_BRANCH)"
-	@echo "  Main Branch: $(MAIN_BRANCH)"
-	@echo "  Develop Branch: $(DEVELOP_BRANCH)"
-	@echo ""
-	@echo "$(BLUE)Working Directory:$(RESET)"
-	@git status --short || echo "  Clean"
-	@echo ""
-	@echo "$(BLUE)Recent Tags:$(RESET)"
-	@git tag --sort=-version:refname | head -5 || echo "  No tags found"
-	@echo ""
-	@echo "$(BLUE)Branch Tracking:$(RESET)"
-	@git branch -vv | grep "^\*" || echo "  Not tracking any remote"
-	@UP=$$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "none"); echo "  Upstream: $$UP"
-	@if [ "$$UP" != "none" ]; then git rev-list --left-right --count $$UP...HEAD 2>/dev/null | awk '{printf "  Divergence: behind %s, ahead %s\n", $$1, $$2}'; else echo "  Divergence: n/a"; fi
-	@echo ""
-	@echo "$(BLUE)Remotes:$(RESET)"
-	@git remote -v | awk '$$3=="(fetch)"{printf "  %s -> %s\n", $$1, $$2}' || echo "  No remotes found"
-	@echo "  Default Remote (REMOTE): $(REMOTE)"
-	@echo "  $(REMOTE) URL: $$(git remote get-url $(REMOTE) 2>/dev/null || echo "not set")"
+git-status: print-git-dir ## 🌿 Show comprehensive git status (GIT_TARGET=project|source|system)
+	@GDIR="$(GIT_INFO_DIR)"; \
+	if [ ! -d "$$GDIR/.git" ]; then \
+		echo "$(RED)Error: $$GDIR is not a git repository$(RESET)"; exit 1; \
+	fi; \
+	echo "$(CYAN)Git target: $(GIT_TARGET) → $$GDIR$(RESET)"; \
+	cd "$$GDIR"; \
+	echo "$(BLUE)Git Repository Status:$(RESET)"; \
+	CUR=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown"); \
+	echo "  Current Branch: $$CUR"; \
+	echo "  Main Branch: $(MAIN_BRANCH)"; \
+	echo "  Develop Branch: $(DEVELOP_BRANCH)"; \
+	echo ""; \
+	echo "$(BLUE)Working Directory:$(RESET)"; \
+	git status --short || echo "  Clean"; \
+	echo ""; \
+	echo "$(BLUE)Recent Tags:$(RESET)"; \
+	git tag --sort=-version:refname | head -5 || echo "  No tags found"; \
+	echo ""; \
+	echo "$(BLUE)Branch Tracking:$(RESET)"; \
+	git branch -vv | grep "^\*" || echo "  Not tracking any remote"; \
+	UP=$$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "none"); \
+	echo "  Upstream: $$UP"; \
+	if [ "$$UP" != "none" ]; then \
+	  git rev-list --left-right --count $$UP...HEAD 2>/dev/null | awk '{printf "  Divergence: behind %s, ahead %s\n", $$1, $$2}'; \
+	else echo "  Divergence: n/a"; fi; \
+	echo ""; \
+	echo "$(BLUE)Remotes:$(RESET)"; \
+	git remote -v | awk '$$3=="(fetch)"{printf "  %s -> %s\n", $$1, $$2}' || echo "  No remotes found"; \
+	echo "  Default Remote (REMOTE): $(REMOTE)"; \
+	echo "  $(REMOTE) URL: $$(git remote get-url $(REMOTE) 2>/dev/null || echo "not set")"
 
-git-branches: ## 🌿 Show all branches with status
-	@echo "$(BLUE)Local Branches:$(RESET)"
-	@git branch -v
-	@echo ""
-	@echo "$(BLUE)Remote Branches:$(RESET)"
-	@git branch -rv
+git-branches: ## 🌿 Show all branches with status (GIT_TARGET=project|source|system)
+	@GDIR="$(GIT_INFO_DIR)"; \
+	if [ ! -d "$$GDIR/.git" ]; then \
+		echo "$(RED)Error: $$GDIR is not a git repository$(RESET)"; exit 1; \
+	fi; \
+	echo "$(CYAN)Git target: $(GIT_TARGET) → $$GDIR$(RESET)"; \
+	cd "$$GDIR"; \
+	echo "$(BLUE)Local Branches:$(RESET)"; \
+	$(GIT_COMMAND) branch -v; \
+	echo ""; \
+	echo "$(BLUE)Remote Branches:$(RESET)"; \
+	$(GIT_COMMAND) branch -rv
 
+	
 # ================================================================
 # 브랜치 관리
 # ================================================================
 
 sync-remote-dry: _git-check ## 🌿 Dry run: preview changes before sync-remote (REMOTE_BRANCH, LOCAL_BRANCH)
-	@echo "$(BLUE)>>> DRY RUN: $(REMOTE_BRANCH)/$(LOCAL_BRANCH) 기준으로 동기화시 삭제/변경될 항목 미리보기 $(RESET)"
-	@git fetch $(REMOTE_BRANCH)
+	@echo "$(BLUE)>>> DRY RUN: $(REMOTE_BRANCH)/$(LOCAL_BRANCH) 기준으로 동기화시 삭제/변경될 항목 미리보기$(RESET)"
+	@$(GIT_COMMAND) fetch $(REMOTE_BRANCH)
 	@echo "---- [git diff --name-status HEAD..$(REMOTE_BRANCH)/$(LOCAL_BRANCH)] ----"
-	@git diff --name-status HEAD..$(REMOTE_BRANCH)/$(LOCAL_BRANCH) || true
+	@$(GIT_COMMAND) diff --name-status HEAD..$(REMOTE_BRANCH)/$(LOCAL_BRANCH) || true
 	@echo "$(RED)---- [git clean -fdxn] ----$(RESET)"
-	@git clean -fdxn
+	@$(GIT_COMMAND) clean -fdxn
 
 sync-remote: _git-check ## 🌿 Hard reset to remote branch (CONFIRM=1, REMOTE_BRANCH, LOCAL_BRANCH)
 	@if [ "$(CONFIRM)" != "1" ]; then \
@@ -230,13 +269,13 @@ sync-remote: _git-check ## 🌿 Hard reset to remote branch (CONFIRM=1, REMOTE_B
 	fi
 	@set -e; \
 	echo "$(GREEN)>>> Fetching $(REMOTE_BRANCH) $(RESET)"; \
-	git fetch $(REMOTE_BRANCH); \
+	$(GIT_COMMAND) fetch $(REMOTE_BRANCH); \
 	echo "$(GREEN)>>> Hard reset to $(REMOTE_BRANCH)/$(LOCAL_BRANCH)$(RESET)"; \
-	git reset --hard $(REMOTE_BRANCH)/$(LOCAL_BRANCH); \
+	$(GIT_COMMAND) reset --hard $(REMOTE_BRANCH)/$(LOCAL_BRANCH); \
 	echo "$(GREEN)>>> Cleaning untracked files/folders (.gitignore 제외)$(RESET)"; \
-	git clean -fd; \
+	$(GIT_COMMAND) clean -fd; \
 	echo "$(GREEN)Done. Current HEAD -> $(REMOTE_BRANCH)/$(LOCAL_BRANCH)$(RESET)"; \
-	git status -sb
+	$(GIT_COMMAND) status -sb
 
 
 sync-develop: ## 🌿 Sync current branch to develop branch
@@ -599,7 +638,7 @@ push-release: ## 📤 Push main, develop, and tags to remote
 	@git push --tags || true
 	@echo "$(GREEN)✅ Successfully pushed main, develop, and tags$(RESET)"
 
-# (옵션) 원격 release 브랜치도 지우고 싶다면 사용
+
 push-release-clean: push-release ## 🧹 Also delete remote release/* branch (optional)
 	@CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	if echo "$$CUR_BRANCH" | grep -q "^release/"; then \
@@ -763,16 +802,57 @@ finish-hotfix: ## 🚀 Finish hotfix (merge to main and develop)
 	git branch -d $$CUR_BRANCH; \
 	$(call success, Hotfix '$$HOTFIX_NAME' completed)
 
-git-log: ## 📜 Graph + oneline with date and author (COUNT=N, DATE=short|iso|relative|raw|format:<fmt>)
-	@COUNT=$(if $(COUNT),$(COUNT),50); \
-	DATE_OPT=$(if $(DATE),$(DATE),short); \
-	echo "$(BLUE)📜 Git Log (last $$COUNT commits, date=$$DATE_OPT):$(RESET)"; \
-	echo "$(YELLOW)Hint: make git-log COUNT=100 DATE=relative$(RESET)"; \
-	if echo "$$DATE_OPT" | grep -q '^format:'; then \
-		DATE_ARG=$$(printf "%s" "$$DATE_OPT" | sed 's/^format://'); \
+git-log:  ## 📜 Graph + oneline with date/author (GIT_TARGET=..., COUNT=N, LOG_DATE=...)
+	@GDIR="$(GIT_INFO_DIR)"; \
+	if [ ! -d "$$GDIR/.git" ]; then \
+		echo "$(RED)Error: $$GDIR is not a git repository$(RESET)"; exit 1; \
+	fi; \
+	echo "$(CYAN)Git target: $(GIT_TARGET) → $$GDIR$(RESET)"; \
+	cd "$$GDIR"; \
+	COUNT_FROM_MAKE='$(COUNT)'; \
+	LOG_DATE_FROM_MAKE='$(LOG_DATE)'; \
+	COUNT_OPT=$${COUNT_FROM_MAKE:-10}; \
+	LOG_DATE_OPT=$${LOG_DATE_FROM_MAKE:-short}; \
+	echo "$(BLUE)📜 Git Log (last $$COUNT_OPT commits, date=$$LOG_DATE_OPT):$(RESET)"; \
+	echo "$(YELLOW)Hint: make git-log GIT_TARGET=source COUNT=100 LOG_DATE=relative$(RESET)"; \
+	if echo "$$LOG_DATE_OPT" | grep -q '^format:'; then \
+		DATE_ARG=$$(printf "%s" "$$LOG_DATE_OPT" | sed 's/^format://'); \
 		DATE_FLAG="--date=format:$$DATE_ARG"; \
 	else \
-		DATE_FLAG="--date=$$DATE_OPT"; \
+		DATE_FLAG="--date=$$LOG_DATE_OPT"; \
 	fi; \
-	git --no-pager log --graph --decorate --color=always -n $$COUNT $$DATE_FLAG \
+	$(GIT_COMMAND) log --graph --decorate --color=always -n $$COUNT_OPT $$DATE_FLAG \
 	  --pretty=format:"$(YELLOW)%h$(RESET) $(GREEN)%ad$(RESET) $(BLUE)%an$(RESET) %C(auto)%d$(RESET) %s"
+	  
+save-git-info: print-git-dir ## 🔧 Save git state to .git-info.json (GIT_TARGET=project|source|system)
+	@GDIR="$(GIT_INFO_DIR)"; \
+	if [ ! -d "$$GDIR/.git" ]; then \
+		echo "$(RED)Error: $$GDIR is not a git repository$(RESET)"; exit 1; \
+	fi; \
+	echo "$(BLUE)💾 Saving git information from $(GIT_TARGET) ($$GDIR) to .git-info.json...$(RESET)"; \
+	cd "$$GDIR"; \
+	COMMIT_SHA=$$($(GIT_COMMAND) rev-parse HEAD 2>/dev/null || echo "unknown"); \
+	COMMIT_SHORT=$$($(GIT_COMMAND) rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
+	BRANCH=$$($(GIT_COMMAND) rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown"); \
+	COMMIT_DATE=$$($(GIT_COMMAND) log -1 --format=%cd --date=iso 2>/dev/null || echo "unknown"); \
+	COMMIT_AUTHOR=$$($(GIT_COMMAND) log -1 --format=%an 2>/dev/null || echo "unknown"); \
+	COMMIT_MESSAGE=$$($(GIT_COMMAND) log -1 --format=%s 2>/dev/null | sed 's/"/\\"/g' || echo "unknown"); \
+	TAG=$$($(GIT_COMMAND) describe --tags --exact-match 2>/dev/null || echo ""); \
+	REMOTE_URL=$$($(GIT_COMMAND) remote get-url origin 2>/dev/null || echo ""); \
+	DIRTY=$$($(GIT_COMMAND) diff --quiet 2>/dev/null && echo "false" || echo "true"); \
+	cd - >/dev/null; \
+	printf '{\n' > .git-info.json; \
+	printf '  "gitTarget": "%s",\n' "$(GIT_TARGET)" >> .git-info.json; \
+	printf '  "commitSha": "%s",\n' "$$COMMIT_SHA" >> .git-info.json; \
+	printf '  "commitShort": "%s",\n' "$$COMMIT_SHORT" >> .git-info.json; \
+	printf '  "branch": "%s",\n' "$$BRANCH" >> .git-info.json; \
+	printf '  "commitDate": "%s",\n' "$$COMMIT_DATE" >> .git-info.json; \
+	printf '  "commitAuthor": "%s",\n' "$$COMMIT_AUTHOR" >> .git-info.json; \
+	printf '  "commitMessage": "%s",\n' "$$COMMIT_MESSAGE" >> .git-info.json; \
+	printf '  "tag": "%s",\n' "$$TAG" >> .git-info.json; \
+	printf '  "remoteUrl": "%s",\n' "$$REMOTE_URL" >> .git-info.json; \
+	printf '  "dirty": %s,\n' "$$DIRTY" >> .git-info.json; \
+	printf '  "buildDate": "%s"\n' "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .git-info.json; \
+	printf '}\n' >> .git-info.json; \
+	echo "$(GREEN)✅ Git info saved to .git-info.json$(RESET)"; \
+	cat .git-info.json
