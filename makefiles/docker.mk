@@ -130,7 +130,7 @@ build: validate-dockerfile check-docker make-build-args ensure-source _compute-b
 	@echo "  DISABLE_CACHE: $(DISABLE_CACHE)"
 	@echo "  BUILD_ARGS_CONTENT: $(BUILD_ARGS_CONTENT)"
 	@$(if $(DISABLE_CACHE),echo "  CACHE: DISABLED",echo "  CACHE_IMAGE: $(CACHE_IMAGE)")
-	@$(if $(DISABLE_CACHE),,echo "  CACHE_FALLBACK: $(CACHE_IMAGE_MAIN)")
+	@$(if $(DISABLE_CACHE),echo "  CACHE_FALLBACK: $(CACHE_IMAGE_MAIN)")
 	@echo ""
 	$(call run_interactive, Image Build $(BUILD_TAG_COMPUTED), \
 		DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker buildx build \
@@ -305,7 +305,7 @@ publish-all: build tag-latest push push-latest ## 🚀 Publish versioned + lates
 
 bash: ensure-image ## 🔧 Run bash in the container
 	@$(call colorecho, 🐚 Starting bash in container...)
-	@docker run -it --rm --name $(NAME)-debug $(FULL_TAG) sh
+	@docker run -it --rm --entrypoint sh --name $(NAME)-debug $(FULL_TAG)
 
 run: ensure-image ## 🔧 Run the container interactively
 	@$(call colorecho, 🚀 Running container interactively...)
