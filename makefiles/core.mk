@@ -91,21 +91,25 @@ ifeq ($(CURRENT_BRANCH),HEAD)
     CURRENT_BRANCH := detached
 endif
 
-_ORIGINAL_TAGNAME := $(TAGNAME)
-
-# SERVICE_KIND가 있으면 VERSION에서 SERVICE_KIND- 접두사 제거 (중복 방지)
+# SERVICE_KIND가 있으면 VERSION에서 SERVICE_KIND- 접두사 제거 (레거시 호환)
+# TAGNAME 계산 전에 실행되어야 함
+# 예: SERVICE_KIND=fe, VERSION=fe-v1.0.51 → VERSION=v1.0.51
 ifneq ($(SERVICE_KIND),)
-    _VERSION_FOR_TAG := $(patsubst $(SERVICE_KIND)-%,%,$(VERSION))
-else
-    _VERSION_FOR_TAG := $(VERSION)
+  _VERSION_WITH_PREFIX := $(VERSION)
+  override VERSION := $(patsubst $(SERVICE_KIND)-%,%,$(VERSION))
+  ifneq ($(_VERSION_WITH_PREFIX),$(VERSION))
+    $(call pdebug_print,Removed SERVICE_KIND prefix: $(_VERSION_WITH_PREFIX) → $(VERSION))
+  endif
 endif
 
+_ORIGINAL_TAGNAME := $(TAGNAME)
+
 ifeq ($(CURRENT_BRANCH),$(MAIN_BRANCH))
-    _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(_VERSION_FOR_TAG))
+    _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION))
 else
     SAFE_BRANCH := $(shell echo "$(CURRENT_BRANCH)" | sed 's/[^a-zA-Z0-9._-]/-/g; s/-+/-/g')
     # 브랜치에서는 version-branch-date-sha 형태
-    _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(_VERSION_FOR_TAG)-$(SAFE_BRANCH)-$(DATE)-$(CURRENT_COMMIT_SHORT))
+    _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION)-$(SAFE_BRANCH)-$(DATE)-$(CURRENT_COMMIT_SHORT))
 endif
 
 _SAFE_TAGNAME := $(shell echo '$(_SOURCE_FOR_SANITIZE)' | sed 's/[^a-zA-Z0-9_.-]/-/g')
