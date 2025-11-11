@@ -1,3 +1,4 @@
 .kiro/**
 logs/**
 .task_first_run.json
+.git-info.json

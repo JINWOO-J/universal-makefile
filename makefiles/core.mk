@@ -93,12 +93,19 @@ endif
 
 _ORIGINAL_TAGNAME := $(TAGNAME)
 
+# SERVICE_KIND가 있으면 VERSION에서 SERVICE_KIND- 접두사 제거 (중복 방지)
+ifneq ($(SERVICE_KIND),)
+    _VERSION_FOR_TAG := $(patsubst $(SERVICE_KIND)-%,%,$(VERSION))
+else
+    _VERSION_FOR_TAG := $(VERSION)
+endif
+
 ifeq ($(CURRENT_BRANCH),$(MAIN_BRANCH))
-    _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION))
+    _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(_VERSION_FOR_TAG))
 else
     SAFE_BRANCH := $(shell echo "$(CURRENT_BRANCH)" | sed 's/[^a-zA-Z0-9._-]/-/g; s/-+/-/g')
     # 브랜치에서는 version-branch-date-sha 형태
-    _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION)-$(SAFE_BRANCH)-$(DATE)-$(CURRENT_COMMIT_SHORT))
+    _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(_VERSION_FOR_TAG)-$(SAFE_BRANCH)-$(DATE)-$(CURRENT_COMMIT_SHORT))
 endif
 
 _SAFE_TAGNAME := $(shell echo '$(_SOURCE_FOR_SANITIZE)' | sed 's/[^a-zA-Z0-9_.-]/-/g')
@@ -364,7 +371,7 @@ endef
 
 
 # 명시적 대화식 모드 (install.sh 같은 대화식 스크립트용)
-define timed_interactive
+define timed_interactve
 	$(call timed_run,$(1),$(2),interactive)
 endef
 
