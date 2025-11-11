@@ -1,6 +1,6 @@
 
-📋 Universal Makefile System v1.0.203
-Project: universal-makefile vv1.0.203
+📋 Universal Makefile System v1.0.204
+Project: universal-makefile vv1.0.204
 Repository: jinwoo/universal-makefile
 Current Branch: develop
 Environment: development
@@ -39,8 +39,8 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
 
 🌿 Git Workflow:
   ensure-clean         Ensure clean working directory  [git-flow.mk]
-  git-status           Show comprehensive git status  [git-flow.mk]
-  git-branches         Show all branches with status  [git-flow.mk]
+  git-status           Show comprehensive git status (GIT_TARGET=project|source|system)  [git-flow.mk]
+  git-branches         Show all branches with status (GIT_TARGET=project|source|system)  [git-flow.mk]
   sync-remote-dry      Dry run: preview changes before sync-remote (REMOTE_BRANCH, LOCAL_BRANCH)  [git-flow.mk]
   sync-remote          Hard reset to remote branch (CONFIRM=1, REMOTE_BRANCH, LOCAL_BRANCH)  [git-flow.mk]
   sync-develop         Sync current branch to develop branch  [git-flow.mk]
@@ -146,6 +146,7 @@ Show Source:  Makefile project.mk makefiles/core.mk makefiles/colors.mk makefile
   bump-version         Bump version (patch by default)  [git-flow.mk]
   bump-minor           Bump minor version  [git-flow.mk]
   bump-major           Bump major version  [git-flow.mk]
+  save-git-info        Save git state to .git-info.json (GIT_TARGET=project|source|system)  [git-flow.mk]
 
 🧹 Cleanup & Utils:
   docker-clean         Clean Docker resources (containers, images, volumes)  [docker.mk]
