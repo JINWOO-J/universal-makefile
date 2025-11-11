@@ -5,6 +5,17 @@
 .PHONY: build push tag-latest bash docker-clean docker-info
 
 # ================================================================
+# Build Hooks
+# ================================================================
+
+# Internal hook: calls prepare-build if it exists in project Makefile
+_prepare-build-hook:
+	@if $(MAKE) -n prepare-build >/dev/null 2>&1; then \
+		echo "$(BLUE)🔧 Running prepare-build hook...$(RESET)"; \
+		$(MAKE) prepare-build; \
+	fi
+
+# ================================================================
 # 메인 Docker 타겟들
 # ================================================================
 
@@ -111,7 +122,7 @@ validate-dockerfile: ## 🔧 Validate Dockerfile exists and is readable
 		$(call print_color, $(BLUE),🔎 Using Dockerfile: $(DOCKERFILE_PATH)); \
 	fi
 
-build: validate-dockerfile check-docker make-build-args ensure-source _compute-build-tag ## 🎯 Build the Docker image
+build: validate-dockerfile check-docker make-build-args ensure-source _compute-build-tag _prepare-build-hook ## 🎯 Build the Docker image
 	@$(call print_color,$(BLUE),🔨 Building Docker image with tag: $(BUILD_TAG_COMPUTED))
 	@echo "$(BLUE)🔍 Cache Debug Info:$(RESET)"
 	@echo "  Environment: $(if $(CI),GitHub Actions,Local)"
