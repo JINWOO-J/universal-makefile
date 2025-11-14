@@ -32,6 +32,18 @@ GIT_INFO_DIR = $(strip \
   $(if $(filter system,$(GIT_TARGET)),$(MAKEFILE_DIR), \
   .)))
 
+# 하위 호환성: CLEAN → SYNC_MODE 자동 변환
+# CLEAN=true → SYNC_MODE=clone, CLEAN=false → SYNC_MODE=keep
+ifdef CLEAN
+  ifeq ($(CLEAN),true)
+    SYNC_MODE ?= clone
+  else
+    SYNC_MODE ?= keep
+  endif
+endif
+SYNC_MODE ?= reset  # 기본값: reset (remote 우선)
+FETCH_ALL ?= false  # 기본값: false
+
 .PHONY: git-status sync-develop start-release list-old-branches clean-old-branches
 .PHONY: bump-version create-release-branch push-release-branch finish-release auto-release push-release push-release-clean
 
@@ -87,12 +99,18 @@ git-fetch: ## 🔧 소스 코드 가져오기 (사용법: make git-fetch SOURCE_
 		echo ""; \
 		echo "$(YELLOW)사용법:$(RESET)"; \
 		echo "  make git-fetch SOURCE_REPO=owner/repo REF=main"; \
+		echo "  make git-fetch SOURCE_REPO=owner/repo REF=main SYNC_MODE=keep"; \
 		echo "  make git-fetch SOURCE_REPO=git@github.com:owner/repo.git REF=develop"; \
 		echo "  make git-fetch SOURCE_REPO=https://github.com/owner/repo REF=feature/test"; \
 		echo ""; \
 		echo "$(CYAN)환경 변수:$(RESET)"; \
-		echo "  GH_TOKEN - GitHub Personal Access Token (private repo용)"; \
-		echo "  CLEAN    - 기존 디렉토리 삭제 여부 (기본: true)"; \
+		echo "  GH_TOKEN   - GitHub Personal Access Token (private repo용)"; \
+		echo "  SYNC_MODE  - 동기화 모드 (기본: reset)"; \
+		echo "               clone = 기존 삭제 후 새로 clone"; \
+		echo "               reset = remote 강제 적용 (로컬 무시) 👈 일반적"; \
+		echo "               pull  = 로컬 변경사항 병합 시도"; \
+		echo "               keep  = fetch만, 로컬 유지 👈 급할 때"; \
+		echo "  FETCH_ALL  - 모든 remote 가져오기 (기본: false)"; \
 		exit 1; \
 	fi; \
 	if [ -z "$(REF)" ]; then \
@@ -104,7 +122,8 @@ git-fetch: ## 🔧 소스 코드 가져오기 (사용법: make git-fetch SOURCE_
 		"$(SOURCE_DIR)" \
 		"$(SOURCE_REPO)" \
 		"$(REF)" \
-		"$(CLEAN)"
+		"$(SYNC_MODE)" \
+		"$(FETCH_ALL)"
 
 
 scan-secrets: ## 🔒 Lightweight secret scan (regex) — no deps
