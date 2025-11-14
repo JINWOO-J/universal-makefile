@@ -93,13 +93,13 @@ ensure-source: ## 🔧 소스 코드 확인 및 자동 fetch (UMF_MODE=global일
 	elif [ "$(UMF_MODE)" = "global" ]; then \
 		if [ ! -d "$(SOURCE_DIR)" ] || [ ! -d "$(SOURCE_DIR)/.git" ]; then \
 			echo "$(YELLOW)📥 소스 코드가 없습니다. git-fetch 실행 중...$(NC)"; \
-			$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) CLEAN=$(CLEAN); \
+			$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) SYNC_MODE=$(SYNC_MODE) FETCH_ALL=$(FETCH_ALL); \
 		elif [ -n "$(REF)" ]; then \
 			CURRENT_REF=$$(cd $(SOURCE_DIR) && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""); \
 			TARGET_REF=$$(echo "$(REF)" | sed 's/.*\///'); \
 			if [ "$$CURRENT_REF" != "$$TARGET_REF" ]; then \
 				echo "$(YELLOW)🔄 REF가 변경되었습니다 ($$CURRENT_REF → $$TARGET_REF). git-fetch 실행 중...$(NC)"; \
-				$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) CLEAN=$(CLEAN); \
+				$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) SYNC_MODE=$(SYNC_MODE) FETCH_ALL=$(FETCH_ALL); \
 			else \
 				echo "$(GREEN)✓ 소스 코드가 최신 상태입니다 ($$CURRENT_REF)$(NC)"; \
 			fi; \
