@@ -94,17 +94,67 @@ ensure-source: ## 🔧 소스 코드 확인 및 자동 fetch (UMF_MODE=global일
 		if [ ! -d "$(SOURCE_DIR)" ] || [ ! -d "$(SOURCE_DIR)/.git" ]; then \
 			echo "$(YELLOW)📥 소스 코드가 없습니다. git-fetch 실행 중...$(NC)"; \
 			$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) SYNC_MODE=$(SYNC_MODE) FETCH_ALL=$(FETCH_ALL); \
-		elif [ -n "$(REF)" ]; then \
-			CURRENT_REF=$$(cd $(SOURCE_DIR) && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""); \
-			TARGET_REF=$$(echo "$(REF)" | sed 's/.*\///'); \
-			if [ "$$CURRENT_REF" != "$$TARGET_REF" ]; then \
-				echo "$(YELLOW)🔄 REF가 변경되었습니다 ($$CURRENT_REF → $$TARGET_REF). git-fetch 실행 중...$(NC)"; \
-				$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) SYNC_MODE=$(SYNC_MODE) FETCH_ALL=$(FETCH_ALL); \
-			else \
-				echo "$(GREEN)✓ 소스 코드가 최신 상태입니다 ($$CURRENT_REF)$(NC)"; \
-			fi; \
 		else \
-			echo "$(GREEN)✓ 소스 코드 존재 확인$(NC)"; \
+			cd $(SOURCE_DIR) && \
+			case "$(SYNC_MODE)" in \
+				clone) \
+					echo "$(YELLOW)🗑️  SYNC_MODE=clone: 강제 재다운로드$(NC)"; \
+					cd - > /dev/null; \
+					$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) SYNC_MODE=clone FETCH_ALL=$(FETCH_ALL); \
+					;; \
+				keep) \
+					echo "$(BLUE)🔍 SYNC_MODE=keep: 로컬 우선 모드$(NC)"; \
+					TARGET_REF="$(REF)"; \
+					CURRENT_HASH=$$(git rev-parse HEAD 2>/dev/null || echo ""); \
+					TARGET_HASH=$$(git rev-parse "$$TARGET_REF" 2>/dev/null || echo ""); \
+					if [ -z "$$CURRENT_HASH" ]; then \
+						echo "$(RED)❌ 현재 커밋을 확인할 수 없습니다$(NC)"; \
+						cd - > /dev/null; \
+						exit 1; \
+					fi; \
+					if [ -z "$$TARGET_HASH" ]; then \
+						echo "$(YELLOW)⚠️  로컬에 $$TARGET_REF가 없습니다. fetch 필요$(NC)"; \
+						cd - > /dev/null; \
+						$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) SYNC_MODE=keep FETCH_ALL=$(FETCH_ALL); \
+					elif [ "$$CURRENT_HASH" != "$$TARGET_HASH" ]; then \
+						CURRENT_SHORT=$$(echo "$$CURRENT_HASH" | cut -c1-7); \
+						TARGET_SHORT=$$(echo "$$TARGET_HASH" | cut -c1-7); \
+						echo "$(YELLOW)🔄 커밋 불일치: $$CURRENT_SHORT → $$TARGET_SHORT$(NC)"; \
+						cd - > /dev/null; \
+						$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) SYNC_MODE=keep FETCH_ALL=$(FETCH_ALL); \
+					else \
+						CURRENT_SHORT=$$(echo "$$CURRENT_HASH" | cut -c1-7); \
+						CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached"); \
+						echo "$(GREEN)✓ 로컬 소스 유지 (브랜치: $$CURRENT_BRANCH, 커밋: $$CURRENT_SHORT)$(NC)"; \
+						cd - > /dev/null; \
+						$(MAKE) --no-print-directory git-log GIT_TARGET=source COUNT=5 GRAPH=false; \
+					fi; \
+					;; \
+				reset|pull|*) \
+					echo "$(BLUE)🔄 SYNC_MODE=$(SYNC_MODE): remote 동기화 필요$(NC)"; \
+					git fetch origin --prune 2>/dev/null || true; \
+					TARGET_REF="$(REF)"; \
+					CURRENT_HASH=$$(git rev-parse HEAD 2>/dev/null || echo ""); \
+					REMOTE_HASH=$$(git rev-parse "origin/$$TARGET_REF" 2>/dev/null || git rev-parse "$$TARGET_REF" 2>/dev/null || echo ""); \
+					if [ -z "$$CURRENT_HASH" ] || [ -z "$$REMOTE_HASH" ]; then \
+						echo "$(YELLOW)⚠️  해시 확인 불가, fetch 실행$(NC)"; \
+						cd - > /dev/null; \
+						$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) SYNC_MODE=$(SYNC_MODE) FETCH_ALL=$(FETCH_ALL); \
+					elif [ "$$CURRENT_HASH" != "$$REMOTE_HASH" ]; then \
+						CURRENT_SHORT=$$(echo "$$CURRENT_HASH" | cut -c1-7); \
+						REMOTE_SHORT=$$(echo "$$REMOTE_HASH" | cut -c1-7); \
+						echo "$(YELLOW)🔄 remote 업데이트 감지: $$CURRENT_SHORT → $$REMOTE_SHORT$(NC)"; \
+						cd - > /dev/null; \
+						$(MAKE) git-fetch SOURCE_REPO=$(SOURCE_REPO) REF=$(REF) SYNC_MODE=$(SYNC_MODE) FETCH_ALL=$(FETCH_ALL); \
+					else \
+						CURRENT_SHORT=$$(echo "$$CURRENT_HASH" | cut -c1-7); \
+						CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached"); \
+						echo "$(GREEN)✓ 이미 최신 상태 (브랜치: $$CURRENT_BRANCH, 커밋: $$CURRENT_SHORT)$(NC)"; \
+						cd - > /dev/null; \
+						$(MAKE) --no-print-directory git-log GIT_TARGET=source COUNT=5 GRAPH=false; \
+					fi; \
+					;; \
+			esac; \
 		fi; \
 	else \
 		echo "$(GRAY)ℹ️  UMF_MODE=local, 소스 fetch 건너뜀$(NC)"; \
