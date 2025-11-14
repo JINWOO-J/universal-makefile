@@ -821,7 +821,7 @@ finish-hotfix: ## 🚀 Finish hotfix (merge to main and develop)
 	git branch -d $$CUR_BRANCH; \
 	$(call success, Hotfix '$$HOTFIX_NAME' completed)
 
-git-log:  ## 📜 Graph + oneline with date/author (GIT_TARGET=..., COUNT=N, LOG_DATE=...)
+git-log:  ## 📜 Graph + oneline with date/author (GIT_TARGET=..., COUNT=N, LOG_DATE=..., GRAPH=true)
 	@GDIR="$(GIT_INFO_DIR)"; \
 	if [ ! -d "$$GDIR/.git" ]; then \
 		echo "$(RED)Error: $$GDIR is not a git repository$(RESET)"; exit 1; \
@@ -830,18 +830,29 @@ git-log:  ## 📜 Graph + oneline with date/author (GIT_TARGET=..., COUNT=N, LOG
 	cd "$$GDIR"; \
 	COUNT_FROM_MAKE='$(COUNT)'; \
 	LOG_DATE_FROM_MAKE='$(LOG_DATE)'; \
+	GRAPH_FROM_MAKE='$(GRAPH)'; \
 	COUNT_OPT=$${COUNT_FROM_MAKE:-10}; \
 	LOG_DATE_OPT=$${LOG_DATE_FROM_MAKE:-short}; \
-	echo "$(BLUE)📜 Git Log (last $$COUNT_OPT commits, date=$$LOG_DATE_OPT):$(RESET)"; \
-	echo "$(YELLOW)Hint: make git-log GIT_TARGET=source COUNT=100 LOG_DATE=relative$(RESET)"; \
+	GRAPH_OPT=$${GRAPH_FROM_MAKE:-true}; \
+	if [ "$$GRAPH_OPT" = "true" ]; then \
+		echo "$(BLUE)📜 Git Log (last $$COUNT_OPT commits, date=$$LOG_DATE_OPT, graph)$(RESET)"; \
+	else \
+		echo "$(BLUE)📜 Git Log (last $$COUNT_OPT commits, date=$$LOG_DATE_OPT)$(RESET)"; \
+	fi; \
+	echo "$(YELLOW)Hint: make git-log GIT_TARGET=source COUNT=100 LOG_DATE=relative GRAPH=false$(RESET)"; \
 	if echo "$$LOG_DATE_OPT" | grep -q '^format:'; then \
 		DATE_ARG=$$(printf "%s" "$$LOG_DATE_OPT" | sed 's/^format://'); \
 		DATE_FLAG="--date=format:$$DATE_ARG"; \
 	else \
 		DATE_FLAG="--date=$$LOG_DATE_OPT"; \
 	fi; \
-	$(GIT_COMMAND) log --graph --decorate --color=always -n $$COUNT_OPT $$DATE_FLAG \
-	  --pretty=format:"$(YELLOW)%h$(RESET) $(GREEN)%ad$(RESET) $(BLUE)%an$(RESET) %C(auto)%d$(RESET) %s"
+	if [ "$$GRAPH_OPT" = "true" ]; then \
+		$(GIT_COMMAND) log --graph --decorate --color=always -n $$COUNT_OPT $$DATE_FLAG \
+		  --pretty=format:"$(YELLOW)%h$(RESET) $(GREEN)%ad$(RESET) $(BLUE)%an$(RESET) %C(auto)%d$(RESET) %s"; \
+	else \
+		$(GIT_COMMAND) log --decorate --color=always -n $$COUNT_OPT $$DATE_FLAG \
+		  --pretty=format:"$(YELLOW)%h$(RESET) $(GREEN)%ad$(RESET) $(BLUE)%an$(RESET) %C(auto)%d$(RESET) %s"; \
+	fi
 	  
 save-git-info: print-git-dir ## 🔧 Save git state to .git-info.json (GIT_TARGET=project|source|system)
 	@GDIR="$(GIT_INFO_DIR)"; \
