@@ -213,7 +213,12 @@ if [[ "$REF" == refs/pull/* ]]; then
     git branch -D "$BRANCH_NAME" 2>/dev/null || true
     git fetch origin "$REF:$BRANCH_NAME" && git checkout "$BRANCH_NAME"
 else
-    git checkout "$REF"
+    # 일반 브랜치: 원격 브랜치를 기준으로 로컬 브랜치 생성/업데이트
+    if [ "$FORCE_RESET" = "true" ]; then
+        git checkout -B "$REF" "origin/$REF" 2>/dev/null || git checkout "$REF"
+    else
+        git checkout "$REF"
+    fi
 fi || {
     echo -e "${RED}❌ 참조 체크아웃 실패${NC}"
     exit 1
@@ -224,9 +229,16 @@ if [ "$FORCE_RESET" = "true" ]; then
     echo ""
     echo -e "${YELLOW}⚠️  remote로 강제 리셋 중...${NC}"
     # PR의 경우 RESET_TARGET을 사용 (pr-XX 브랜치명)
-    git reset --hard "$RESET_TARGET" || {
-        echo -e "${YELLOW}⚠️  reset 실패 (브랜치가 remote에 없거나 detached 상태)${NC}"
-    }
+    # 일반 브랜치의 경우 origin/ 브랜치명 사용
+    if [[ "$REF" == refs/pull/* ]]; then
+        git reset --hard "$RESET_TARGET" || {
+            echo -e "${YELLOW}⚠️  reset 실패 (브랜치가 remote에 없거나 detached 상태)${NC}"
+        }
+    else
+        git reset --hard "origin/$REF" || {
+            echo -e "${YELLOW}⚠️  reset 실패 (브랜치가 remote에 없거나 detached 상태)${NC}"
+        }
+    fi
 fi
 
 # 완료 메시지
