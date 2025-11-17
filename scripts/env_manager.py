@@ -23,11 +23,12 @@ class EnvManager:
     def __init__(self, environment: str = "prod", project_root: str = None):
         self.environment = environment
         self.project_root = Path(project_root or os.getcwd())
-        
+
         # 파일 경로
         self.common_env = self.project_root / ".env.common"
         self.env_file = self.project_root / f".env.{environment}"
         self.local_env = self.project_root / ".env.local"
+        self.build_info = self.project_root / ".build-info"
         self.config_dir = self.project_root / "config" / environment
         
         # 필수 변수
@@ -106,21 +107,29 @@ class EnvManager:
     
     def load_all(self) -> Dict[str, str]:
         """모든 환경 변수 로드 (계층적)"""
-        
+
         result = {}
-        
+
         # 1. .env.common (기본)
         if self.common_env.exists():
             result.update(self._read_env_file(self.common_env))
-        
+
         # 2. .env.{environment} (환경별 오버라이드)
         if self.env_file.exists():
             result.update(self._read_env_file(self.env_file))
-        
+
         # 3. .env.local (로컬 오버라이드)
         if self.local_env.exists():
             result.update(self._read_env_file(self.local_env))
-        
+
+        # 4. .build-info (최우선 - 로컬 빌드 이미지)
+        # IGNORE_BUILD_INFO 환경 변수가 설정되어 있으면 .build-info를 무시
+        ignore_build_info = os.environ.get("IGNORE_BUILD_INFO", "").lower() in ("1", "true", "yes")
+        if not ignore_build_info and self.build_info.exists():
+            build_image = self._read_build_info()
+            if build_image:
+                result["DEPLOY_IMAGE"] = build_image
+
         return result
     
     def validate(self) -> bool:
@@ -157,20 +166,27 @@ class EnvManager:
     
     def export(self, include_warning: bool = True) -> str:
         """docker-compose용 환경 변수 export"""
-        
+
         env_data = self.load_all()
         lines = []
-        
+
         if include_warning:
             lines.append("# ⚠️  이 파일은 자동 생성됩니다. 직접 수정하지 마세요!")
             lines.append(f"# 환경: {self.environment}")
             lines.append(f"# 생성 시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            lines.append(f"# 로드 순서: .env.common → .env.{self.environment} → .env.local")
+
+            # .build-info가 있으면 표시 (IGNORE_BUILD_INFO가 설정되지 않은 경우만)
+            load_order = f".env.common → .env.{self.environment} → .env.local"
+            ignore_build_info = os.environ.get("IGNORE_BUILD_INFO", "").lower() in ("1", "true", "yes")
+            if not ignore_build_info and self.build_info.exists():
+                load_order += " → .build-info (DEPLOY_IMAGE 오버라이드)"
+
+            lines.append(f"# 로드 순서: {load_order}")
             lines.append("")
-        
+
         for key, value in sorted(env_data.items()):
             lines.append(f"{key}={value}")
-        
+
         return "\n".join(lines)
     
     def export_with_sources(self, format: str = "json", show_override: bool = False) -> str:
@@ -339,19 +355,35 @@ class EnvManager:
     
     def _write_env_file(self, path: Path, data: Dict[str, str], header: str = None) -> None:
         """env 파일 쓰기 (멱등)"""
-        
+
         lines = []
-        
+
         if header:
             lines.append(header)
             lines.append(f"# 마지막 업데이트: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             lines.append("")
-        
+
         for key, value in sorted(data.items()):
             lines.append(f"{key}={value}")
-        
+
         with open(path, 'w', encoding='utf-8') as f:
             f.write("\n".join(lines) + "\n")
+
+    def _read_build_info(self) -> Optional[str]:
+        """빌드 정보 파일 읽기 (.build-info에서 이미지 이름 추출)"""
+
+        if not self.build_info.exists():
+            return None
+
+        try:
+            with open(self.build_info, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content:
+                    return content
+        except Exception as e:
+            print(f"⚠️  .build-info 읽기 실패: {e}", file=sys.stderr)
+
+        return None
     
     def _git_commit(self, message: str) -> None:
         """Git 커밋"""
