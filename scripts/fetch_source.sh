@@ -188,23 +188,27 @@ echo ""
 echo -e "${BLUE}[INFO]${NC} 참조 체크아웃: $REF"
 cd "$SOURCE_DIR"
 
+# PR 브랜치 이름을 저장할 변수
+RESET_TARGET="$REF"
+
 if [[ "$REF" == refs/pull/* ]]; then
     echo -e "${BLUE}[INFO]${NC} PR 참조 감지, fetch 실행: $REF"
-    
+
     # PR 번호 추출 (refs/pull/17/head -> pr-17)
     PR_NUMBER=$(echo "$REF" | sed -n 's|refs/pull/\([0-9]*\)/.*|\1|p')
     BRANCH_NAME="pr-${PR_NUMBER}"
-    
+    RESET_TARGET="$BRANCH_NAME"
+
     echo "  PR 번호: $PR_NUMBER"
     echo "  브랜치 이름: $BRANCH_NAME"
-    
+
     # 해당 브랜치가 이미 체크아웃되어 있으면 임시로 detached HEAD로 이동
     CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
     if [ "$CURRENT_BRANCH" = "$BRANCH_NAME" ]; then
         echo "  현재 $BRANCH_NAME에 있음, 임시로 HEAD로 이동..."
         git checkout --detach HEAD
     fi
-    
+
     # 기존 브랜치 삭제 후 다시 생성 (강제 업데이트)
     git branch -D "$BRANCH_NAME" 2>/dev/null || true
     git fetch origin "$REF:$BRANCH_NAME" && git checkout "$BRANCH_NAME"
@@ -219,7 +223,8 @@ fi || {
 if [ "$FORCE_RESET" = "true" ]; then
     echo ""
     echo -e "${YELLOW}⚠️  remote로 강제 리셋 중...${NC}"
-    git reset --hard "origin/$REF" 2>/dev/null || git reset --hard "$REF" || {
+    # PR의 경우 RESET_TARGET을 사용 (pr-XX 브랜치명)
+    git reset --hard "$RESET_TARGET" || {
         echo -e "${YELLOW}⚠️  reset 실패 (브랜치가 remote에 없거나 detached 상태)${NC}"
     }
 fi
