@@ -31,10 +31,10 @@ ifeq (,$(wildcard .env.runtime))
     $(info [INFO] .env.runtime 파일이 없어서 빈 파일로 생성했습니다)
 endif
 
-prepare-env: ## 🔧 .env 파일 준비 (docker-compose용, 빌드 후 자동 감지)
-	@echo "$(BLUE)📝 .env 파일 생성 중...$(NC)"
+prepare-env: ## 🔧 .env.resolved 파일 준비 (docker-compose용, 빌드 후 자동 감지)
+	@echo "$(BLUE)📝 .env.resolved 파일 생성 중...$(NC)"
 	@echo ""
-	@$(ENV_MANAGER) export --environment $(ENVIRONMENT) > .env
+	@$(ENV_MANAGER) export --environment $(ENVIRONMENT) > .env.resolved  
 	@# 빌드된 이미지가 있으면 DEPLOY_IMAGE만 오버라이드
 	@if [ -f .build-info ]; then \
 		BUILD_IMAGE=$$(cat .build-info); \
@@ -42,15 +42,15 @@ prepare-env: ## 🔧 .env 파일 준비 (docker-compose용, 빌드 후 자동 �
 		TMP=$$(mktemp .env.XXXXXX); \
 		awk -v img="$$BUILD_IMAGE" '\
 			/^DEPLOY_IMAGE=/ { print "DEPLOY_IMAGE=" img; next } \
-			{ print }' .env > "$$TMP"; \
+			{ print }' .env.resolved   > "$$TMP"; \
 		if ! grep -q '^DEPLOY_IMAGE=' "$$TMP"; then \
 			echo "DEPLOY_IMAGE=$$BUILD_IMAGE" >> "$$TMP"; \
 		fi; \
-		mv "$$TMP" .env; \
+		mv "$$TMP" .env.resolved  ; \
 	fi
 	@echo "$(YELLOW)배포 환경:$(NC)"
 	@echo "  ENVIRONMENT     : $(ENVIRONMENT)"
-	@DEPLOY_IMG=$$(grep '^DEPLOY_IMAGE=' .env 2>/dev/null | cut -d= -f2); \
+	@DEPLOY_IMG=$$(grep '^DEPLOY_IMAGE=' .env.resolved 2>/dev/null | cut -d= -f2); \
 	if [ -n "$$DEPLOY_IMG" ]; then \
 		echo "  DEPLOY_IMAGE    : $$DEPLOY_IMG"; \
 		if [ -f .build-info ]; then \
@@ -74,13 +74,13 @@ prepare-env: ## 🔧 .env 파일 준비 (docker-compose용, 빌드 후 자동 �
 		echo "  CURRENT_COMMIT  : $(CURRENT_COMMIT_SHORT)"; \
 	fi
 	@echo ""
-	@echo "$(GREEN)✓ .env 파일 생성 완료 (Environment: $(ENVIRONMENT))$(NC)"
+	@echo "$(GREEN)✓ .env.resolved 파일 생성 완료 (Environment: $(ENVIRONMENT))$(NC)"
 	@if [ ! -f .build-info ]; then \
 		echo "$(GRAY)💡 Tip: 'make build' 후에는 빌드된 이미지가 자동으로 사용됩니다$(NC)"; \
 		echo "$(GRAY)💡 Tip: 'make reset-build' 로 .env.$(ENVIRONMENT) 기준으로 리셋할 수 있습니다$(NC)"; \
 	fi
 
-# prepare-runtime-env: ## .env + DEPLOY_IMAGE 생성 (docker-compose/로컬 실행용)
+# prepare-runtime-env: ## .env.resolved + DEPLOY_IMAGE 생성 (docker-compose/로컬 실행용)
 # 	@$(ENV_MANAGER) export --environment "$(ENVIRONMENT)" > .env
 # 	@{ \
 # 	  if [ -d "$(SOURCE_DIR)" ] && cd "$(SOURCE_DIR)" >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then \
@@ -100,9 +100,9 @@ prepare-env: ## 🔧 .env 파일 준비 (docker-compose용, 빌드 후 자동 �
 # 	@echo "$(GREEN)✓ .env 파일 생성 완료 (Environment: $(ENVIRONMENT), DEPLOY_IMAGE 포함)$(NC)"
 
 prepare-runtime-env: ## 🔧 .env + DEPLOY_IMAGE 생성 (docker-compose/로컬 실행용)
-	@echo "$(BLUE)📝 .env 파일 생성 중 (DEPLOY_IMAGE 자동 계산)...$(NC)"
+	@echo "$(BLUE)📝 .env.resolved 파일 생성 중 (DEPLOY_IMAGE 자동 계산)...$(NC)"
 	@echo ""
-	@$(ENV_MANAGER) export --environment "$(ENVIRONMENT)" > .env
+	@$(ENV_MANAGER) export --environment "$(ENVIRONMENT)" > .env.resolved
 	@{ \
 	  if [ -d "$(SOURCE_DIR)" ] && cd "$(SOURCE_DIR)" >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then \
 	    $(compute_build_vars); \
@@ -114,13 +114,13 @@ prepare-runtime-env: ## 🔧 .env + DEPLOY_IMAGE 생성 (docker-compose/로컬 �
 	    TMP=$$(mktemp .env.XXXXXX); \
 	    awk -v img="$$IMAGE_TAG" '\
 	      $$0 !~ /^DEPLOY_IMAGE=/ { print $$0 } \
-	      END { print "DEPLOY_IMAGE=" img }' .env > "$$TMP"; \
-	    mv "$$TMP" .env; \
+	      END { print "DEPLOY_IMAGE=" img }' .env.resolved > "$$TMP"; \
+	    mv "$$TMP" .env.resolved ; \
 	  else \
 	    echo "$(YELLOW)[WARNING]$(NC) SOURCE_DIR or git not ready; skipping DEPLOY_IMAGE calculation"; \
 	  fi; \
 	}
-	@echo "$(GREEN)✓ .env 파일 생성 완료 (Environment: $(ENVIRONMENT), DEPLOY_IMAGE 포함)$(NC)"
+	@echo "$(GREEN)✓ .env.resolved 파일 생성 완료 (Environment: $(ENVIRONMENT), DEPLOY_IMAGE 포함)$(NC)"
 
 
 # env: ## .env.runtime 생성 (SSM + 공개 구성 병합)

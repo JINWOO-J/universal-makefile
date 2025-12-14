@@ -155,7 +155,7 @@ reclone: ## 🧹 Reset to remote state (discard local changes, re-fetch source)
 	@echo "$(RED)⚠️  WARNING: This will reset your deployment to remote state$(RESET)"
 	@echo "$(YELLOW)This will:$(RESET)"
 	@echo "  - Remove .build-info (빌드 정보 초기화)"
-	@echo "  - Remove .env (환경 변수 초기화)"
+	@echo "  - Remove .env.resolved (환경 변수 초기화)"
 	@echo "  - Clean source directory (소스 코드 재다운로드)"
 	@echo "  - Stop all containers (실행 중인 컨테이너 중지)"
 	@echo ""
@@ -178,8 +178,8 @@ reclone: ## 🧹 Reset to remote state (discard local changes, re-fetch source)
 	@echo ""
 	@# 3. 환경 파일 제거
 	@echo "$(BLUE)3/5 Removing generated env files...$(RESET)"
-	@rm -f .env .env.runtime
-	@echo "$(GREEN)✓ .env files removed$(RESET)"
+	@rm -f .env.resolved .env.runtime
+	@echo "$(GREEN)✓ .env.resolved files removed$(RESET)"
 	@echo ""
 	@# 4. 소스 디렉토리 정리
 	@if [ "$(UMF_MODE)" = "global" ] && [ -d "$(SOURCE_DIR)" ]; then \
