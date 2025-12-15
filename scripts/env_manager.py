@@ -20,14 +20,16 @@ from typing import Dict, Optional
 class EnvManager:
     """환경 변수 통합 관리자"""
     
-    def __init__(self, environment: str = "prod", project_root: str = None):
+    def __init__(self, environment: str = "prod", project_root: str = None, use_consul: bool = False):
         self.environment = environment
         self.project_root = Path(project_root or os.getcwd())
+        self.use_consul = use_consul
 
         # 파일 경로
         self.common_env = self.project_root / ".env.common"
         self.env_file = self.project_root / f".env.{environment}"
         self.local_env = self.project_root / ".env.local"
+        self.consul_env = self.project_root / ".env.runtime"  # Consul 환경 변수 파일
         self.build_info = self.project_root / ".build-info"
         self.config_dir = self.project_root / "config" / environment
         
@@ -118,11 +120,15 @@ class EnvManager:
         if self.env_file.exists():
             result.update(self._read_env_file(self.env_file))
 
-        # 3. .env.local (로컬 오버라이드)
+        # 3. Consul 환경 변수 (USE_CONSUL=true일 때)
+        if self.use_consul and self.consul_env.exists():
+            result.update(self._read_env_file(self.consul_env))
+
+        # 4. .env.local (로컬 오버라이드)
         if self.local_env.exists():
             result.update(self._read_env_file(self.local_env))
 
-        # 4. .build-info (최우선 - 로컬 빌드 이미지)
+        # 5. .build-info (최우선 - 로컬 빌드 이미지)
         # IGNORE_BUILD_INFO 환경 변수가 설정되어 있으면 .build-info를 무시
         ignore_build_info = os.environ.get("IGNORE_BUILD_INFO", "").lower() in ("1", "true", "yes")
         if not ignore_build_info and self.build_info.exists():
@@ -200,6 +206,7 @@ class EnvManager:
         # 각 파일별로 로드
         common_data = {}
         env_data = {}
+        consul_data = {}
         local_data = {}
         
         if self.common_env.exists():
@@ -208,6 +215,9 @@ class EnvManager:
         if self.env_file.exists():
             env_data = self._read_env_file(self.env_file)
         
+        if self.use_consul and self.consul_env.exists():
+            consul_data = self._read_env_file(self.consul_env)
+        
         if self.local_env.exists():
             local_data = self._read_env_file(self.local_env)
         
@@ -215,6 +225,7 @@ class EnvManager:
         all_keys = set()
         all_keys.update(common_data.keys())
         all_keys.update(env_data.keys())
+        all_keys.update(consul_data.keys())
         all_keys.update(local_data.keys())
         
         result = []
@@ -222,7 +233,7 @@ class EnvManager:
             sources = []
             final_value = None
             
-            # 각 소스에서 값 확인
+            # 각 소스에서 값 확인 (우선순위 순서)
             if key in common_data:
                 sources.append(("common", common_data[key]))
                 final_value = common_data[key]
@@ -230,6 +241,10 @@ class EnvManager:
             if key in env_data:
                 sources.append((self.environment, env_data[key]))
                 final_value = env_data[key]
+            
+            if key in consul_data:
+                sources.append(("Consul", consul_data[key]))
+                final_value = consul_data[key]
             
             if key in local_data:
                 sources.append(("local", local_data[key]))
@@ -296,7 +311,11 @@ class EnvManager:
             
             if show_override and overridden:
                 # 상세 오버라이드 정보 표시
-                lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {RED}[Override]{NC}")
+                final_source = sources[-1][0] if sources else "unknown"
+                if final_source == "Consul":
+                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {BLUE}[Consul]{NC}")
+                else:
+                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {RED}[Override]{NC}")
                 for i, (source_name, source_value) in enumerate(sources):
                     is_last = i == len(sources) - 1
                     is_final = source_value == value
@@ -307,11 +326,19 @@ class EnvManager:
                 # 간단한 오버라이드 표시 (최종 소스만)
                 final_source = sources[-1][0] if sources else "unknown"
                 source_list = " → ".join([s[0] for s in sources])
-                lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {YELLOW}[{source_list}]{NC}")
+                # Consul Override인 경우 색상 변경
+                if final_source == "Consul":
+                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {BLUE}[{final_source}]{NC}")
+                else:
+                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {YELLOW}[{source_list}]{NC}")
             else:
                 # 단일 소스
                 source_name = sources[0][0] if sources else "unknown"
-                lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {GRAY}[{source_name}]{NC}")
+                # Consul Override인 경우 색상 변경
+                if source_name == "Consul":
+                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {BLUE}[{source_name}]{NC}")
+                else:
+                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {GRAY}[{source_name}]{NC}")
         
         return "\n".join(lines)
     
@@ -427,12 +454,13 @@ def main():
     parser.add_argument("--no-warning", action="store_true", help="export 시 경고 메시지 제외")
     parser.add_argument("--format", choices=["json", "table", "colored"], default="json", help="export-sources 출력 형식")
     parser.add_argument("--show-override", action="store_true", help="오버라이드 정보 표시")
+    parser.add_argument("--use-consul", action="store_true", help="Consul 환경 변수 사용")
     parser.add_argument("key", nargs="?", help="환경 변수 키")
     parser.add_argument("value", nargs="?", help="환경 변수 값")
     
     args = parser.parse_args()
     
-    manager = EnvManager(environment=args.environment)
+    manager = EnvManager(environment=args.environment, use_consul=args.use_consul)
     
     try:
         if args.command == "update":
