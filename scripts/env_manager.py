@@ -12,6 +12,7 @@ import sys
 import json
 import argparse
 import subprocess
+import shlex
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -29,7 +30,8 @@ class EnvManager:
         self.common_env = self.project_root / ".env.common"
         self.env_file = self.project_root / f".env.{environment}"
         self.local_env = self.project_root / ".env.local"
-        self.consul_env = self.project_root / ".env.runtime"  # Consul 환경 변수 파일
+        consul_env_file = os.environ.get("CONSUL_ENV_FILE", ".env.runtime")
+        self.consul_env = self.project_root / consul_env_file  # Consul 환경 변수 파일
         self.build_info = self.project_root / ".build-info"
         self.config_dir = self.project_root / "config" / environment
         
@@ -121,8 +123,14 @@ class EnvManager:
             result.update(self._read_env_file(self.env_file))
 
         # 3. Consul 환경 변수 (USE_CONSUL=true일 때)
-        if self.use_consul and self.consul_env.exists():
-            result.update(self._read_env_file(self.consul_env))
+        # - read-only 정책 준수: 캐시 파일을 "쓰기"로 갱신하지 않고, 가능하면 라이브로 조회
+        # - 라이브 조회 실패 시에만 캐시 파일로 fallback
+        if self.use_consul:
+            consul_live = self._load_consul_live()
+            if consul_live:
+                result.update(consul_live)
+            elif self.consul_env.exists():
+                result.update(self._read_env_file(self.consul_env))
 
         # 4. .env.local (로컬 오버라이드)
         if self.local_env.exists():
@@ -215,8 +223,10 @@ class EnvManager:
         if self.env_file.exists():
             env_data = self._read_env_file(self.env_file)
         
-        if self.use_consul and self.consul_env.exists():
-            consul_data = self._read_env_file(self.consul_env)
+        if self.use_consul:
+            consul_data = self._load_consul_live()
+            if not consul_data and self.consul_env.exists():
+                consul_data = self._read_env_file(self.consul_env)
         
         if self.local_env.exists():
             local_data = self._read_env_file(self.local_env)
@@ -379,6 +389,71 @@ class EnvManager:
                     result[key.strip()] = value.strip()
         
         return result
+
+    def _parse_env_text(self, text: str) -> Dict[str, str]:
+        """env 텍스트(KEY=VALUE) 파싱 (파일 쓰기 없이 사용)"""
+
+        result: Dict[str, str] = {}
+        for raw in (text or "").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
+            if "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+
+            # strip surrounding quotes
+            if len(value) >= 2 and ((value[0] == value[-1] == '"') or (value[0] == value[-1] == "'")):
+                value = value[1:-1]
+
+            if key:
+                result[key] = value
+
+        return result
+
+    def _load_consul_live(self) -> Dict[str, str]:
+        """Consul 값을 라이브로 조회해 env dict로 반환 (read-only). 실패 시 {}."""
+
+        consul_app = os.environ.get("CONSUL_APP", "").strip()
+        consul_prefix = os.environ.get("CONSUL_PREFIX", "").strip()
+
+        if not consul_app and not consul_prefix:
+            return {}
+
+        # consul client 커맨드 결정: CONSUL_CLIENT(예: "python3 scripts/consul_web.py") 우선, 없으면 같은 디렉토리의 consul_web.py
+        consul_client_raw = os.environ.get("CONSUL_CLIENT", "").strip()
+        if consul_client_raw:
+            consul_cmd = shlex.split(consul_client_raw)
+        else:
+            consul_cmd = [sys.executable, str(Path(__file__).resolve().parent / "consul_web.py")]
+
+        # 라이브 export (stdout) - 기본 decrypt 활성화(= --no-decrypt 미사용)
+        # NOTE: consul_web.py는 전역 옵션을 먼저 모으는 커스텀 파서가 있어서
+        # "export" 서브커맨드를 첫 토큰으로 주는 게 안전함(예: "--quiet export ..." 형태는 깨질 수 있음)
+        global_args: list[str] = []
+        if consul_app:
+            global_args += ["--app", consul_app, "--env", self.environment]
+        else:
+            global_args += ["--prefix", consul_prefix]
+
+        export_args = ["export", "--format", "env", "--output", "-", "--quiet"]
+
+        try:
+            proc = subprocess.run(
+                consul_cmd + global_args + export_args,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except Exception:
+            return {}
+
+        return self._parse_env_text(proc.stdout)
     
     def _write_env_file(self, path: Path, data: Dict[str, str], header: str = None) -> None:
         """env 파일 쓰기 (멱등)"""

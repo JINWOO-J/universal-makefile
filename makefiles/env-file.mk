@@ -4,12 +4,16 @@ ENV_MANAGER := python3 $(SCRIPTS_DIR)/env_manager.py
 ENVIRONMENT ?= $(ENV)
 SHOW_OVERRIDE := true
 CONSUL_ENV_FILE ?= .env.runtime
+export CONSUL_ENV_FILE
 USE_CONSUL ?= false
 CONSUL_CLIENT ?= python3 $(SCRIPTS_DIR)/consul_web.py
 CONSUL_API_URL ?= http://localhost:8000
 CONSUL_API_KEY ?= 
 CONSUL_APP ?= 
 CONSUL_PREFIX ?= 
+
+# Consul 클라이언트/설정 값을 하위 프로세스(파이썬 스크립트)에서 동일하게 사용하도록 export
+export CONSUL_CLIENT CONSUL_API_URL CONSUL_API_KEY CONSUL_APP CONSUL_PREFIX
 
 
 # 중복 로드 방지 가드
@@ -27,18 +31,13 @@ ifneq (,$(wildcard .env.local))
     export
     $(info [INFO] .env.local 파일 로드됨 (오버라이드))
 else
-    $(shell touch .env.local)
-    $(info [INFO] .env.local 파일이 없어서 빈 파일로 생성했습니다)
+    $(info [INFO] .env.local 파일이 없습니다. (자동 생성하지 않음: read-only 정책))
 endif
 
 endif # ENV_FILE_LOADED
 
-# .env.runtime 파일 확인 및 생성
-ifeq (,$(wildcard .env.runtime))
-    $(shell touch .env.runtime)
-    $(info [INFO] .env.runtime 파일이 없어서 빈 파일로 생성했습니다)
-endif
 
+env: prepare-env
 prepare-env: ## 🔧 .env.resolved 파일 준비 (docker-compose용, Consul+로컬 환경 병합)
 	@echo "$(BLUE)📝 .env.resolved 파일 생성 중...$(NC)"
 	@echo ""
@@ -398,11 +397,11 @@ env-list: ## 🔧 환경 변수 목록 조회 (Consul+로컬 통합, FILTER=키�
 		echo "$(CYAN)📁 모드: 로컬 환경 변수만$(NC)"; \
 	fi
 	@echo ""
-	@if [ "$(USE_CONSUL)" = "true" ]; then \
-		if [ ! -f "$(CONSUL_ENV_FILE)" ]; then \
-			echo "$(YELLOW)[INFO]$(NC) Consul 환경 변수 파일이 없습니다. 먼저 가져오는 중..."; \
-			$(MAKE) --no-print-directory prepare-consul-env >/dev/null 2>&1 || true; \
-		fi; \
+	@if [ "$(USE_CONSUL)" = "true" ] && [ ! -s "$(CONSUL_ENV_FILE)" ]; then \
+		echo "$(YELLOW)[WARN]$(NC) Consul 캐시 파일이 없거나 비어있습니다: $(CONSUL_ENV_FILE)"; \
+		echo "$(GRAY)💡 env-list는 read-only라 자동 갱신하지 않습니다.$(NC)"; \
+		echo "$(GRAY)💡 최신 값을 반영하려면 먼저 실행: make prepare-consul-env$(NC)"; \
+		echo ""; \
 	fi
 	@CONSUL_FLAG=""; \
 	if [ "$(USE_CONSUL)" = "true" ]; then \

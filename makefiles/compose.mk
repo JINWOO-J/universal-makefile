@@ -40,11 +40,22 @@ define compose_cmd
   $(COMPOSE_CLI) -f $(if $(wildcard $(ACTIVE_COMPOSE_FILE)),$(ACTIVE_COMPOSE_FILE),$(COMPOSE_FILE)) $(1)
 endef
 
+PREPARE_TARGET := prepare-env
+
+ifneq ($(filter true 1,$(NO_ENV_UPDATE)),)
+    PREPARE_TARGET := notify-skip-env
+endif
+
+.PHONY: notify-skip-env
+notify-skip-env:
+    @echo "[INFO] ⏭️  NO_ENV_UPDATE=$(NO_ENV_UPDATE) 감지: 환경변수 갱신을 건너뜁니다."
+
+
 # ================================================================
 # 환경별 타겟들
 # ================================================================
 
-deploy: prepare-env ## 🚀 배포 실행 (환경 준비 후 서비스 시작)
+deploy: $(PREPARE_TARGET) ## 🚀 배포 실행 (환경 준비 후 서비스 시작)
 	@$(call colorecho, 🚀 $(ENVIRONMENT) 환경으로 배포 시작...)
 	@echo "📋 배포 정보:"
 	@python3 $(MAKEFILE_DIR)/scripts/env_manager.py status --environment $(ENVIRONMENT) 2>/dev/null || echo "  배포 정보 없음"
@@ -76,7 +87,7 @@ deploy-zero-downtime: ## 🚀 무중단 배포 (단일 컨테이너)
 	@echo "✅ 무중단 배포 완료"
 
 
-up: prepare-env ## 🚀 Start services (자동으로 .env 갱신 체크)	
+up: $(PREPARE_TARGET) ## 🚀 Start services (자동으로 .env 갱신 체크)	
 	@$(call colorecho, 🚀 Starting services for [$(ENVIRONMENT)] environment using [$(COMPOSE_FILE_TO_USE)]...)
 	@$(call timed_command, Starting $(COMPOSE_FILE_TO_USE), \
 		$(COMPOSE_COMMAND) up -d)
