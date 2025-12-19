@@ -262,21 +262,24 @@ prepare-consul-runtime-env: ## 🔧 Consul + 로컬 환경 변수 병합하여 .
 	@echo "$(CYAN)🔄 환경 변수 병합 중...$(NC)"
 	@{ \
 	  TMP=$$(mktemp .env.XXXXXX); \
-	  echo "# Consul 환경 변수 ($(ENVIRONMENT))" > "$$TMP"; \
-	  echo "# 생성 시간: $$(date)" >> "$$TMP"; \
-	  echo "" >> "$$TMP"; \
-	  if [ -f "$(CONSUL_ENV_FILE)" ]; then \
-	    cat "$(CONSUL_ENV_FILE)" >> "$$TMP"; \
-	    echo "" >> "$$TMP"; \
-	  fi; \
-	  echo "# 로컬 환경 변수 오버라이드" >> "$$TMP"; \
-	  $(ENV_MANAGER) export --environment "$(ENVIRONMENT)" --use-consul >> "$$TMP"; \
+	  : "NOTE: env_manager export(--use-consul)는 Consul + 로컬(.env.common/.env.{env}/.env.local/.build-info)까지 이미 병합된 최종 값만 출력함"; \
+	  : "NOTE: 여기서 Consul 캐시 파일을 cat으로 먼저 붙이면 동일 키가 중복되므로 금지"; \
+	  $(ENV_MANAGER) export --environment "$(ENVIRONMENT)" --use-consul > "$$TMP"; \
 	  if [ -d "$(SOURCE_DIR)" ] && cd "$(SOURCE_DIR)" >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then \
 	    $(compute_build_vars); \
 	    cd - >/dev/null 2>&1 || true; \
-	    printf "\n# 빌드 정보\n" >> "$$TMP"; \
-	    printf "IMAGE_TAG=%s\n" "$$IMAGE_TAG" >> "$$TMP"; \
-	    printf "DEPLOY_IMAGE=%s\n" "$$IMAGE_TAG" >> "$$TMP"; \
+	    TMP2=$$(mktemp .env.XXXXXX); \
+	    awk -v img="$$IMAGE_TAG" '\
+	      $$0 ~ /^IMAGE_TAG=/ { next } \
+	      $$0 ~ /^DEPLOY_IMAGE=/ { next } \
+	      { print $$0 } \
+	      END { \
+	        print ""; \
+	        print "# 빌드 정보"; \
+	        print "IMAGE_TAG=" img; \
+	        print "DEPLOY_IMAGE=" img; \
+	      }' "$$TMP" > "$$TMP2"; \
+	    mv "$$TMP2" "$$TMP"; \
 	    printf "$(YELLOW)계산된 이미지 태그:$(NC)\n"; \
 	    printf "  IMAGE_TAG       : %s\n" "$$IMAGE_TAG"; \
 	    printf "  DEPLOY_IMAGE    : %s\n" "$$IMAGE_TAG"; \
