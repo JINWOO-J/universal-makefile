@@ -216,6 +216,7 @@ class EnvManager:
         env_data = {}
         consul_data = {}
         local_data = {}
+        build_data = {}
         
         if self.common_env.exists():
             common_data = self._read_env_file(self.common_env)
@@ -230,6 +231,13 @@ class EnvManager:
         
         if self.local_env.exists():
             local_data = self._read_env_file(self.local_env)
+
+        # build-info (DEPLOY_IMAGE 최우선) - load_all과 동일한 규칙 유지
+        ignore_build_info = os.environ.get("IGNORE_BUILD_INFO", "").lower() in ("1", "true", "yes")
+        if not ignore_build_info and self.build_info.exists():
+            build_image = self._read_build_info()
+            if build_image:
+                build_data["DEPLOY_IMAGE"] = build_image
         
         # 모든 키 수집
         all_keys = set()
@@ -237,35 +245,55 @@ class EnvManager:
         all_keys.update(env_data.keys())
         all_keys.update(consul_data.keys())
         all_keys.update(local_data.keys())
+        all_keys.update(build_data.keys())
         
         result = []
         for key in sorted(all_keys):
             sources = []
             final_value = None
+            final_source = "unknown"
             
             # 각 소스에서 값 확인 (우선순위 순서)
             if key in common_data:
                 sources.append(("common", common_data[key]))
                 final_value = common_data[key]
+                final_source = "common"
             
             if key in env_data:
                 sources.append((self.environment, env_data[key]))
                 final_value = env_data[key]
+                final_source = self.environment
             
             if key in consul_data:
                 sources.append(("Consul", consul_data[key]))
                 final_value = consul_data[key]
+                final_source = "Consul"
             
             if key in local_data:
                 sources.append(("local", local_data[key]))
                 final_value = local_data[key]
+                final_source = "local"
+
+            if key in build_data:
+                sources.append(("build", build_data[key]))
+                final_value = build_data[key]
+                final_source = "build"
+
+            # 상태 판정
+            # - conflict: 서로 다른 값이 2개 이상 존재 (실제 override)
+            # - dup: 여러 소스지만 값은 동일 (중복 정의)
+            distinct_values = {v for _, v in sources if v is not None}
+            is_conflict = len(distinct_values) > 1
+            is_dup = (len(sources) > 1) and (len(distinct_values) == 1)
             
             # 결과 생성
             result.append({
                 "key": key,
                 "value": final_value,
                 "sources": sources,
-                "overridden": len(sources) > 1
+                "final_source": final_source,
+                "is_conflict": is_conflict,
+                "is_dup": is_dup,
             })
         
         # 포맷에 따라 출력
@@ -285,19 +313,26 @@ class EnvManager:
         for item in data:
             key = item["key"]
             value = item["value"]
-            overridden = item["overridden"]
+            final_source = (item.get("final_source") or "unknown")
+            is_conflict = bool(item.get("is_conflict"))
+            is_dup = bool(item.get("is_dup"))
+            sources = item.get("sources") or []
             
-            if show_override and overridden:
-                # 오버라이드된 경우 소스 정보 표시
-                lines.append(f"{key}|{value}|OVERRIDE")
-                for source_name, source_value in item["sources"]:
-                    is_final = source_value == value
-                    marker = "✓" if is_final else " "
+            # 태그(항상 최종 소스 1개 + 필요 시 상태)
+            tags = [final_source]
+            if is_conflict:
+                tags.append("override")
+            elif show_override and is_dup:
+                tags.append("dup")
+
+            if show_override and len(sources) > 1:
+                # 상세 소스 정보 표시
+                lines.append(f"{key}|{value}|{' '.join(f'[{t}]' for t in tags)}")
+                for i, (source_name, source_value) in enumerate(sources):
+                    marker = "✓" if i == len(sources) - 1 else " "
                     lines.append(f"  {marker} {source_name}|{source_value}|")
             else:
-                # 단일 소스
-                source_name = item["sources"][0][0] if item["sources"] else "unknown"
-                lines.append(f"{key}|{value}|{source_name}")
+                lines.append(f"{key}|{value}|{' '.join(f'[{t}]' for t in tags)}")
         
         return "\n".join(lines)
     
@@ -305,6 +340,7 @@ class EnvManager:
         """색상 포함 형식으로 포맷 (ANSI 색상 코드)"""
         # ANSI 색상 코드
         BLUE = "\033[34m"
+        CYAN = "\033[36m"
         GREEN = "\033[32m"
         RED = "\033[31m"
         YELLOW = "\033[33m"
@@ -312,43 +348,40 @@ class EnvManager:
         NC = "\033[0m"  # No Color
         
         lines = []
+
+        def _tag(src: str) -> str:
+            # 최종 소스 태그는 소문자/환경명 그대로 노출
+            if src == "Consul":
+                return "consul"
+            return (src or "unknown").lower()
         
         for item in data:
             key = item["key"]
             value = item["value"]
-            overridden = item["overridden"]
-            sources = item["sources"]
+            sources = item.get("sources") or []
+            final_source = item.get("final_source") or (sources[-1][0] if sources else "unknown")
+            is_conflict = bool(item.get("is_conflict"))
+            is_dup = bool(item.get("is_dup"))
+
+            tags = [f"[{_tag(final_source)}]"]
+            if is_conflict:
+                tags.append(f"{RED}[override]{NC}")
+            elif show_override and is_dup:
+                tags.append(f"{GRAY}[dup]{NC}")
+            tag_str = " ".join(tags)
             
-            if show_override and overridden:
-                # 상세 오버라이드 정보 표시
-                final_source = sources[-1][0] if sources else "unknown"
-                if final_source == "Consul":
-                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {BLUE}[Consul]{NC}")
-                else:
-                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {RED}[Override]{NC}")
+            # 상단 라인: 항상 최종 소스 태그를 표시
+            if _tag(final_source) == "consul":
+                tag_str = f"{CYAN}{tag_str}{NC}"
+            lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {tag_str}")
+
+            # 상세 트리: show_override일 때, 2개 이상 소스가 있으면 출력
+            if show_override and len(sources) > 1:
                 for i, (source_name, source_value) in enumerate(sources):
                     is_last = i == len(sources) - 1
-                    is_final = source_value == value
                     prefix = "└─" if is_last else "├─"
-                    marker = f" {YELLOW}✓{NC}" if is_final else ""
+                    marker = f" {YELLOW}✓{NC}" if is_last else ""
                     lines.append(f"{GRAY}  {prefix} {source_name}: {source_value}{marker}{NC}")
-            elif overridden:
-                # 간단한 오버라이드 표시 (최종 소스만)
-                final_source = sources[-1][0] if sources else "unknown"
-                source_list = " → ".join([s[0] for s in sources])
-                # Consul Override인 경우 색상 변경
-                if final_source == "Consul":
-                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {BLUE}[{final_source}]{NC}")
-                else:
-                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {YELLOW}[{source_list}]{NC}")
-            else:
-                # 단일 소스
-                source_name = sources[0][0] if sources else "unknown"
-                # Consul Override인 경우 색상 변경
-                if source_name == "Consul":
-                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {BLUE}[{source_name}]{NC}")
-                else:
-                    lines.append(f"{BLUE}{key:<30}{NC} = {GREEN}{value:<40}{NC} {GRAY}[{source_name}]{NC}")
         
         return "\n".join(lines)
     
@@ -377,16 +410,34 @@ class EnvManager:
         if not path.exists():
             return {}
         
-        result = {}
+        result: Dict[str, str] = {}
         with open(path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
+            for raw in f:
+                line = raw.strip()
                 if not line or line.startswith('#'):
                     continue
-                
-                if '=' in line:
-                    key, value = line.split('=', 1)
-                    result[key.strip()] = value.strip()
+
+                # Allow common dotenv variants used in shell exports
+                # - export KEY=VALUE
+                # - declare -x KEY=VALUE (bash)
+                if line.startswith("export "):
+                    line = line[len("export "):].strip()
+                elif line.startswith("declare -x "):
+                    line = line[len("declare -x "):].strip()
+
+                if '=' not in line:
+                    continue
+
+                key, value = line.split('=', 1)
+                key = key.strip()
+                value = value.strip()
+
+                # strip surrounding quotes
+                if len(value) >= 2 and ((value[0] == value[-1] == '"') or (value[0] == value[-1] == "'")):
+                    value = value[1:-1]
+
+                if key:
+                    result[key] = value
         
         return result
 
