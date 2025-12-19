@@ -4,6 +4,30 @@
 
 여러 프로젝트에서 일관된 빌드, 테스트, 배포 워크플로우를 제공하는 모듈화된 Makefile 시스템입니다.
 
+---
+
+## 📑 목차
+
+- [✨ 주요 특징](#-주요-특징)
+- [📦 지원하는 프로젝트 타입](#-지원하는-프로젝트-타입)
+- [🚀 빠른 시작](#-빠른-시작)
+- [🎯 설치 후 다음 단계](#-설치-후-다음-단계) ⭐
+- [📋 기본 사용법](#-기본-사용법)
+- [🔄 시스템 업데이트](#-시스템-업데이트) ⭐ **중요**
+- [🏗️ 프로젝트 구조](#️-프로젝트-구조)
+- [⚙️ 설정 파일들](#️-설정-파일들)
+- [🔧 고급 기능](#-고급-기능)
+- [🔵🟢 Blue/Green 배포](#-bluegreen-배포)
+- [🪝 배포 훅 시스템](#-배포-훅-시스템-deploy-hooks)
+- [📦 GitHub Release 프로세스](#-github-release-프로세스)
+- [🗑️ 제거(언인스톨)](#️-제거언인스톨)
+- [🤝 팀 협업](#-팀-협업)
+- [🏭 CI/CD 통합](#-cicd-통합)
+- [🐛 문제 해결](#-문제-해결)
+- [🤔 FAQ](#-faq)
+
+---
+
 ## ✨ 주요 특징
 
 - 🔧 **모듈화된 구조**: 기능별로 분리된 Makefile 모듈
@@ -11,8 +35,10 @@
 - 🌿 **Git Flow**: 자동화된 Git 워크플로우 및 릴리스 관리
 - 🎯 **다중 환경**: 개발/스테이징/프로덕션 환경 지원
 - 📋 **자동 문서화**: 모든 타겟에 대한 자동 help 시스템
-- 🔄 **두 가지 설치 방식**: Git Submodule 또는 파일 복사
+- 🔄 **쉬운 업데이트**: `make self-update`로 간편한 시스템 업데이트
+- 🔒 **버전 고정**: `.ums-version`으로 특정 버전 고정 가능
 - 🎨 **프로젝트별 커스터마이징**: 최소한의 설정으로 프로젝트 적응
+- 🚀 **다양한 설치 방식**: Submodule, Subtree, Copy, Release 지원
 
 ## 📦 지원하는 프로젝트 타입
 
@@ -157,6 +183,64 @@ git submodule add https://github.com/jinwoo-j/universal-makefile
 > - `setup.sh`: 부트스트랩 전용(레포 밖). 정책/핀/최신/강제/토큰을 반영해 릴리스 아카이브를 내려받고 스캐폴딩까지 수행합니다.
 > - `install.sh`: 로컬 유지보수 전용(레포 안). 설치/업데이트/언인스톨/상태/스캐폴딩을 제공합니다.
 
+---
+
+## 🎯 설치 후 다음 단계
+
+### 1. 설치 확인
+
+```bash
+# 시스템 버전 확인
+make um-version
+
+# 설치 상태 확인
+make self-check
+
+# 사용 가능한 모든 명령어 보기
+make help
+```
+
+### 2. 프로젝트 설정
+
+`project.mk` 파일을 편집하여 프로젝트에 맞게 설정:
+
+```makefile
+# project.mk
+REPO_HUB = mycompany
+NAME = myproject
+VERSION = v1.0.0
+
+MAIN_BRANCH = main
+DEVELOP_BRANCH = develop
+```
+
+### 3. 첫 빌드
+
+```bash
+# Docker 이미지 빌드
+make build
+
+# 서비스 시작
+make up
+
+# 로그 확인
+make logs
+```
+
+### 4. 정기 업데이트 ⭐
+
+Universal Makefile System을 최신 상태로 유지하세요:
+
+```bash
+# 시스템 업데이트
+make self-update
+
+# 강제 최신 업데이트 (월 1회 권장)
+make self-update FORCE=true
+```
+
+---
+
 ## 📋 기본 사용법
 
 ### 주요 명령어
@@ -166,6 +250,11 @@ git submodule add https://github.com/jinwoo-j/universal-makefile
 make help                    # 모든 사용 가능한 명령어 표시
 make getting-started         # 시작 가이드 표시
 make debug-vars             # 현재 설정 표시
+
+# 시스템 관리 ⭐
+make self-update            # Universal Makefile System 업데이트
+make um-version             # 설치된 버전 확인
+make self-check             # 설치 상태 확인
 
 # 빌드 및 테스트
 make build                  # Docker 이미지 빌드
@@ -908,44 +997,160 @@ make help-cleanup    # 정리 명령어
 make help-build      # build 타겟 상세 정보
 ```
 
-## 🔄 업데이트
+## 🔄 시스템 업데이트
 
-### Release/Setup 방식
+### ⭐ 권장 방법: Make 명령어 (설치 후)
+
+Universal Makefile System이 이미 설치되어 있다면, **Make 명령어가 가장 쉽고 안전한 방법**입니다:
 
 ```bash
-# .ums-version에 버전을 고정했을 때
-./setup.sh         # 해당 버전으로 동기화
+# 기본 업데이트 (핀 버전 존중)
+make self-update
 
-# 미지정 시 최신 태그로 동기화
-./setup.sh
+# 강제 최신 업데이트 (핀 무시)
+make self-update FORCE=true
 
-# 버전/플래그 활용
-./setup.sh v1.2.3   # 특정 버전으로 동기화
-./setup.sh -f       # 프롬프트 없이 강제 재설치/재동기화
-./setup.sh --debug  # 디버그 컨텍스트/경로/파일 기록 로그
+# 특정 버전으로 업데이트
+make self-update ARGS="--version v1.2.3"
+
+# 디버그 모드로 업데이트
+make self-update ARGS="--debug"
 ```
 
-### Submodule 방식
+**장점:**
+- ✅ 설치 타입 자동 감지 (submodule/subtree/copy/release)
+- ✅ `.ums-version` 핀 자동 확인
+- ✅ 안전한 업데이트 프로세스
+- ✅ 버전 검증 및 롤백 가능
+
+### 관련 명령어
+
+```bash
+# 현재 설치된 버전 확인
+make um-version
+
+# 출력 예시:
+#   Installed: v1.2.3
+#   Pinned: v1.2.3
+#   Bootstrap: v1.2.3
+
+# 설치 상태 확인
+make self-check
+
+# 도움말
+make self-help
+```
+
+### 버전 고정 (.ums-version)
+
+특정 버전을 고정하려면:
+
+```bash
+# 버전 핀 설정
+echo "v1.2.3" > .ums-version
+make self-update
+
+# 핀 제거 (최신 버전 사용)
+rm .ums-version
+make self-update FORCE=true
+```
+
+---
+
+### 고급: 직접 스크립트 사용
+
+설치 타입별로 직접 업데이트하는 방법입니다.
+
+#### Release 방식
+
+```bash
+# install.sh를 통한 업데이트
+.makefile-system/install.sh update
+
+# 강제 최신 업데이트
+.makefile-system/install.sh update --force
+
+# 특정 버전으로 업데이트
+.makefile-system/install.sh update --version v1.2.3
+```
+
+#### Submodule 방식
 
 ```bash
 # 자동 업데이트
-make update-makefile-system
+make self-update
 
-# 수동 업데이트
-git submodule update --remote universal-makefile
+# 또는 Git 명령어
+cd .makefile-system
+git fetch origin
+git checkout main
+git pull origin main
+cd ..
+git add .makefile-system
+git commit -m "chore: update UMF to latest"
 ```
 
-### 복사 방식
+#### Subtree 방식
+
+```bash
+# 자동 업데이트
+make self-update
+
+# 또는 install.sh 사용
+.makefile-system/install.sh update
+```
+
+#### Copy 방식
 
 ```bash
 # 재설치 필요
-./install.sh --copy --force
+.makefile-system/install.sh update
 ```
 
-### Subtree 방식
+---
+
+### CI/CD에서 자동 업데이트
+
+```yaml
+# .github/workflows/update-umf.yml
+name: Update UMF
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # 매주 월요일
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Update Universal Makefile System
+        run: make self-update FORCE=true
+      
+      - name: Create Pull Request
+        if: github.event_name == 'schedule'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: 'chore: update Universal Makefile System'
+          title: 'Update Universal Makefile System'
+          body: 'Automated UMF update'
+          branch: 'chore/update-umf'
+```
+
+### 문제 해결
 
 ```bash
-./install.sh update   # 서브트리 갱신
+# 업데이트 실패 시
+make um-version              # 현재 상태 확인
+make self-check              # 설치 검증
+make self-update ARGS="--debug"  # 디버그 모드
+
+# 완전히 재설치
+rm -rf .makefile-system
+./setup.sh --force
 ```
 
 ## 🗑️ 제거(언인스톨)
@@ -1176,19 +1381,41 @@ cd company-makefile
 
 ## 🤔 FAQ
 
+### Q: 시스템을 어떻게 업데이트하나요?
+A: **`make self-update`**가 가장 쉽고 권장되는 방법입니다. 설치 타입(submodule/subtree/copy/release)을 자동으로 감지하고 안전하게 업데이트합니다.
+```bash
+make self-update              # 기본 업데이트
+make self-update FORCE=true   # 강제 최신 업데이트
+```
+
+### Q: 특정 버전으로 고정하고 싶어요
+A: `.ums-version` 파일을 사용하세요:
+```bash
+echo "v1.2.3" > .ums-version
+make self-update
+```
+
+### Q: 업데이트가 안전한가요?
+A: 네, `make self-update`는 다음을 보장합니다:
+- ✅ 설치 타입 자동 감지
+- ✅ 버전 핀(`.ums-version`) 존중
+- ✅ 백업 및 롤백 가능
+- ✅ 디버그 모드 지원
+
 ### Q: 기존 Makefile과 충돌하지 않나요?
 A: `--existing-project` 옵션을 사용하면 기존 Makefile을 보존하고 `Makefile.universal`로 새 시스템을 생성합니다.
 
 ### Q: Submodule 방식과 복사 방식 중 어떤 것을 선택해야 하나요?
-A: **Submodule 방식을 권장**합니다. 중앙 집중식 업데이트가 가능하고 여러 프로젝트를 일관되게 관리할 수 있습니다.
+A: **Release 방식**을 가장 권장합니다 (setup.sh 사용). Git 의존성이 없고 빠르며, `make self-update`로 쉽게 업데이트할 수 있습니다. 그 다음으로는 **Submodule 방식**을 권장합니다.
 
 ### Q: 프로젝트별로 다른 버전의 시스템을 사용할 수 있나요?
-A: 네, Submodule에서 특정 태그나 커밋을 지정할 수 있습니다:
+A: 네, `.ums-version` 파일로 프로젝트별 버전을 고정할 수 있습니다:
 ```bash
-cd universal-makefile
-git checkout v1.2.0
-cd ..
-git add universal-makefile
+# 프로젝트 A
+echo "v1.2.0" > .ums-version
+
+# 프로젝트 B
+echo "v1.3.0" > .ums-version
 ```
 
 ### Q: Docker 없이도 사용할 수 있나요?
@@ -1196,6 +1423,9 @@ A: 네, Docker 관련 타겟들은 선택사항입니다. Git 워크플로우, �
 
 ### Q: Windows에서도 작동하나요?
 A: Git Bash, WSL2, 또는 Docker Desktop이 설치된 환경에서 작동합니다.
+
+### Q: 팀 전체가 같은 버전을 사용하게 하려면?
+A: `.ums-version` 파일을 Git에 커밋하세요. 모든 팀원이 `make self-update`를 실행하면 같은 버전으로 동기화됩니다.
 
 ## 🚀 로드맵
 
@@ -1247,6 +1477,53 @@ make help
 
 ---
 
+## 🚀 빠른 참조
+
+### 가장 자주 사용하는 명령어
+
+```bash
+# 시스템 관리
+make self-update           # 시스템 업데이트 ⭐
+make um-version            # 버전 확인
+make help                  # 전체 명령어 보기
+
+# 개발
+make build                 # 빌드
+make up                    # 서비스 시작
+make logs                  # 로그 확인
+make down                  # 서비스 중지
+
+# 릴리스
+make auto-release         # 자동 릴리스
+make ur                   # 버전 업데이트 후 릴리스
+
+# 정리
+make clean                # 기본 정리
+make docker-clean         # Docker 정리
+```
+
+### 중요한 파일들
+
+| 파일 | 설명 |
+|------|------|
+| `project.mk` | 프로젝트 설정 (필수) |
+| `.ums-version` | 버전 고정 (선택) |
+| `.project.local.mk` | 개발자별 로컬 설정 (Git 무시) |
+| `environments/*.mk` | 환경별 설정 |
+
+### 도움말
+
+```bash
+make help-docker      # Docker 명령어
+make help-git         # Git 워크플로우
+make help-compose     # Docker Compose
+make help-cleanup     # 정리 명령어
+make help-version     # 버전 관리
+make help-system      # 시스템 관리
+```
+
+---
+
 **💡 도움이 필요하신가요?**
 
 - 📖 [Wiki](https://github.com/jinwoo-j/universal-makefile/wiki)
@@ -1254,3 +1531,5 @@ make help
 - 💬 [Discussions](https://github.com/jinwoo-j/universal-makefile/discussions)
 
 **⭐ 이 프로젝트가 도움이 되었다면 스타를 눌러주세요!**
+
+**🔄 정기 업데이트를 잊지 마세요: `make self-update`**
