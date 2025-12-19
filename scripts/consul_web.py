@@ -15,6 +15,8 @@ import os
 import logging
 import requests
 import json
+import time
+import socket
 from typing import Optional, Dict, Tuple
 
 
@@ -25,6 +27,23 @@ logging.basicConfig(
     stream=sys.stderr  # 로그는 stderr로, 데이터는 stdout으로 분리
 )
 logger = logging.getLogger(__name__)
+
+# urllib3 디버그 로깅 (verbose 모드에서만)
+urllib3_logger = logging.getLogger('urllib3.connectionpool')
+urllib3_logger.setLevel(logging.WARNING)  # 기본은 WARNING, verbose에서 DEBUG로 변경
+
+# DNS 조회 시간 추적을 위한 monkey patch
+_original_getaddrinfo = socket.getaddrinfo
+def _timed_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    t_start = time.perf_counter()
+    result = _original_getaddrinfo(host, port, family, type, proto, flags)
+    t_end = time.perf_counter()
+    if (t_end - t_start) > 0.001:  # 1ms 이상 걸린 경우만 로그
+        logger.debug(f"[TIMING] DNS lookup for {host}:{port}: {(t_end - t_start)*1000:.2f}ms")
+    return result
+
+# Monkey patch 적용 (verbose 모드에서만 적용될 예정)
+_dns_patched = False
 
 
 # ----------------------------
@@ -167,22 +186,46 @@ class ConsulAPIClient:
         timeout: int = 5,
         quote_values: bool = False,  # env 형식에서 "값" 으로 감쌀지 여부 (기본: False)
     ):
+        t_init_start = time.perf_counter()
+        
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
         self.prefix = prefix.strip('/')
         self.timeout = timeout
         self.quote_values = quote_values
 
+        t_before_session = time.perf_counter()
         self.session = requests.Session()
-        self.session.headers.update({'X-API-Key': api_key})
+        self.session.headers.update({
+            'X-API-Key': api_key,
+            'Connection': 'close'  # Force connection close to avoid delayed ACK
+        })
+        
+        # Connection pooling 최적화
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=1,
+            pool_maxsize=1,
+            max_retries=0,
+            pool_block=False
+        )
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
+        
+        t_after_session = time.perf_counter()
+        logger.debug(f"[TIMING] Session creation: {(t_after_session - t_before_session)*1000:.2f}ms")
+        logger.debug(f"[TIMING] ConsulAPIClient.__init__ total: {(t_after_session - t_init_start)*1000:.2f}ms")
 
     def get_config(self, key: str, decrypt: bool = True) -> Optional[str]:
         """단일 설정 조회"""
+        t_start = time.perf_counter()
         resp = self.session.get(
             f"{self.base_url}/api/v1/config/{key}",
             params={'prefix': self.prefix, 'decrypt': decrypt},
             timeout=self.timeout,
         )
+        t_request = time.perf_counter()
+        logger.debug(f"[TIMING] HTTP GET /api/v1/config/{key}: {(t_request - t_start)*1000:.2f}ms")
+        
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
@@ -191,15 +234,49 @@ class ConsulAPIClient:
 
     def get_all_configs(self, decrypt: bool = False, mask_secrets: bool = True) -> Dict[str, str]:
         """prefix 아래 모든 설정 조회 (일괄)"""
+        t_start = time.perf_counter()
+        
         if decrypt:
             # 복호화된 값을 빠르게 가져오기
+            url = f"{self.base_url}/api/v1/export/json"
+            params = {'prefix': self.prefix, 'decrypt': 'true'}
+            
+            t_before_request = time.perf_counter()
+            logger.debug(f"[TIMING] Preparing request to: {url}")
+            logger.debug(f"[TIMING]   - Session adapter pool: {self.session.adapters}")
+            
+            # 저수준 타이밍을 위한 훅 사용
+            timings = {}
+            def response_hook(r, *args, **kwargs):
+                timings['response_received'] = time.perf_counter()
+            
             resp = self.session.get(
-                f"{self.base_url}/api/v1/export/json",
-                params={'prefix': self.prefix, 'decrypt': 'true'},
+                url,
+                params=params,
                 timeout=self.timeout,
+                hooks={'response': response_hook}
             )
+            
+            t_after_request = time.perf_counter()
+            
+            # 세부 타이밍 출력
+            if 'response_received' in timings:
+                logger.debug(f"[TIMING] HTTP GET /api/v1/export/json:")
+                logger.debug(f"[TIMING]   - Total request time: {(t_after_request - t_before_request)*1000:.2f}ms")
+                logger.debug(f"[TIMING]   - Until response received: {(timings['response_received'] - t_before_request)*1000:.2f}ms")
+                logger.debug(f"[TIMING]   - Hook processing: {(t_after_request - timings['response_received'])*1000:.2f}ms")
+            else:
+                logger.debug(f"[TIMING] HTTP GET /api/v1/export/json (decrypt): {(t_after_request - t_before_request)*1000:.2f}ms")
+            
+            logger.debug(f"[TIMING]   - Response status: {resp.status_code}, size: {len(resp.content)} bytes")
+            
+            t_before_parse = time.perf_counter()
             resp.raise_for_status()
             data = resp.json()
+            
+            t_after_parse = time.perf_counter()
+            logger.debug(f"[TIMING]   - JSON parsing: {(t_after_parse - t_before_parse)*1000:.2f}ms")
+            
             return data.get('configurations', {})
         else:
             # 메타데이터 포함 조회 (마스킹 지원)
@@ -213,6 +290,9 @@ class ConsulAPIClient:
                 },
                 timeout=self.timeout,
             )
+            t_request = time.perf_counter()
+            logger.debug(f"[TIMING] HTTP GET /api/v1/config (metadata): {(t_request - t_start)*1000:.2f}ms")
+            
             resp.raise_for_status()
             data = resp.json()
             return {k: v['value'] for k, v in data.get('items', {}).items()}
@@ -227,7 +307,10 @@ class ConsulAPIClient:
         sort_keys: bool = True,
     ) -> str:
         """ .env / shell / json 형식으로 export """
+        t_start = time.perf_counter()
         items = self.get_all_configs(decrypt=decrypt, mask_secrets=mask_secrets)
+        t_fetch = time.perf_counter()
+        logger.debug(f"[TIMING] export_to_env - get_all_configs: {(t_fetch - t_start)*1000:.2f}ms")
 
         def to_env_name(key: str) -> str:
             if strip_prefix:
@@ -261,18 +344,26 @@ class ConsulAPIClient:
                     lines.append(f'{name}="{val}"')
                 else:
                     lines.append(f'{name}={raw}')
+        
+        t_format = time.perf_counter()
+        logger.debug(f"[TIMING] export_to_env - formatting: {(t_format - t_fetch)*1000:.2f}ms")
+        logger.debug(f"[TIMING] export_to_env - total: {(t_format - t_start)*1000:.2f}ms")
 
         return '\n'.join(lines)
 
     def set_config(self, key: str, value: str, is_secret: bool = False) -> bool:
         """설정 저장"""
         try:
+            t_start = time.perf_counter()
             resp = self.session.post(
                 f"{self.base_url}/api/v1/config",
                 params={'prefix': self.prefix},
                 json={'key': key, 'value': value, 'is_secret': is_secret},
                 timeout=self.timeout,
             )
+            t_request = time.perf_counter()
+            logger.debug(f"[TIMING] HTTP POST /api/v1/config: {(t_request - t_start)*1000:.2f}ms")
+            
             resp.raise_for_status()
             return True
         except Exception as e:
@@ -282,11 +373,15 @@ class ConsulAPIClient:
     def delete_config(self, key: str) -> bool:
         """설정 삭제"""
         try:
+            t_start = time.perf_counter()
             resp = self.session.delete(
                 f"{self.base_url}/api/v1/config/{key}",
                 params={'prefix': self.prefix},
                 timeout=self.timeout,
             )
+            t_request = time.perf_counter()
+            logger.debug(f"[TIMING] HTTP DELETE /api/v1/config/{key}: {(t_request - t_start)*1000:.2f}ms")
+            
             resp.raise_for_status()
             return True
         except Exception as e:
@@ -445,8 +540,16 @@ def extract_global_args(argv):
 
 
 def main():
+    start_time = time.perf_counter()
+    logger.debug(f"[TIMING] Script started at {start_time:.6f}")
+    
     argv = sys.argv[1:]
+    t1 = time.perf_counter()
+    logger.debug(f"[TIMING] argv parsing: {(t1 - start_time)*1000:.2f}ms")
+    
     global_part, rest_part = extract_global_args(argv)
+    t2 = time.perf_counter()
+    logger.debug(f"[TIMING] extract_global_args: {(t2 - t1)*1000:.2f}ms")
 
     # 1) env-file 경로 결정 (CLI > default ./.env)
     env_file = None
@@ -458,18 +561,31 @@ def main():
         # 기본은 현재 디렉토리에 .env가 있으면 사용
         if os.path.exists(".env"):
             env_file = ".env"
+    
+    t3 = time.perf_counter()
+    logger.debug(f"[TIMING] env-file path resolution: {(t3 - t2)*1000:.2f}ms")
 
     dotenv = load_dotenv_file(env_file) if env_file else {}
+    t4 = time.perf_counter()
+    logger.debug(f"[TIMING] load_dotenv_file: {(t4 - t3)*1000:.2f}ms")
 
     # 2) 기본 명령어 처리 - argparse 실행 전에 처리
     if not rest_part or rest_part[0] not in ['get', 'list', 'export', 'set', 'delete', 'count']:
         # 기본 명령어 'export' 추가
         rest_part = ['export'] + rest_part
         logger.debug("Using default command: export")
+    
+    t5 = time.perf_counter()
+    logger.debug(f"[TIMING] command validation: {(t5 - t4)*1000:.2f}ms")
 
     # 3) 파서 실행 (CLI 값 확보)
     parser = build_parser()
+    t6 = time.perf_counter()
+    logger.debug(f"[TIMING] build_parser: {(t6 - t5)*1000:.2f}ms")
+    
     args = parser.parse_args(global_part + rest_part)
+    t7 = time.perf_counter()
+    logger.debug(f"[TIMING] parse_args: {(t7 - t6)*1000:.2f}ms")
 
     # 4) 전역 설정을 "CLI > .env > OS env > default"로 확정 + source 추적
     resolved: Dict[str, Tuple[str, str]] = {}
@@ -495,6 +611,9 @@ def main():
     timeout, timeout_src = resolve_value(
         "timeout", str(args.timeout) if args.timeout else None, dotenv, "CONSUL_TIMEOUT", default="5"
     )
+    
+    t8 = time.perf_counter()
+    logger.debug(f"[TIMING] resolve configuration values: {(t8 - t7)*1000:.2f}ms")
 
     # use-quotes: CLI 플래그가 True면 무조건 CLI 우선.
     # CLI에서 안 켰으면(.env/OS env에 CONSUL_USE_QUOTES=true가 있으면 켜기)
@@ -568,12 +687,35 @@ def main():
     if args.quiet:
         # --quiet 모드: WARNING 이상만 출력
         logger.setLevel(logging.WARNING)
+    elif args.verbose:
+        # --verbose 모드: DEBUG 레벨로 타이밍 로그 출력
+        logger.setLevel(logging.DEBUG)
+        urllib3_logger.setLevel(logging.DEBUG)
+        
+        # DNS 타이밍 추적 활성화
+        global _dns_patched
+        if not _dns_patched:
+            socket.getaddrinfo = _timed_getaddrinfo
+            _dns_patched = True
+            logger.debug("[TIMING] DNS timing tracking enabled")
     else:
         logger.setLevel(getattr(logging, str(log_level).upper(), logging.INFO))
 
     if not api_key or api_key == "":
         logger.error("API key required. (CLI --api-key) or .env/OS env CONSUL_API_KEY")
         sys.exit(1)
+
+    if not app or app == "":
+        logger.error("App name required. (CLI --app) or .env/OS env CONSUL_APP")
+        sys.exit(1)
+        
+    if not env_name or env_name == "":
+        logger.error("Environment name required. (CLI --env) or .env/OS env CONSUL_ENV")
+        sys.exit(1)
+
+    t_config_end = time.perf_counter()
+    logger.debug(f"[TIMING] Total configuration setup: {(t_config_end - start_time)*1000:.2f}ms")
+    
 
     client = ConsulAPIClient(
         base_url=str(api_url),
@@ -582,33 +724,42 @@ def main():
         timeout=int(timeout) if isinstance(timeout, (int, str)) else 5,
         quote_values=bool(use_quotes),
     )
+    
+    t_client = time.perf_counter()
+    logger.debug(f"[TIMING] ConsulAPIClient initialization: {(t_client - t_config_end)*1000:.2f}ms")
 
     try:
         if args.command == 'get':
+            t_cmd_start = time.perf_counter()
             decrypt = not args.no_decrypt
             value = client.get_config(args.key, decrypt=decrypt)
+            t_cmd_end = time.perf_counter()
+            logger.debug(f"[TIMING] Command 'get' execution: {(t_cmd_end - t_cmd_start)*1000:.2f}ms")
+            
             if value is None:
                 logger.error(f"Key not found: {args.key}")
                 sys.exit(1)
             print(f"{args.key}: {value}" if args.with_key else value)
 
         elif args.command == 'list':
+            t_cmd_start = time.perf_counter()
             cfgs = client.get_all_configs(decrypt=args.decrypt)
+            t_fetch = time.perf_counter()
+            logger.debug(f"[TIMING] Command 'list' - fetch: {(t_fetch - t_cmd_start)*1000:.2f}ms")
+            
             if args.match:
                 cfgs = {k: v for k, v in cfgs.items() if args.match in k}
             for k in sorted(cfgs.keys()):
                 print(f"{k}: {cfgs[k]}")
+            
+            t_cmd_end = time.perf_counter()
+            logger.debug(f"[TIMING] Command 'list' - total: {(t_cmd_end - t_cmd_start)*1000:.2f}ms")
             logger.info(f"Total: {len(cfgs)} configurations")
 
         elif args.command == 'export':
-            # 설정 개수 및 메타데이터 수집 (요약용)
-            try:
-                all_configs = client.get_all_configs(decrypt=False, mask_secrets=False)
-                config_count = len(all_configs)
-            except:
-                config_count = 0
+            t_cmd_start = time.perf_counter()
             
-            # 실제 export 수행
+            # 실제 export 수행 (한 번의 HTTP 요청으로 처리)
             out = client.export_to_env(
                 decrypt=not args.no_decrypt,
                 mask_secrets=args.mask_secrets,
@@ -618,22 +769,34 @@ def main():
                 sort_keys=not args.no_sort,
             )
             
+            t_export = time.perf_counter()
+            logger.debug(f"[TIMING] Command 'export' - export_to_env: {(t_export - t_cmd_start)*1000:.2f}ms")
+            
             # 출력 (stdout 또는 파일)
             write_output(out, args.output, args.overwrite)
             
-            # 요약 정보 (stderr로 출력)
+            t_write = time.perf_counter()
+            logger.debug(f"[TIMING] Command 'export' - write_output: {(t_write - t_export)*1000:.2f}ms")
+            logger.debug(f"[TIMING] Command 'export' - total: {(t_write - t_cmd_start)*1000:.2f}ms")
+            
+            # 요약 정보 (stderr로 출력) - 출력 결과에서 라인 수 계산
             if not args.quiet:
                 if args.output and args.output != '-':
                     # 파일 출력 시에는 write_output에서 이미 "✓ Wrote" 메시지 출력됨
                     pass
                 else:
                     # stdout 출력 시에만 요약 출력
+                    config_count = len([line for line in out.split('\n') if line.strip() and not line.strip().startswith('#')])
                     decrypt_status = "decrypted" if not args.no_decrypt else "encrypted"
                     mask_status = " (secrets masked)" if args.mask_secrets else ""
                     logger.info(f"Exported {config_count} configurations ({decrypt_status}){mask_status}")
 
         elif args.command == 'set':
+            t_cmd_start = time.perf_counter()
             ok = client.set_config(args.key, args.value, is_secret=args.secret)
+            t_cmd_end = time.perf_counter()
+            logger.debug(f"[TIMING] Command 'set' execution: {(t_cmd_end - t_cmd_start)*1000:.2f}ms")
+            
             if ok:
                 logger.info(f"✓ Successfully set key: {args.key}")
                 if args.secret:
@@ -643,12 +806,16 @@ def main():
                 sys.exit(1)
 
         elif args.command == 'delete':
+            t_cmd_start = time.perf_counter()
             if not args.yes:
                 ans = input(f"Delete key '{args.key}'? [y/N]: ").strip().lower()
                 if ans not in ('y', 'yes'):
                     logger.info("Cancelled")
                     sys.exit(0)
             ok = client.delete_config(args.key)
+            t_cmd_end = time.perf_counter()
+            logger.debug(f"[TIMING] Command 'delete' execution: {(t_cmd_end - t_cmd_start)*1000:.2f}ms")
+            
             if ok:
                 logger.info(f"✓ Successfully deleted key: {args.key}")
             else:
@@ -656,10 +823,20 @@ def main():
                 sys.exit(1)
 
         elif args.command == 'count':
+            t_cmd_start = time.perf_counter()
             cfgs = client.get_all_configs(decrypt=args.decrypt)
+            t_cmd_end = time.perf_counter()
+            logger.debug(f"[TIMING] Command 'count' execution: {(t_cmd_end - t_cmd_start)*1000:.2f}ms")
+            
             count = len(cfgs)
             print(count)
             logger.info(f"Total: {count} configurations")
+        
+        # 전체 실행 시간 출력
+        total_time = time.perf_counter() - start_time
+        logger.debug(f"[TIMING] ========================================")
+        logger.debug(f"[TIMING] TOTAL SCRIPT EXECUTION: {total_time*1000:.2f}ms ({total_time:.3f}s)")
+        logger.debug(f"[TIMING] ========================================")
 
     except KeyboardInterrupt:
         logger.info("Operation cancelled")
