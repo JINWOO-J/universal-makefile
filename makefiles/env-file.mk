@@ -13,7 +13,7 @@ CONSUL_APP ?=
 CONSUL_PREFIX ?= 
 
 # 필요시 make 실행 때 RESOLVED_ENV_FILE=$(RESOLVED_ENV_FILE) 로 변경 가능
-RESOLVED_ENV_FILE ?= .env
+RESOLVED_ENV_FILE ?= .env.resolved
 
 # Consul 클라이언트/설정 값을 하위 프로세스(파이썬 스크립트)에서 동일하게 사용하도록 export
 export CONSUL_CLIENT CONSUL_API_URL CONSUL_API_KEY CONSUL_APP CONSUL_PREFIX
@@ -42,7 +42,7 @@ endif # ENV_FILE_LOADED
 
 env: prepare-env
 prepare-env: ## 🔧 .env.resolved 파일 준비 (docker-compose용, Consul+로컬 환경 병합)
-	@echo "$(BLUE)📝 $(RESOLVED_ENV_FILE) 파일 생성 중...$(NC)"
+	@echo "$(BLUE)📝 RESOLVED_ENV_FILE=$(RESOLVED_ENV_FILE) 파일 생성 중...$(NC)"
 	@echo ""
 	@if [ "$(USE_CONSUL)" = "true" ]; then \
 		echo "$(CYAN)🌐 Consul 모드: Consul + 로컬 환경 변수 병합$(NC)"; \
