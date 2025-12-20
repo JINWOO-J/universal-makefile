@@ -12,6 +12,9 @@ CONSUL_API_KEY ?=
 CONSUL_APP ?= 
 CONSUL_PREFIX ?= 
 
+# 필요시 make 실행 때 RESOLVED_ENV_FILE=$(RESOLVED_ENV_FILE) 로 변경 가능
+RESOLVED_ENV_FILE ?= .env
+
 # Consul 클라이언트/설정 값을 하위 프로세스(파이썬 스크립트)에서 동일하게 사용하도록 export
 export CONSUL_CLIENT CONSUL_API_URL CONSUL_API_KEY CONSUL_APP CONSUL_PREFIX
 
@@ -39,30 +42,30 @@ endif # ENV_FILE_LOADED
 
 env: prepare-env
 prepare-env: ## 🔧 .env.resolved 파일 준비 (docker-compose용, Consul+로컬 환경 병합)
-	@echo "$(BLUE)📝 .env.resolved 파일 생성 중...$(NC)"
+	@echo "$(BLUE)📝 $(RESOLVED_ENV_FILE) 파일 생성 중...$(NC)"
 	@echo ""
 	@if [ "$(USE_CONSUL)" = "true" ]; then \
 		echo "$(CYAN)🌐 Consul 모드: Consul + 로컬 환경 변수 병합$(NC)"; \
 		$(MAKE) --no-print-directory prepare-consul-runtime-env; \
 	else \
 		echo "$(CYAN)� 로컬 모드미: 로컬 환경 변수만 사용$(NC)"; \
-		$(ENV_MANAGER) export --environment $(ENVIRONMENT) > .env.resolved; \
+		$(ENV_MANAGER) export --environment $(ENVIRONMENT) > $(RESOLVED_ENV_FILE); \
 		if [ -f .build-info ]; then \
 			BUILD_IMAGE=$$(cat .build-info); \
 			echo "$(CYAN)🔍 빌드된 이미지 감지: $$BUILD_IMAGE$(NC)"; \
 			TMP=$$(mktemp .env.XXXXXX); \
 			awk -v img="$$BUILD_IMAGE" '\
 				/^DEPLOY_IMAGE=/ { print "DEPLOY_IMAGE=" img; next } \
-				{ print }' .env.resolved > "$$TMP"; \
+				{ print }' $(RESOLVED_ENV_FILE) > "$$TMP"; \
 			if ! grep -q '^DEPLOY_IMAGE=' "$$TMP"; then \
 				echo "DEPLOY_IMAGE=$$BUILD_IMAGE" >> "$$TMP"; \
 			fi; \
-			mv "$$TMP" .env.resolved; \
+			mv "$$TMP" $(RESOLVED_ENV_FILE); \
 		fi; \
 	fi
 	@echo "$(YELLOW)배포 환경:$(NC)"
 	@echo "  ENVIRONMENT     : $(ENVIRONMENT)"
-	@DEPLOY_IMG=$$(grep '^DEPLOY_IMAGE=' .env.resolved 2>/dev/null | cut -d= -f2); \
+	@DEPLOY_IMG=$$(grep '^DEPLOY_IMAGE=' $(RESOLVED_ENV_FILE) 2>/dev/null | cut -d= -f2); \
 	if [ -n "$$DEPLOY_IMG" ]; then \
 		echo "  DEPLOY_IMAGE    : $$DEPLOY_IMG"; \
 		if [ -f .build-info ]; then \
@@ -86,13 +89,13 @@ prepare-env: ## 🔧 .env.resolved 파일 준비 (docker-compose용, Consul+로�
 		echo "  CURRENT_COMMIT  : $(CURRENT_COMMIT_SHORT)"; \
 	fi
 	@echo ""
-	@echo "$(GREEN)✓ .env.resolved 파일 생성 완료 (Environment: $(ENVIRONMENT))$(NC)"
+	@echo "$(GREEN)✓ $(RESOLVED_ENV_FILE) 파일 생성 완료 (Environment: $(ENVIRONMENT))$(NC)"
 	@if [ ! -f .build-info ]; then \
 		echo "$(GRAY)💡 Tip: 'make build' 후에는 빌드된 이미지가 자동으로 사용됩니다$(NC)"; \
 		echo "$(GRAY)💡 Tip: 'make reset-build' 로 .env.$(ENVIRONMENT) 기준으로 리셋할 수 있습니다$(NC)"; \
 	fi
 
-# prepare-runtime-env: ## .env.resolved + DEPLOY_IMAGE 생성 (docker-compose/로컬 실행용)
+# prepare-runtime-env: ## $(RESOLVED_ENV_FILE) + DEPLOY_IMAGE 생성 (docker-compose/로컬 실행용)
 # 	@$(ENV_MANAGER) export --environment "$(ENVIRONMENT)" > .env
 # 	@{ \
 # 	  if [ -d "$(SOURCE_DIR)" ] && cd "$(SOURCE_DIR)" >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then \
@@ -112,9 +115,9 @@ prepare-env: ## 🔧 .env.resolved 파일 준비 (docker-compose용, Consul+로�
 # 	@echo "$(GREEN)✓ .env 파일 생성 완료 (Environment: $(ENVIRONMENT), DEPLOY_IMAGE 포함)$(NC)"
 
 prepare-runtime-env: ## 🔧 .env + DEPLOY_IMAGE 생성 (docker-compose/로컬 실행용)
-	@echo "$(BLUE)📝 .env.resolved 파일 생성 중 (DEPLOY_IMAGE 자동 계산)...$(NC)"
+	@echo "$(BLUE)📝 $(RESOLVED_ENV_FILE) 파일 생성 중 (DEPLOY_IMAGE 자동 계산)...$(NC)"
 	@echo ""
-	@$(ENV_MANAGER) export --environment "$(ENVIRONMENT)" > .env.resolved
+	@$(ENV_MANAGER) export --environment "$(ENVIRONMENT)" > $(RESOLVED_ENV_FILE)
 	@{ \
 	  if [ -d "$(SOURCE_DIR)" ] && cd "$(SOURCE_DIR)" >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then \
 	    $(compute_build_vars); \
@@ -126,13 +129,13 @@ prepare-runtime-env: ## 🔧 .env + DEPLOY_IMAGE 생성 (docker-compose/로컬 �
 	    TMP=$$(mktemp .env.XXXXXX); \
 	    awk -v img="$$IMAGE_TAG" '\
 	      $$0 !~ /^DEPLOY_IMAGE=/ { print $$0 } \
-	      END { print "DEPLOY_IMAGE=" img }' .env.resolved > "$$TMP"; \
-	    mv "$$TMP" .env.resolved ; \
+	      END { print "DEPLOY_IMAGE=" img }' $(RESOLVED_ENV_FILE) > "$$TMP"; \
+	    mv "$$TMP" $(RESOLVED_ENV_FILE) ; \
 	  else \
 	    echo "$(YELLOW)[WARNING]$(NC) SOURCE_DIR or git not ready; skipping DEPLOY_IMAGE calculation"; \
 	  fi; \
 	}
-	@echo "$(GREEN)✓ .env.resolved 파일 생성 완료 (Environment: $(ENVIRONMENT), DEPLOY_IMAGE 포함)$(NC)"
+	@echo "$(GREEN)✓ $(RESOLVED_ENV_FILE) 파일 생성 완료 (Environment: $(ENVIRONMENT), DEPLOY_IMAGE 포함)$(NC)"
 
 prepare-consul-env: ## 🔧 Consul에서 환경 변수 가져와서 .env.consul 생성
 	@echo "$(BLUE)📝 Consul에서 환경 변수 가져오는 중...$(NC)"
@@ -248,7 +251,7 @@ consul-debug: ## 🔧 Consul 연결 디버깅 (상세한 에러 정보 출력)
 	@echo "  make prepare-consul-env DEBUG=true"
 	@echo "  make prepare-consul-env CONSUL_DEBUG=true"
 
-prepare-consul-runtime-env: ## 🔧 Consul + 로컬 환경 변수 병합하여 .env.resolved 생성
+prepare-consul-runtime-env: ## 🔧 Consul + 로컬 환경 변수 병합하여 $(RESOLVED_ENV_FILE) 생성
 	@echo "$(BLUE)📝 Consul + 로컬 환경 변수 병합 중...$(NC)"
 	@echo ""
 	@if [ "$(USE_CONSUL)" != "true" ]; then \
@@ -286,12 +289,12 @@ prepare-consul-runtime-env: ## 🔧 Consul + 로컬 환경 변수 병합하여 .
 	  else \
 	    echo "$(YELLOW)[WARNING]$(NC) SOURCE_DIR or git not ready; skipping DEPLOY_IMAGE calculation"; \
 	  fi; \
-	  mv "$$TMP" .env.resolved; \
+	  mv "$$TMP" $(RESOLVED_ENV_FILE); \
 	}
 	@echo ""
-	@echo "$(GREEN)✓ .env.resolved 파일 생성 완료 (Consul + 로컬 환경 병합)$(NC)"
+	@echo "$(GREEN)✓ $(RESOLVED_ENV_FILE) 파일 생성 완료 (Consul + 로컬 환경 병합)$(NC)"
 	@echo "$(YELLOW)📊 최종 환경 변수 통계:$(NC)"
-	@TOTAL_VARS=$$(grep -c '^[A-Z]' .env.resolved 2>/dev/null || echo "0"); \
+	@TOTAL_VARS=$$(grep -c '^[A-Z]' $(RESOLVED_ENV_FILE) 2>/dev/null || echo "0"); \
 	CONSUL_VARS=$$(grep -c '^[A-Z]' $(CONSUL_ENV_FILE) 2>/dev/null || echo "0"); \
 	echo "  Consul 변수     : $$CONSUL_VARS개"; \
 	echo "  전체 변수       : $$TOTAL_VARS개"
