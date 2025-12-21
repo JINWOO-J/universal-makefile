@@ -300,7 +300,7 @@ prepare-consul-runtime-env: ## 🔧 Consul + 로컬 환경 변수 병합하여 $
 	  TMP=$$(mktemp .env.XXXXXX); \
 	  : "NOTE: env_manager export(--use-consul)는 Consul + 로컬(.env.common/.env.{env}/.runner.env/.env.local/.build-info)까지 이미 병합된 최종 값만 출력함"; \
 	  : "NOTE: 여기서 Consul 캐시 파일을 cat으로 먼저 붙이면 동일 키가 중복되므로 금지"; \
-	  $(ENV_MANAGER) export --environment "$(ENVIRONMENT)" --use-consul --preserve-user-deploy-image > "$$TMP"; \
+	  $(ENV_MANAGER) export --environment "$(ENVIRONMENT)" --use-consul > "$$TMP"; \
 	  \
 	  : "DEPLOY_IMAGE 우선순위 확인: .env.local > .runner.env > Git 계산값"; \
 	  EXISTING_DEPLOY_IMAGE=$$(grep '^DEPLOY_IMAGE=' "$$TMP" 2>/dev/null | cut -d= -f2 || echo ""); \
