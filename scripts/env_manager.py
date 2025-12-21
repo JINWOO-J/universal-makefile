@@ -29,6 +29,7 @@ class EnvManager:
         # 파일 경로
         self.common_env = self.project_root / ".env.common"
         self.env_file = self.project_root / f".env.{environment}"
+        self.runner_env = self.project_root / ".runner.env"  # 중앙서버에서 전파되는 환경 변수
         self.local_env = self.project_root / ".env.local"
         consul_env_file = os.environ.get("CONSUL_ENV_FILE", ".env.runtime")
         self.consul_env = self.project_root / consul_env_file  # Consul 환경 변수 파일
@@ -82,18 +83,24 @@ class EnvManager:
             if key in local_data:
                 return local_data[key]
         
-        # 2. .env.{environment}
+        # 2. .runner.env (중앙서버에서 전파)
+        if self.runner_env.exists():
+            runner_data = self._read_env_file(self.runner_env)
+            if key in runner_data:
+                return runner_data[key]
+        
+        # 3. .env.{environment}
         env_data = self._read_env_file(self.env_file)
         if key in env_data:
             return env_data[key]
         
-        # 3. .env.common
+        # 4. .env.common
         if self.common_env.exists():
             common_data = self._read_env_file(self.common_env)
             if key in common_data:
                 return common_data[key]
         
-        # 4. 기본값
+        # 5. 기본값
         return default
     
     def set(self, key: str, value: str, commit: bool = True) -> None:
@@ -132,11 +139,15 @@ class EnvManager:
             elif self.consul_env.exists():
                 result.update(self._read_env_file(self.consul_env))
 
-        # 4. .env.local (로컬 오버라이드)
+        # 4. .runner.env (중앙서버에서 전파)
+        if self.runner_env.exists():
+            result.update(self._read_env_file(self.runner_env))
+
+        # 5. .env.local (로컬 오버라이드)
         if self.local_env.exists():
             result.update(self._read_env_file(self.local_env))
 
-        # 5. .build-info (최우선 - 로컬 빌드 이미지)
+        # 6. .build-info (최우선 - 로컬 빌드 이미지)
         # IGNORE_BUILD_INFO 환경 변수가 설정되어 있으면 .build-info를 무시
         ignore_build_info = os.environ.get("IGNORE_BUILD_INFO", "").lower() in ("1", "true", "yes")
         if not ignore_build_info and self.build_info.exists():
@@ -178,10 +189,34 @@ class EnvManager:
             "deployed_version": env_data.get("DEPLOYED_VERSION", "N/A"),
         }
     
-    def export(self, include_warning: bool = True) -> str:
+    def export(self, include_warning: bool = True, preserve_user_deploy_image: bool = False) -> str:
         """docker-compose용 환경 변수 export"""
 
         env_data = self.load_all()
+        
+        # 사용자 설정 DEPLOY_IMAGE 보호 로직
+        if preserve_user_deploy_image:
+            user_deploy_image = None
+            deploy_source = None
+            
+            # .env.local 우선 확인
+            if self.local_env.exists():
+                local_data = self._read_env_file(self.local_env)
+                if "DEPLOY_IMAGE" in local_data:
+                    user_deploy_image = local_data["DEPLOY_IMAGE"]
+                    deploy_source = ".env.local"
+            
+            # .env.local에 없으면 .runner.env 확인
+            if not user_deploy_image and self.runner_env.exists():
+                runner_data = self._read_env_file(self.runner_env)
+                if "DEPLOY_IMAGE" in runner_data:
+                    user_deploy_image = runner_data["DEPLOY_IMAGE"]
+                    deploy_source = ".runner.env"
+            
+            # 사용자가 설정한 DEPLOY_IMAGE가 있으면 보호
+            if user_deploy_image and env_data.get("DEPLOY_IMAGE") == user_deploy_image:
+                print(f"📌 사용자 설정 DEPLOY_IMAGE 유지: {user_deploy_image} (소스: {deploy_source})", file=sys.stderr)
+        
         lines = []
 
         if include_warning:
@@ -190,7 +225,10 @@ class EnvManager:
             lines.append(f"# 생성 시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
             # .build-info가 있으면 표시 (IGNORE_BUILD_INFO가 설정되지 않은 경우만)
-            load_order = f".env.common → .env.{self.environment} → .env.local"
+            load_order = f".env.common → .env.{self.environment}"
+            if self.use_consul:
+                load_order += " → Consul"
+            load_order += " → .runner.env → .env.local"
             ignore_build_info = os.environ.get("IGNORE_BUILD_INFO", "").lower() in ("1", "true", "yes")
             if not ignore_build_info and self.build_info.exists():
                 load_order += " → .build-info (DEPLOY_IMAGE 오버라이드)"
@@ -215,6 +253,7 @@ class EnvManager:
         common_data = {}
         env_data = {}
         consul_data = {}
+        runner_data = {}
         local_data = {}
         build_data = {}
         
@@ -228,6 +267,9 @@ class EnvManager:
             consul_data = self._load_consul_live()
             if not consul_data and self.consul_env.exists():
                 consul_data = self._read_env_file(self.consul_env)
+        
+        if self.runner_env.exists():
+            runner_data = self._read_env_file(self.runner_env)
         
         if self.local_env.exists():
             local_data = self._read_env_file(self.local_env)
@@ -244,6 +286,7 @@ class EnvManager:
         all_keys.update(common_data.keys())
         all_keys.update(env_data.keys())
         all_keys.update(consul_data.keys())
+        all_keys.update(runner_data.keys())
         all_keys.update(local_data.keys())
         all_keys.update(build_data.keys())
         
@@ -268,6 +311,11 @@ class EnvManager:
                 sources.append(("Consul", consul_data[key]))
                 final_value = consul_data[key]
                 final_source = "Consul"
+            
+            if key in runner_data:
+                sources.append(("runner", runner_data[key]))
+                final_value = runner_data[key]
+                final_source = "runner"
             
             if key in local_data:
                 sources.append(("local", local_data[key]))
@@ -581,6 +629,7 @@ def main():
     parser.add_argument("--format", choices=["json", "table", "colored"], default="json", help="export-sources 출력 형식")
     parser.add_argument("--show-override", action="store_true", help="오버라이드 정보 표시")
     parser.add_argument("--use-consul", action="store_true", help="Consul 환경 변수 사용")
+    parser.add_argument("--preserve-user-deploy-image", action="store_true", help="사용자가 설정한 DEPLOY_IMAGE 보호 (.env.local/.runner.env)")
     parser.add_argument("key", nargs="?", help="환경 변수 키")
     parser.add_argument("value", nargs="?", help="환경 변수 값")
     
@@ -630,7 +679,10 @@ def main():
                 sys.exit(1)
         
         elif args.command == "export":
-            print(manager.export(include_warning=not args.no_warning))
+            print(manager.export(
+                include_warning=not args.no_warning,
+                preserve_user_deploy_image=args.preserve_user_deploy_image
+            ))
         
         elif args.command == "export-sources":
             output = manager.export_with_sources(
