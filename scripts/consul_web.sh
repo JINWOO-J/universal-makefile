@@ -32,6 +32,7 @@ Consul Configuration API Client (with decryption support)
 
 COMMANDS:
     export [prefix]     Configuration을 .env 형식으로 출력 (기본 명령어)
+    import <file>       .env 파일을 Consul에 업로드
     get <key>           특정 key 조회 (자동 복호화)
     list [prefix]       Configuration 목록 조회
     set <key> <value>   Configuration 설정
@@ -69,6 +70,10 @@ EXAMPLES:
 
     # 위험한 방식 - 모든 환경 포함 (명시적 옵션 필요)
     $0 --app web_service --all-env export
+
+    # .env 파일 import
+    $0 import .env --prefix dev
+    $0 import config.env --app web_service --env prod --overwrite
 
     # 복호화된 비밀번호 조회
     $0 get dev/password
@@ -234,6 +239,30 @@ api_delete() {
         "${url}${params:+?$params}" 2>/dev/null || echo '{"success": false, "detail": "Request failed"}'
 }
 
+# IMPORT 요청 (.env 파일 업로드)
+api_import() {
+    local file_path="$1"
+    local prefix="$2"
+    local overwrite="$3"
+    
+    check_api_key
+    
+    if [ ! -f "$file_path" ]; then
+        echo '{"success": false, "detail": "File not found"}'
+        return 1
+    fi
+    
+    local url="${CONSUL_API_URL}/api/v1/import/env"
+    
+    # multipart/form-data로 파일 업로드
+    curl -s -f -X POST \
+        -H "X-API-Key: ${CONSUL_API_KEY}" \
+        -F "file=@${file_path}" \
+        -F "prefix=${prefix}" \
+        -F "overwrite=${overwrite}" \
+        "$url" 2>/dev/null || echo '{"success": false, "detail": "Request failed"}'
+}
+
 # JSON 파싱 (jq 사용)
 parse_json() {
     local query="$1"
@@ -269,7 +298,7 @@ main() {
     # 인자 파싱
     while [[ $# -gt 0 ]]; do
         case $1 in
-            export|get|list|set|delete)
+            export|get|list|set|delete|import)
                 command="$1"
                 shift
                 ;;
@@ -418,23 +447,31 @@ main() {
         export)
             prefix="${key:-$prefix}"
             
-            response=$(api_list "$prefix")
+            log_info "Exporting configurations (prefix: ${prefix:-none})"
             
-            if echo "$response" | grep -q '"count"'; then
-                # 설정 개수 수집 (요약용)
-                local config_count
-                config_count=$(echo "$response" | parse_json '.count')
-                
-                # .env 형식으로 변환
-                local result
-                result=$(echo "$response" | parse_json '.items | to_entries[] | "\(.key | gsub("/"; "_") | ascii_upcase)=\(.value)"')
-                
-                # 출력 (stdout 또는 파일)
-                write_output "$result" "$output" "$overwrite"
+            # FastAPI 서버의 export 엔드포인트 사용
+            local url="${CONSUL_API_URL}/api/v1/export/full"
+            local params="format=env&decrypt=${decrypt}"
+            
+            if [ -n "$prefix" ]; then
+                params="${params}&prefix=${prefix}"
+            fi
+            
+            # curl 실행 및 응답 확인
+            response=$(curl -s -H "X-API-Key: ${CONSUL_API_KEY}" \
+                "${url}?${params}" 2>/dev/null)
+            curl_exit_code=$?
+            
+            if [ $curl_exit_code -eq 0 ] && [ -n "$response" ]; then
+                # 서버에서 이미 .env 형식으로 변환된 데이터를 받음
+                write_output "$response" "$output" "$overwrite"
                 
                 # 요약 정보 (stderr로 출력, --quiet가 아닐 때만)
                 if [ "$QUIET" != "true" ] && ([ -z "$output" ] || [ "$output" = "-" ]); then
-                    # stdout 출력 시에만 요약 출력 (파일 출력 시에는 write_output에서 이미 메시지 출력됨)
+                    # 라인 수 계산 (빈 줄과 주석 제외)
+                    local config_count
+                    config_count=$(echo "$response" | grep -v '^#' | grep -v '^$' | wc -l | tr -d ' ')
+                    
                     local decrypt_status="decrypted"
                     if [ "$decrypt" = "false" ]; then
                         decrypt_status="encrypted"
@@ -443,7 +480,50 @@ main() {
                 fi
             else
                 log_error "Failed to export configurations"
-                echo "$response" >&2
+                # 디버깅 정보 추가
+                log_error "curl exit code: $curl_exit_code"
+                log_error "URL: ${url}?${params}"
+                
+                # API 에러 응답 파싱 시도
+                if [ -n "$response" ]; then
+                    echo "$response" | parse_json '.detail' 2>/dev/null || echo "$response"
+                else
+                    echo "No response from server"
+                fi >&2
+                exit 1
+            fi
+            ;;
+            
+        import)
+            if [ -z "$key" ]; then
+                log_error "File path required"
+                exit 1
+            fi
+            
+            local file_path="$key"
+            
+            log_info "Importing .env file: ${file_path}"
+            
+            response=$(api_import "$file_path" "$prefix" "$overwrite")
+            
+            if echo "$response" | grep -q '"success".*true'; then
+                success_count=$(echo "$response" | parse_json '.success_count')
+                failed_count=$(echo "$response" | parse_json '.failed_count')
+                skipped_count=$(echo "$response" | parse_json '.skipped_count')
+                total_keys=$(echo "$response" | parse_json '.total_keys')
+                
+                log_info "✓ Import completed: $success_count imported, $skipped_count skipped, $failed_count failed (total: $total_keys)"
+                
+                # 실패한 키들이 있으면 표시
+                if [ "$failed_count" -gt 0 ]; then
+                    failed_keys=$(echo "$response" | parse_json '.failed_keys[]' 2>/dev/null)
+                    if [ -n "$failed_keys" ]; then
+                        log_warn "Failed keys: $failed_keys"
+                    fi
+                fi
+            else
+                log_error "Failed to import .env file"
+                echo "$response" | parse_json '.detail' 2>/dev/null || echo "$response" >&2
                 exit 1
             fi
             ;;
