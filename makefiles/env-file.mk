@@ -6,6 +6,14 @@ SHOW_OVERRIDE := true
 CONSUL_ENV_FILE ?= .env.runtime
 export CONSUL_ENV_FILE
 USE_CONSUL ?= false
+
+# Consul 장애 대응 정책 (CHANGED)
+# - CONSUL_ALLOW_STALE=true: Consul fetch 실패 시 캐시($(CONSUL_ENV_FILE))가 있으면 경고만 찍고 계속 진행
+# - CONSUL_FALLBACK_TO_LOCAL=true: 캐시도 없으면 로컬만으로 $(RESOLVED_ENV_FILE) 생성
+# - CONSUL_FALLBACK_KEEP_RESOLVED=true: 캐시도 없고 로컬 생성도 안 하면 기존 $(RESOLVED_ENV_FILE)이 있으면 유지
+CONSUL_ALLOW_STALE ?= true
+CONSUL_FALLBACK_TO_LOCAL ?= true
+CONSUL_FALLBACK_KEEP_RESOLVED ?= true
 CONSUL_CLIENT ?= python3 $(SCRIPTS_DIR)/consul_web.py
 CONSUL_API_URL ?= http://localhost:8000
 CONSUL_API_KEY ?= 
@@ -197,6 +205,10 @@ prepare-consul-env: ## 🔧 Consul에서 환경 변수 가져와서 .env.consul 
 	    fi; \
 	    echo "$(GRAY)💡 Consul 서버 상태와 API 키를 확인하세요$(NC)"; \
 	    echo "$(GRAY)💡 DEBUG=true로 실행하면 더 자세한 정보를 볼 수 있습니다$(NC)"; \
+	    if [ "$(CONSUL_ALLOW_STALE)" = "true" ] && [ -s "$(CONSUL_ENV_FILE)" ]; then \
+	      echo "$(YELLOW)[WARN]$(NC) CONSUL_ALLOW_STALE=true: 캐시 $(CONSUL_ENV_FILE) 사용하여 계속 진행합니다."; \
+	      exit 0; \
+	    fi; \
 	    exit 1; \
 	  fi; \
 	}
@@ -260,7 +272,22 @@ prepare-consul-runtime-env: ## 🔧 Consul + 로컬 환경 변수 병합하여 $
 		exit 1; \
 	fi
 	@# 먼저 Consul에서 환경 변수 가져오기
-	@$(MAKE) --no-print-directory prepare-consul-env
+	@CONSUL_OK=1; \
+	$(MAKE) --no-print-directory prepare-consul-env || CONSUL_OK=0; \
+	if [ "$$CONSUL_OK" -eq 0 ]; then \
+	  echo "$(YELLOW)[WARN]$(NC) Consul fetch 실패"; \
+	  if [ "$(CONSUL_FALLBACK_TO_LOCAL)" = "true" ]; then \
+	    echo "$(YELLOW)[WARN]$(NC) CONSUL_FALLBACK_TO_LOCAL=true: 로컬 값만으로 $(RESOLVED_ENV_FILE) 생성합니다."; \
+	    $(ENV_MANAGER) export --environment "$(ENVIRONMENT)" > $(RESOLVED_ENV_FILE); \
+	    exit 0; \
+	  fi; \
+	  if [ "$(CONSUL_FALLBACK_KEEP_RESOLVED)" = "true" ] && [ -s "$(RESOLVED_ENV_FILE)" ]; then \
+	    echo "$(YELLOW)[WARN]$(NC) CONSUL_FALLBACK_KEEP_RESOLVED=true: 기존 $(RESOLVED_ENV_FILE) 유지(변경 없음)"; \
+	    exit 0; \
+	  fi; \
+	  echo "$(RED)❌ fallback 불가 → 중단$(NC)"; \
+	  exit 1; \
+	fi
 	@echo ""
 	@echo "$(CYAN)🔄 환경 변수 병합 중...$(NC)"
 	@{ \

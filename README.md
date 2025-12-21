@@ -1333,16 +1333,64 @@ make security-scan
 
 ### 환경 변수 관리
 
+`makefiles/env-file.mk` 기준으로 **로컬 환경 + (선택) Consul**을 합쳐 `docker-compose`에서 바로 쓸 수 있는 **최종 파일**을 만듭니다.
+
+#### 로컬 파일 로딩 정책
+
+- **`.env.common`**: 있으면 자동 로드/export
+- **`.env.local`**: 있으면 자동 로드/export (오버라이드 용도)
+  - 정책: `.env.local`은 **자동 생성하지 않음**(read-only). 필요하면 직접 만들어 사용
+
+#### 기본(로컬) 모드: `.env.resolved` 생성
+
 ```bash
-# .env 파일 생성
+# 기본: 로컬 환경 변수만으로 .env.resolved 생성
+make prepare-env
+
+# 별칭
 make env
 
-# 환경 설정 확인
-make env-show
-
-# 로컬 설정은 .project.local.mk 사용
-echo "REPO_HUB=dev-$(whoami)" > .project.local.mk
+# 출력 파일명 변경(선택)
+make prepare-env RESOLVED_ENV_FILE=.env.resolved.dev
 ```
+
+#### Consul 모드: Consul + 로컬 병합 (캐시/폴백 정책 포함)
+
+```bash
+# Consul + 로컬 병합하여 .env.resolved 생성
+make prepare-env USE_CONSUL=true \
+  CONSUL_APP=myapp CONSUL_API_URL=http://localhost:8000 CONSUL_API_KEY=*** \
+  ENVIRONMENT=production
+```
+
+Consul 모드 동작 요약:
+- **캐시 파일**: `CONSUL_ENV_FILE` (기본: `.env.runtime`)에 Consul 값을 저장
+- **최종 파일**: `RESOLVED_ENV_FILE` (기본: `.env.resolved`)에 **Consul + 로컬** 최종 결과 저장
+
+Consul 장애 대응 정책(기본값은 “웬만하면 계속 진행” 쪽):
+- **`CONSUL_ALLOW_STALE=true`**: Consul fetch 실패 시 캐시(`$(CONSUL_ENV_FILE)`)가 있으면 **경고만** 찍고 계속
+- **`CONSUL_FALLBACK_TO_LOCAL=true`**: 캐시도 없으면 **로컬만으로** `$(RESOLVED_ENV_FILE)` 생성
+- **`CONSUL_FALLBACK_KEEP_RESOLVED=true`**: 캐시도 없고 로컬 생성도 불가하면 **기존 `$(RESOLVED_ENV_FILE)`이 있으면 유지**
+
+#### 조회/디버깅
+
+```bash
+# 최종 값(오버라이드 포함) 조회 (FILTER로 키워드 필터 가능)
+make env-list
+make env-list FILTER=LOG
+
+# Consul 값 조회/캐시 생성
+make prepare-consul-env USE_CONSUL=true CONSUL_APP=myapp ENVIRONMENT=production
+
+# Consul+로컬 병합(캐시 → 최종 파일)
+make prepare-consul-runtime-env USE_CONSUL=true CONSUL_APP=myapp ENVIRONMENT=production
+
+# Consul 연결 디버깅
+make consul-debug USE_CONSUL=true CONSUL_APP=myapp ENVIRONMENT=production
+```
+
+참고:
+- `env-list`는 read-only 성격이라 **캐시 자동 갱신을 하지 않습니다**. 최신 Consul 값을 반영하려면 먼저 `make prepare-consul-env`를 실행하세요.
 
 ## 📚 확장 및 커스터마이징
 

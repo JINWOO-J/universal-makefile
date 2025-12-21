@@ -215,6 +215,86 @@ class ConsulAPIClient:
         logger.debug(f"[TIMING] Session creation: {(t_after_session - t_before_session)*1000:.2f}ms")
         logger.debug(f"[TIMING] ConsulAPIClient.__init__ total: {(t_after_session - t_init_start)*1000:.2f}ms")
 
+    def validate_app_env_existence(self, app: str, env_name: str, strict_mode: bool = False) -> Tuple[bool, str]:
+        """
+        지정된 app과 env가 실제로 Consul에 존재하는지 검증
+        
+        Args:
+            app: 애플리케이션 이름
+            env_name: 환경 이름  
+            strict_mode: True면 존재하지 않을 때 에러, False면 경고
+            
+        Returns:
+            (exists, message) 튜플
+        """
+        try:
+            t_start = time.perf_counter()
+            
+            # 1. app 레벨 확인 - app/* 패턴으로 키가 있는지 확인
+            app_exists = False
+            app_envs = set()
+            
+            # 전체 키 목록을 가져와서 app 패턴 확인
+            resp = self.session.get(
+                f"{self.base_url}/api/v1/config",
+                params={'prefix': '', 'include_metadata': 'false'},
+                timeout=self.timeout,
+            )
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                all_keys = list(data.get('items', {}).keys())
+                
+                # app으로 시작하는 키들 찾기
+                app_prefix = f"{app}/"
+                for key in all_keys:
+                    if key.startswith(app_prefix):
+                        app_exists = True
+                        # env 추출 (app/env/... 패턴에서 env 부분)
+                        remaining = key[len(app_prefix):]
+                        if '/' in remaining:
+                            env_part = remaining.split('/')[0]
+                            app_envs.add(env_part)
+                        else:
+                            # app/key 형태 (env 없이 직접 키)
+                            app_envs.add('(direct)')
+            
+            t_request = time.perf_counter()
+            logger.debug(f"[TIMING] validate_app_env_existence: {(t_request - t_start)*1000:.2f}ms")
+            
+            # 2. 검증 결과 분석
+            if not app_exists:
+                msg = f"App '{app}' not found in Consul. No keys found with prefix '{app}/'"
+                if strict_mode:
+                    return False, f"ERROR: {msg}"
+                else:
+                    return False, f"WARNING: {msg}"
+            
+            # 3. env 검증 (env_name이 지정된 경우)
+            if env_name and env_name != '':
+                if env_name not in app_envs:
+                    available_envs = sorted(list(app_envs))
+                    msg = f"Environment '{env_name}' not found for app '{app}'. Available environments: {available_envs}"
+                    if strict_mode:
+                        return False, f"ERROR: {msg}"
+                    else:
+                        return False, f"WARNING: {msg}"
+            
+            # 4. 성공 케이스
+            if env_name and env_name != '':
+                return True, f"✓ App '{app}' and environment '{env_name}' exist in Consul"
+            else:
+                available_envs = sorted(list(app_envs))
+                return True, f"✓ App '{app}' exists in Consul with environments: {available_envs}"
+                
+        except Exception as e:
+            msg = f"Failed to validate app/env existence: {e}"
+            logger.debug(f"Validation error: {e}")
+            if strict_mode:
+                return False, f"ERROR: {msg}"
+            else:
+                return False, f"WARNING: {msg} (continuing anyway)"
+
     def get_config(self, key: str, decrypt: bool = True) -> Optional[str]:
         """단일 설정 조회"""
         t_start = time.perf_counter()
@@ -436,6 +516,8 @@ Examples:
                         help='HTTP request timeout in seconds (env: CONSUL_TIMEOUT)')
     parser.add_argument('--use-quotes', action='store_true',
                         help='Wrap values with double quotes in env format (env: CONSUL_USE_QUOTES=true)')
+    parser.add_argument('--strict-mode', action='store_true',
+                        help='Exit with error if app/env not found (env: CONSUL_STRICT_MODE=true)')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Print resolved configuration and sources')
 
@@ -513,6 +595,7 @@ def extract_global_args(argv):
         '--log-level': 1,
         '--timeout': 1,
         '--use-quotes': 0,
+        '--strict-mode': 0,
         '-v': 0,
         '--verbose': 0,
     }
@@ -615,6 +698,19 @@ def main():
     t8 = time.perf_counter()
     logger.debug(f"[TIMING] resolve configuration values: {(t8 - t7)*1000:.2f}ms")
 
+    # strict-mode: CLI 플래그가 True면 무조건 CLI 우선.
+    # CLI에서 안 켰으면(.env/OS env에 CONSUL_STRICT_MODE=true가 있으면 켜기)
+    if getattr(args, 'strict_mode', False):
+        strict_mode, strict_src = True, "CLI(--strict-mode)"
+    else:
+        # .env / OS env에서만 읽음
+        if "CONSUL_STRICT_MODE" in dotenv:
+            strict_mode, strict_src = parse_bool(dotenv["CONSUL_STRICT_MODE"]), ".env(CONSUL_STRICT_MODE)"
+        elif os.environ.get("CONSUL_STRICT_MODE") is not None:
+            strict_mode, strict_src = parse_bool(os.environ.get("CONSUL_STRICT_MODE", "")), "OS_ENV(CONSUL_STRICT_MODE)"
+        else:
+            strict_mode, strict_src = False, "DEFAULT"
+
     # use-quotes: CLI 플래그가 True면 무조건 CLI 우선.
     # CLI에서 안 켰으면(.env/OS env에 CONSUL_USE_QUOTES=true가 있으면 켜기)
     if args.use_quotes:
@@ -628,6 +724,11 @@ def main():
         else:
             use_quotes, quotes_src = False, "DEFAULT"
 
+    # strict_mode 설정 추가
+    strict_mode, strict_src = resolve_value(
+        "strict-mode", None, dotenv, "CONSUL_STRICT_MODE", default="false", cast=parse_bool
+    )
+
     resolved["ENV_FILE"] = (env_file or "", f"{'CLI/DEFAULT' if env_file else 'NONE'}")
     resolved["CONSUL_API_URL"] = (api_url, api_url_src)
     resolved["CONSUL_API_KEY"] = ("***" if api_key else None, api_key_src)
@@ -637,6 +738,7 @@ def main():
     resolved["CONSUL_LOG_LEVEL"] = (log_level, log_src)
     resolved["CONSUL_TIMEOUT"] = (timeout, timeout_src)
     resolved["CONSUL_USE_QUOTES"] = (use_quotes, quotes_src)
+    resolved["CONSUL_STRICT_MODE"] = (strict_mode, strict_src)
 
     auto_prefix = None
     if (not prefix or prefix == "") and app and app != "" and env_name and env_name != "":
@@ -678,6 +780,7 @@ def main():
             "CONSUL_LOG_LEVEL",
             "CONSUL_TIMEOUT",
             "CONSUL_USE_QUOTES",
+            "CONSUL_STRICT_MODE",
         ]:
             v, src = resolved[k]
             print(f"- {k}: {v}    <- {src}")
@@ -727,6 +830,36 @@ def main():
     
     t_client = time.perf_counter()
     logger.debug(f"[TIMING] ConsulAPIClient initialization: {(t_client - t_config_end)*1000:.2f}ms")
+
+    # App/Env 존재 여부 검증 (export 명령어에서만 수행)
+    if args.command == 'export' and app and app != "":
+        t_validation_start = time.perf_counter()
+        
+        # --all-env 사용 시에는 env 검증 생략
+        validation_env = env_name if not args.all_env else ""
+        
+        exists, validation_msg = client.validate_app_env_existence(
+            app=str(app), 
+            env_name=str(validation_env), 
+            strict_mode=bool(strict_mode)
+        )
+        
+        t_validation_end = time.perf_counter()
+        logger.debug(f"[TIMING] App/Env validation: {(t_validation_end - t_validation_start)*1000:.2f}ms")
+        
+        if not exists:
+            if strict_mode:
+                # Strict mode: 에러로 처리하고 종료
+                logger.error(validation_msg)
+                sys.exit(1)
+            else:
+                # Non-strict mode: 경고만 출력하고 계속 진행
+                logger.warning(validation_msg)
+                logger.warning("Continuing anyway... (set CONSUL_STRICT_MODE=true to make this an error)")
+        else:
+            # 성공 시에는 verbose 모드에서만 출력
+            if args.verbose:
+                logger.info(validation_msg)
 
     try:
         if args.command == 'get':
