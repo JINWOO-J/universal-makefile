@@ -114,7 +114,18 @@ endif
 
 _SAFE_TAGNAME := $(shell echo '$(_SOURCE_FOR_SANITIZE)' | sed 's/[^a-zA-Z0-9_.-]/-/g')
 
-override TAGNAME := $(_SAFE_TAGNAME)
+# Optional tag suffix (e.g. TAG_SUFFIX=canary or TAG_SUFFIX=-canary) (CHANGED)
+TAG_SUFFIX ?=
+_RAW_TAG_SUFFIX := $(strip $(TAG_SUFFIX))
+_SAFE_TAG_SUFFIX := $(shell echo '$(_RAW_TAG_SUFFIX)' | sed 's/[^a-zA-Z0-9_.-]/-/g')
+# Auto-add "-" prefix if user didn't provide one (e.g. canary -> -canary) (CHANGED)
+ifneq ($(strip $(_SAFE_TAG_SUFFIX)),)
+  ifeq ($(filter -%,$(_SAFE_TAG_SUFFIX)),)
+    _SAFE_TAG_SUFFIX := -$(_SAFE_TAG_SUFFIX)
+  endif
+endif
+
+override TAGNAME := $(_SAFE_TAGNAME)$(_SAFE_TAG_SUFFIX)
 
 ifneq ($(_SOURCE_FOR_SANITIZE),$(TAGNAME))
 $(info ⚠️  Warning: Original tag '$(_SOURCE_FOR_SANITIZE)' contained invalid characters. Sanitized to '$(TAGNAME)'.)

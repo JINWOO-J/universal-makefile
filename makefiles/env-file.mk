@@ -302,7 +302,7 @@ prepare-consul-runtime-env: ## 🔧 Consul + 로컬 환경 변수 병합하여 $
 	  : "NOTE: 여기서 Consul 캐시 파일을 cat으로 먼저 붙이면 동일 키가 중복되므로 금지"; \
 	  $(ENV_MANAGER) export --environment "$(ENVIRONMENT)" --use-consul --preserve-user-deploy-image > "$$TMP"; \
 	  \
-	  : "DEPLOY_IMAGE 우선순위 확인: .env.local > .runner.env > Git 계산값"; \
+	  : "DEPLOY_IMAGE 우선순위 확인: .env.local > .runner.env > .build-info > Git 계산값"; \
 	  EXISTING_DEPLOY_IMAGE=$$(grep '^DEPLOY_IMAGE=' "$$TMP" 2>/dev/null | cut -d= -f2 || echo ""); \
 	  USE_GIT_IMAGE=true; \
 	  DEPLOY_SOURCE="Git 계산"; \
@@ -317,6 +317,10 @@ prepare-consul-runtime-env: ## 🔧 Consul + 로컬 환경 변수 병합하여 $
 	    echo "$(CYAN)🔍 .runner.env에서 DEPLOY_IMAGE 발견: $$RUNNER_DEPLOY_IMAGE$(NC)"; \
 	    USE_GIT_IMAGE=false; \
 	    DEPLOY_SOURCE=".runner.env"; \
+	  elif [ -f ".build-info" ] && [ -n "$$EXISTING_DEPLOY_IMAGE" ]; then \
+	    echo "$(CYAN)🔍 .build-info 기반 DEPLOY_IMAGE 유지: $$EXISTING_DEPLOY_IMAGE$(NC)"; \
+	    USE_GIT_IMAGE=false; \
+	    DEPLOY_SOURCE=".build-info"; \
 	  fi; \
 	  \
 	  if [ "$$USE_GIT_IMAGE" = "true" ] && [ -d "$(SOURCE_DIR)" ] && cd "$(SOURCE_DIR)" >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then \
