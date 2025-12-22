@@ -10,11 +10,18 @@ REF="${2:-}"
 IMAGE_NAME="${3:-repo/app}"
 SERVICE_KIND="${4:-be}"
 VERSION="${5:-v1.0.0}"
+TAG_SUFFIX_RAW="${6:-${TAG_SUFFIX:-}}"  # CHANGED: optional suffix (env or 6th arg)
+
+# suffix 정규화 (CHANGED)
+TAG_SUFFIX="$(echo "${TAG_SUFFIX_RAW}" | tr -d '[:space:]' | sed 's/[^a-zA-Z0-9_.-]/-/g; s/-\\+/-/g')"
+if [ -n "$TAG_SUFFIX" ] && [[ "$TAG_SUFFIX" != -* ]]; then
+  TAG_SUFFIX="-$TAG_SUFFIX"
+fi
 
 # Git 정보가 없으면 기본값 사용
 if [ ! -d "$SOURCE_DIR" ] || [ ! -d "$SOURCE_DIR/.git" ]; then
     echo "Warning: No git repository found in $SOURCE_DIR" >&2
-    echo "$IMAGE_NAME:$SERVICE_KIND-$VERSION-unknown-$(date +%Y%m%d)-unknown"
+    echo "$IMAGE_NAME:$SERVICE_KIND-$VERSION-unknown-$(date +%Y%m%d)-unknown${TAG_SUFFIX}"
     exit 0
 fi
 
@@ -51,6 +58,6 @@ fi
 CURRENT_DATE=$(date +%Y%m%d)
 
 # 최종 이미지 태그 생성
-IMAGE_TAG="$IMAGE_NAME:$SERVICE_KIND-$VERSION-$BRANCH_NAME-$CURRENT_DATE-$SHA8"
+IMAGE_TAG="$IMAGE_NAME:$SERVICE_KIND-$VERSION-$BRANCH_NAME-$CURRENT_DATE-$SHA8${TAG_SUFFIX}"
 
 echo "$IMAGE_TAG"

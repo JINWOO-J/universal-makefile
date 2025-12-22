@@ -214,7 +214,8 @@ _compute-build-tag:
 				"$(REF)" \
 				"$(IMAGE_NAME)" \
 				"$(SERVICE_KIND)" \
-				"$(VERSION)"; \
+				"$(VERSION)" \
+				"$(TAG_SUFFIX)"; \
 		else \
 			echo "$(FULL_TAG)"; \
 		fi \
