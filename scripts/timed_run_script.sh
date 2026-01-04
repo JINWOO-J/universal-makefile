@@ -8,7 +8,12 @@ set -o pipefail
 # Configuration from environment
 # ================================================================
 TASK_NAME="${TIMED_TASK_NAME:-Task}"
-MODE="${TIMED_MODE:-auto}"
+# CI 환경에서는 기본적으로 quiet 모드 사용
+if [ "${CI:-false}" = "true" ]; then
+    MODE="${TIMED_MODE:-quiet}"
+else
+    MODE="${TIMED_MODE:-auto}"
+fi
 DEBUG="${TIMED_DEBUG:-false}"
 COLORS="${TIMED_COLORS:-true}"
 
@@ -22,7 +27,7 @@ if [ -n "${TIMED_FORCE_MODE:-}" ]; then
     MODE="$TIMED_FORCE_MODE"
 fi
 
-if [ "$COLORS" = "true" ] && [ -t 1 ]; then
+if [ "$COLORS" = "true" ] && [ -t 1 ] && [ "${CI:-false}" != "true" ]; then
     YELLOW="${YELLOW:-\033[33m}"
     GREEN="${GREEN:-\033[32m}"
     RED="${RED:-\033[31m}"
@@ -177,7 +182,7 @@ run_quiet() {
     local start=$(get_nano_time)
     local command_str="$*"
     
-    if "$@"; then
+    if eval "$@"; then
         local end=$(get_nano_time)
         local duration=$(format_duration $((end - start)))
         echo "${GREEN}✅ Completed in $duration${RESET}"
