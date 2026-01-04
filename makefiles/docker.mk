@@ -182,7 +182,7 @@ build: validate-dockerfile check-docker make-build-args ensure-source _compute-b
 	@$(if $(DISABLE_CACHE),echo "  CACHE: DISABLED",echo "  CACHE_IMAGE: $(CACHE_IMAGE)")
 	@$(if $(DISABLE_CACHE),echo "  CACHE_FALLBACK: $(CACHE_IMAGE_MAIN)")
 	@echo ""
-	$(call run_interactive, Image Build $(BUILD_TAG_COMPUTED), \
+	$(if $(filter true,$(CI)),$(call run_quiet, Image Build $(BUILD_TAG_COMPUTED), \
 		DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker buildx build \
 			$(DOCKER_BUILD_OPTION) \
 			$(BUILD_ARGS_CONTENT) \
@@ -190,7 +190,15 @@ build: validate-dockerfile check-docker make-build-args ensure-source _compute-b
 			-t $(BUILD_TAG_COMPUTED) \
 			$(BUILDX_FLAGS) \
 			$(DOCKERFILE_CONTEXT) \
-	)
+	),$(call run_interactive, Image Build $(BUILD_TAG_COMPUTED), \
+		DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker buildx build \
+			$(DOCKER_BUILD_OPTION) \
+			$(BUILD_ARGS_CONTENT) \
+			-f $(DOCKERFILE_PATH) \
+			-t $(BUILD_TAG_COMPUTED) \
+			$(BUILDX_FLAGS) \
+			$(DOCKERFILE_CONTEXT) \
+	))
 	@echo ""
 	@$(call print_color, $(BLUE),--- Image Details ---)
 	@docker images $(BUILD_TAG_COMPUTED)
