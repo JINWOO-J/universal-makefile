@@ -172,7 +172,7 @@ validate-dockerfile: ## 🔧 Validate Dockerfile exists and is readable
 		$(call print_color, $(BLUE),🔎 Using Dockerfile: $(DOCKERFILE_PATH)); \
 	fi
 
-build: validate-dockerfile check-docker make-build-args ensure-source _compute-build-tag _prepare-build-hook ## 🎯 Build the Docker image
+build: ensure-source validate-dockerfile check-docker make-build-args _compute-build-tag _prepare-build-hook ## 🎯 Build the Docker image
 	@$(call print_color,$(BLUE),🔨 Building Docker image with tag: $(BUILD_TAG_COMPUTED))
 	@echo "$(BLUE)🔍 Cache Debug Info:$(RESET)"
 	@echo "  Environment: $(if $(CI),GitHub Actions,Local)"
