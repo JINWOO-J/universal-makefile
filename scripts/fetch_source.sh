@@ -16,239 +16,271 @@
 #   - pull  : git pull (로컬 변경사항 병합 시도)
 #   - keep  : fetch만 실행 (로컬 유지)
 
-set -e  # 에러 발생 시 즉시 종료
+set -euo pipefail
 
-# 색상 정의
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+#=============================================================================
+# 색상 및 로깅
+#=============================================================================
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[0;33m'
+readonly BLUE='\033[0;34m'
+readonly NC='\033[0m'
 
-# 인자 받기
-SOURCE_DIR="$1"
-SOURCE_REPO="$2"
-REF="$3"
-SYNC_MODE="${4:-reset}"  # 기본값: reset (remote 우선)
-FETCH_ALL="${5:-false}"  # 기본값: false
+log_info()  { echo -e "${BLUE}[INFO]${NC} $*"; }
+log_warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
+log_ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
 
-# 인자 검증
-if [ -z "$SOURCE_DIR" ] || [ -z "$SOURCE_REPO" ] || [ -z "$REF" ]; then
-    echo -e "${RED}❌ 에러: 필수 인자가 누락되었습니다${NC}"
-    echo "사용법: $0 <SOURCE_DIR> <SOURCE_REPO> <REF> [SYNC_MODE] [FETCH_ALL]"
-    exit 1
-fi
-
-# SYNC_MODE 검증
-case "$SYNC_MODE" in
-    clone|reset|pull|keep) ;;
-    *)
-        echo -e "${RED}❌ 에러: 잘못된 SYNC_MODE: $SYNC_MODE${NC}"
-        echo "사용 가능한 값: clone, reset, pull, keep"
-        exit 1
-        ;;
-esac
-
-echo -e "${BLUE}[INFO]${NC} 소스 코드 가져오기 시작..."
-echo "  SOURCE_DIR: $SOURCE_DIR"
-echo "  SOURCE_REPO: $SOURCE_REPO"
-echo "  REF: $REF"
-echo "  SYNC_MODE: $SYNC_MODE"
-echo "  FETCH_ALL: $FETCH_ALL"
-echo ""
-
-# 동기화 모드별 동작 판단
-NEED_CLONE=false
-FORCE_RESET=false
-DO_PULL=false
-FETCH_ONLY=false
-
-if [ -d "$SOURCE_DIR" ]; then
-    case "$SYNC_MODE" in
-        clone)
-            echo "🗑️  SYNC_MODE=clone: 기존 소스 디렉토리 삭제 후 새로 clone"
-            rm -rf "$SOURCE_DIR"
-            NEED_CLONE=true
-            ;;
-        reset)
-            echo "🔄 SYNC_MODE=reset: remote 강제 적용 (로컬 무시)"
-            if [ ! -d "$SOURCE_DIR/.git" ]; then
-                echo -e "${RED}❌ 에러: $SOURCE_DIR는 git 저장소가 아닙니다${NC}"
-                echo -e "${YELLOW}💡 SYNC_MODE=clone으로 다시 시도하세요${NC}"
-                exit 1
-            fi
-            FORCE_RESET=true
-            ;;
-        pull)
-            echo "⬇️  SYNC_MODE=pull: 로컬 변경사항 병합 시도"
-            if [ ! -d "$SOURCE_DIR/.git" ]; then
-                echo -e "${RED}❌ 에러: $SOURCE_DIR는 git 저장소가 아닙니다${NC}"
-                echo -e "${YELLOW}💡 SYNC_MODE=clone으로 다시 시도하세요${NC}"
-                exit 1
-            fi
-            DO_PULL=true
-            ;;
-        keep)
-            echo "♻️  SYNC_MODE=keep: fetch만 실행 (로컬 유지)"
-            if [ ! -d "$SOURCE_DIR/.git" ]; then
-                echo -e "${RED}❌ 에러: $SOURCE_DIR는 git 저장소가 아닙니다${NC}"
-                echo -e "${YELLOW}💡 SYNC_MODE=clone으로 다시 시도하세요${NC}"
-                exit 1
-            fi
-            FETCH_ONLY=true
-            ;;
-    esac
-else
-    echo "📁 소스 디렉토리가 없습니다. clone 실행..."
-    NEED_CLONE=true
-fi
+die() {
+    log_error "$1"
+    exit "${2:-1}"
+}
 
 # Git URL 생성 함수
 build_git_url() {
     local repo="$1"
-    
+
     # 이미 완전한 URL인 경우 (https:// 또는 git@)
-    if [[ "$repo" =~ ^https:// ]] || [[ "$repo" =~ ^git@ ]]; then
+    if [[ "$repo" =~ ^(https://|git@) ]]; then
         echo "$repo"
         return
     fi
-    
-    # SSH 형식 감지 (git@github.com:owner/repo)
-    if [[ "$repo" =~ ^git@ ]]; then
-        echo "$repo"
-        return
-    fi
-    
+
     # owner/repo 형식 → HTTPS URL 생성
-    # GH_TOKEN이 있으면 포함
-    if [ -n "$GH_TOKEN" ]; then
+    if [[ -n "${GH_TOKEN:-}" ]]; then
         echo "https://${GH_TOKEN}@github.com/${repo}.git"
     else
         echo "https://github.com/${repo}.git"
     fi
 }
 
-# Clone 또는 Fetch/Pull
-if [ "$NEED_CLONE" = "true" ]; then
-    mkdir -p "$SOURCE_DIR"
-    echo ""
-    
-    # Git URL 생성
-    GIT_URL=$(build_git_url "$SOURCE_REPO")
-    
-    # 토큰 마스킹된 URL (로그용)
-    if [ -n "$GH_TOKEN" ]; then
-        DISPLAY_URL=$(echo "$GIT_URL" | sed "s/${GH_TOKEN}/***TOKEN***/g")
-        echo -e "${BLUE}[INFO]${NC} 저장소 클론: $DISPLAY_URL"
+# 토큰이 마스킹된 URL 반환 (로그용)
+mask_token_url() {
+    local url="$1"
+    if [[ -n "${GH_TOKEN:-}" ]]; then
+        echo "${url//${GH_TOKEN}/***TOKEN***}"
     else
-        echo -e "${BLUE}[INFO]${NC} 저장소 클론: $GIT_URL"
+        echo "$url"
     fi
-    
-    git clone "$GIT_URL" "$SOURCE_DIR" || {
-        echo -e "${RED}❌ 저장소 클론 실패${NC}"
-        exit 1
-    }
-else
-    echo ""
-    cd "$SOURCE_DIR"
-    
-    # Fetch 실행
-    if [ "$FETCH_ALL" = "true" ]; then
-        echo -e "${BLUE}[INFO]${NC} 모든 remote 가져오는 중..."
-        git fetch --all --prune || {
-            echo -e "${RED}❌ git fetch --all 실패${NC}"
-            exit 1
-        }
-    else
-        echo -e "${BLUE}[INFO]${NC} 기존 저장소 업데이트: $SOURCE_REPO"
-        git fetch origin --prune || {
-            echo -e "${RED}❌ git fetch 실패${NC}"
-            exit 1
-        }
-    fi
-    
-    # SYNC_MODE별 후속 처리
-    if [ "$FORCE_RESET" = "true" ]; then
-        echo -e "${YELLOW}⚠️  로컬 변경사항 무시하고 remote로 강제 리셋${NC}"
-        # 아직 체크아웃 전이므로, REF 체크아웃 후 reset 수행
-    elif [ "$DO_PULL" = "true" ]; then
-        echo -e "${BLUE}[INFO]${NC} 로컬 변경사항 병합 시도 (pull)"
-        # 현재 브랜치에서 pull 수행
-        git pull origin "$(git rev-parse --abbrev-ref HEAD)" || {
-            echo -e "${YELLOW}⚠️  병합 충돌 발생. 수동으로 해결이 필요합니다.${NC}"
-            exit 1
-        }
-    elif [ "$FETCH_ONLY" = "true" ]; then
-        echo -e "${GREEN}✓ fetch 완료 (로컬 유지)${NC}"
-    fi
-fi
-
-# REF 체크아웃
-echo ""
-echo -e "${BLUE}[INFO]${NC} 참조 체크아웃: $REF"
-cd "$SOURCE_DIR"
-
-# PR 브랜치 이름을 저장할 변수
-RESET_TARGET="$REF"
-
-if [[ "$REF" == refs/pull/* ]]; then
-    echo -e "${BLUE}[INFO]${NC} PR 참조 감지, fetch 실행: $REF"
-
-    # PR 번호 추출 (refs/pull/17/head -> pr-17)
-    PR_NUMBER=$(echo "$REF" | sed -n 's|refs/pull/\([0-9]*\)/.*|\1|p')
-    BRANCH_NAME="pr-${PR_NUMBER}"
-    RESET_TARGET="$BRANCH_NAME"
-
-    echo "  PR 번호: $PR_NUMBER"
-    echo "  브랜치 이름: $BRANCH_NAME"
-
-    # 해당 브랜치가 이미 체크아웃되어 있으면 임시로 detached HEAD로 이동
-    CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
-    if [ "$CURRENT_BRANCH" = "$BRANCH_NAME" ]; then
-        echo "  현재 $BRANCH_NAME에 있음, 임시로 HEAD로 이동..."
-        git checkout --detach HEAD
-    fi
-
-    # 기존 브랜치 삭제 후 다시 생성 (강제 업데이트)
-    git branch -D "$BRANCH_NAME" 2>/dev/null || true
-    git fetch origin "$REF:$BRANCH_NAME" && git checkout "$BRANCH_NAME"
-else
-    # 일반 브랜치: 원격 브랜치를 기준으로 로컬 브랜치 생성/업데이트
-    if [ "$FORCE_RESET" = "true" ]; then
-        git checkout -B "$REF" "origin/$REF" 2>/dev/null || git checkout "$REF"
-    else
-        git checkout "$REF"
-    fi
-fi || {
-    echo -e "${RED}❌ 참조 체크아웃 실패${NC}"
-    exit 1
 }
 
-# FORCE_RESET 처리 (체크아웃 후)
-if [ "$FORCE_RESET" = "true" ]; then
-    echo ""
-    echo -e "${YELLOW}⚠️  remote로 강제 리셋 중...${NC}"
-    # PR의 경우 RESET_TARGET을 사용 (pr-XX 브랜치명)
-    # 일반 브랜치의 경우 origin/ 브랜치명 사용
-    if [[ "$REF" == refs/pull/* ]]; then
-        git reset --hard "$RESET_TARGET" || {
-            echo -e "${YELLOW}⚠️  reset 실패 (브랜치가 remote에 없거나 detached 상태)${NC}"
-        }
-    else
-        git reset --hard "origin/$REF" || {
-            echo -e "${YELLOW}⚠️  reset 실패 (브랜치가 remote에 없거나 detached 상태)${NC}"
-        }
+# git 저장소 검증
+validate_git_repo() {
+    local dir="$1"
+    if [[ ! -d "$dir/.git" ]]; then
+        log_error "$dir 는 git 저장소가 아닙니다"
+        log_warn "SYNC_MODE=clone으로 다시 시도하세요"
+        exit 1
     fi
-fi
+}
 
-# 완료 메시지
-echo ""
-BRANCH=$(git branch --show-current 2>/dev/null || echo 'detached')
-COMMIT_HASH=$(git rev-parse --short HEAD)
-echo -e "✓ ${GREEN}완료: (브랜치: $BRANCH, 커밋: $COMMIT_HASH)${NC}"
-echo "--------------------------------------------------"
-git --no-pager log -4 --pretty=format:"%C(yellow)%h%Creset %C(blue)%ad%Creset  %s" --date=short
-echo ""
-echo "--------------------------------------------------"
-echo ""
-echo -e "${GREEN}✅ 소스 코드 가져오기 완료${NC}"
+# Clone 수행
+do_clone() {
+    local git_url="$1"
+    local target_dir="$2"
+
+    mkdir -p "$target_dir"
+    log_info "저장소 클론: $(mask_token_url "$git_url")"
+
+    if ! git clone "$git_url" "$target_dir"; then
+        die "저장소 클론 실패"
+    fi
+}
+
+# Fetch 수행
+do_fetch() {
+    local fetch_all="$1"
+
+    if [[ "$fetch_all" == "true" ]]; then
+        log_info "모든 remote 가져오는 중..."
+        git fetch --all --prune || die "git fetch --all 실패"
+    else
+        log_info "기존 저장소 업데이트 중..."
+        git fetch origin --prune || die "git fetch 실패"
+    fi
+}
+
+# REF 체크아웃 (PR 또는 일반 브랜치)
+checkout_ref() {
+    local ref="$1"
+    local force_reset="$2"
+
+    if [[ "$ref" == refs/pull/* ]]; then
+        checkout_pr_ref "$ref" "$force_reset"
+    else
+        checkout_branch_ref "$ref" "$force_reset"
+    fi
+}
+
+# PR 참조 체크아웃
+checkout_pr_ref() {
+    local ref="$1"
+    local force_reset="$2"
+
+    # PR 번호 추출 (refs/pull/17/head -> pr-17)
+    local pr_number
+    pr_number=$(echo "$ref" | sed -n 's|refs/pull/\([0-9]*\)/.*|\1|p')
+    local branch_name="pr-${pr_number}"
+
+    log_info "PR 참조 감지: #$pr_number → $branch_name"
+
+    # 해당 브랜치에 있으면 임시로 detached HEAD로 이동
+    local current_branch
+    current_branch=$(git branch --show-current 2>/dev/null || echo "")
+    if [[ "$current_branch" == "$branch_name" ]]; then
+        git checkout --detach HEAD 2>/dev/null
+    fi
+
+    # 기존 브랜치 삭제 후 다시 생성
+    git branch -D "$branch_name" 2>/dev/null || true
+    git fetch origin "$ref:$branch_name" || die "PR fetch 실패: $ref"
+
+    if [[ "$force_reset" == "true" ]]; then
+        git checkout -f "$branch_name" || die "PR 체크아웃 실패: $branch_name"
+    else
+        git checkout "$branch_name" || die "PR 체크아웃 실패: $branch_name"
+    fi
+}
+
+# 일반 브랜치 체크아웃
+checkout_branch_ref() {
+    local ref="$1"
+    local force_reset="$2"
+
+    if [[ "$force_reset" == "true" ]]; then
+        # 로컬 변경사항 무시하고 강제 체크아웃
+        git checkout -f -B "$ref" "origin/$ref" 2>/dev/null || git checkout -f "$ref"
+    else
+        git checkout "$ref"
+    fi || die "참조 체크아웃 실패: $ref"
+}
+
+# Reset 수행 (체크아웃 후)
+do_reset() {
+    local ref="$1"
+
+    log_warn "remote로 강제 리셋 중..."
+
+    local reset_target
+    if [[ "$ref" == refs/pull/* ]]; then
+        # PR의 경우 현재 브랜치 (pr-XX)를 대상으로
+        reset_target="HEAD"
+    else
+        reset_target="origin/$ref"
+    fi
+
+    if ! git reset --hard "$reset_target" 2>/dev/null; then
+        log_warn "reset 실패 (브랜치가 remote에 없거나 detached 상태)"
+    fi
+}
+
+# Pull 수행
+do_pull() {
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+    log_info "로컬 변경사항 병합 시도 (pull)"
+    if ! git pull origin "$current_branch"; then
+        die "병합 충돌 발생. 수동으로 해결이 필요합니다."
+    fi
+}
+
+# 완료 메시지 출력
+print_summary() {
+    local branch commit_hash
+    branch=$(git branch --show-current 2>/dev/null || echo 'detached')
+    commit_hash=$(git rev-parse --short HEAD)
+
+    echo ""
+    log_ok "완료: (브랜치: $branch, 커밋: $commit_hash)"
+    echo "--------------------------------------------------"
+    git --no-pager log -4 --pretty=format:"%C(yellow)%h%Creset %C(blue)%ad%Creset  %s" --date=short
+    echo ""
+    echo "--------------------------------------------------"
+    echo ""
+    echo -e "${GREEN}✅ 소스 코드 가져오기 완료${NC}"
+}
+
+
+main() {
+    local source_dir="${1:-}"
+    local source_repo="${2:-}"
+    local ref="${3:-}"
+    local sync_mode="${4:-reset}"
+    local fetch_all="${5:-false}"
+    if [[ -z "$source_dir" ]] || [[ -z "$source_repo" ]] || [[ -z "$ref" ]]; then
+        die "필수 인자가 누락되었습니다
+사용법: $0 <SOURCE_DIR> <SOURCE_REPO> <REF> [SYNC_MODE] [FETCH_ALL]"
+    fi
+
+    case "$sync_mode" in
+        clone|reset|pull|keep) ;;
+        *) die "잘못된 SYNC_MODE: $sync_mode (사용 가능: clone, reset, pull, keep)" ;;
+    esac
+
+    log_info "소스 코드 가져오기 시작..."
+    echo "  SOURCE_DIR:  $source_dir"
+    echo "  SOURCE_REPO: $source_repo"
+    echo "  REF:         $ref"
+    echo "  SYNC_MODE:   $sync_mode"
+    echo "  FETCH_ALL:   $fetch_all"
+    echo ""
+
+    local need_clone=false
+    local force_reset=false
+    local do_pull_flag=false
+
+    if [[ -d "$source_dir" ]]; then
+        case "$sync_mode" in
+            clone)
+                log_info "SYNC_MODE=clone: 기존 소스 디렉토리 삭제 후 새로 clone"
+                rm -rf "$source_dir"
+                need_clone=true
+                ;;
+            reset)
+                log_info "SYNC_MODE=reset: remote 강제 적용 (로컬 무시)"
+                validate_git_repo "$source_dir"
+                force_reset=true
+                ;;
+            pull)
+                log_info "SYNC_MODE=pull: 로컬 변경사항 병합 시도"
+                validate_git_repo "$source_dir"
+                do_pull_flag=true
+                ;;
+            keep)
+                log_info "SYNC_MODE=keep: fetch만 실행 (로컬 유지)"
+                validate_git_repo "$source_dir"
+                ;;
+        esac
+    else
+        log_info "소스 디렉토리가 없습니다. clone 실행..."
+        need_clone=true
+    fi
+
+    if [[ "$need_clone" == "true" ]]; then
+        local git_url
+        git_url=$(build_git_url "$source_repo")
+        do_clone "$git_url" "$source_dir"
+    else
+        cd "$source_dir"
+        do_fetch "$fetch_all"
+
+        if [[ "$do_pull_flag" == "true" ]]; then
+            do_pull
+        fi
+    fi
+
+    echo ""
+    log_info "참조 체크아웃: $ref"
+    cd "$source_dir"
+    checkout_ref "$ref" "$force_reset"
+
+    if [[ "$force_reset" == "true" ]]; then
+        do_reset "$ref"
+    fi
+
+    print_summary
+}
+
+main "$@"
