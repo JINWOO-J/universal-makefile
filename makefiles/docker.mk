@@ -165,11 +165,11 @@ validate-dockerfile: ## 🔧 Validate Dockerfile exists and is readable
 		echo "[ERROR] DOCKERFILE_PATH가 비어 있습니다. 예: DOCKERFILE_PATH=./Dockerfile"; \
 		exit 1; \
 	fi
-	@if [ ! -f "$(DOCKERFILE_PATH)" ]; then \
-		echo "[ERROR] Dockerfile을 찾을 수 없습니다: $(DOCKERFILE_PATH)"; \
+	@if [ ! -f "$(strip $(DOCKERFILE_PATH))" ]; then \
+		echo "[ERROR] Dockerfile을 찾을 수 없습니다: $(strip $(DOCKERFILE_PATH))"; \
 		exit 1; \
 	else \
-		$(call print_color, $(BLUE),🔎 Using Dockerfile: $(DOCKERFILE_PATH)); \
+		$(call print_color, $(BLUE),🔎 Using Dockerfile: $(strip $(DOCKERFILE_PATH))); \
 	fi
 
 build: ensure-source validate-dockerfile check-docker make-build-args _compute-build-tag _prepare-build-hook ## 🎯 Build the Docker image

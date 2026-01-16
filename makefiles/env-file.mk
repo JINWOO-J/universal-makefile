@@ -46,7 +46,19 @@ endif
 ifneq (,$(wildcard .env.local))
     include .env.local
     export
-    $(info [INFO] .env.local 파일 로드됨 (오버라이드))
+    $(info [INFO] .env.local 파일 로드됨 (오버라이드))    
+    ifeq ($(USE_SERVICE_KIND_IN_TAG),true)
+      ifneq ($(strip $(SERVICE_KIND)),)
+        override FULL_TAG := $(APP_IMAGE_NAME):$(strip $(SERVICE_KIND))-$(TAGNAME)
+        override LATEST_TAG := $(APP_IMAGE_NAME):$(strip $(SERVICE_KIND))-latest
+      else
+        override FULL_TAG := $(APP_IMAGE_NAME):$(TAGNAME)
+        override LATEST_TAG := $(APP_IMAGE_NAME):latest
+      endif
+    else
+      override FULL_TAG := $(APP_IMAGE_NAME):$(TAGNAME)
+      override LATEST_TAG := $(APP_IMAGE_NAME):latest
+    endif
 else
     $(info [INFO] .env.local 파일이 없습니다. (자동 생성하지 않음: read-only 정책))
 endif
@@ -312,15 +324,27 @@ prepare-consul-runtime-env: ## 🔧 Consul + 로컬 환경 변수 병합하여 $
 	    echo "$(CYAN)🔍 .env.local에서 DEPLOY_IMAGE 발견: $$LOCAL_DEPLOY_IMAGE$(NC)"; \
 	    USE_GIT_IMAGE=false; \
 	    DEPLOY_SOURCE=".env.local"; \
+	    EXISTING_DEPLOY_IMAGE="$$LOCAL_DEPLOY_IMAGE"; \
 	  elif [ -f ".runner.env" ] && grep -q '^DEPLOY_IMAGE=' .runner.env 2>/dev/null; then \
 	    RUNNER_DEPLOY_IMAGE=$$(grep '^DEPLOY_IMAGE=' .runner.env | cut -d= -f2); \
 	    echo "$(CYAN)🔍 .runner.env에서 DEPLOY_IMAGE 발견: $$RUNNER_DEPLOY_IMAGE$(NC)"; \
 	    USE_GIT_IMAGE=false; \
 	    DEPLOY_SOURCE=".runner.env"; \
+	    EXISTING_DEPLOY_IMAGE="$$RUNNER_DEPLOY_IMAGE"; \
 	  elif [ -f ".build-info" ] && [ -n "$$EXISTING_DEPLOY_IMAGE" ]; then \
 	    echo "$(CYAN)🔍 .build-info 기반 DEPLOY_IMAGE 유지: $$EXISTING_DEPLOY_IMAGE$(NC)"; \
 	    USE_GIT_IMAGE=false; \
 	    DEPLOY_SOURCE=".build-info"; \
+	  fi; \
+	  \
+	  : "runner/local이 지정한 DEPLOY_IMAGE면 TMP에 강제 반영 (build-info가 export에서 덮는 문제 방지)"; \
+	  if [ "$$USE_GIT_IMAGE" = "false" ] && [ "$$DEPLOY_SOURCE" != ".build-info" ] && [ -n "$$EXISTING_DEPLOY_IMAGE" ]; then \
+	    TMP3=$$(mktemp .env.XXXXXX); \
+	    awk -v img="$$EXISTING_DEPLOY_IMAGE" '\
+	      $$0 ~ /^DEPLOY_IMAGE=/ { next } \
+	      { print $$0 } \
+	      END { print "DEPLOY_IMAGE=" img }' "$$TMP" > "$$TMP3"; \
+	    mv "$$TMP3" "$$TMP"; \
 	  fi; \
 	  \
 	  if [ "$$USE_GIT_IMAGE" = "true" ] && [ -d "$(SOURCE_DIR)" ] && cd "$(SOURCE_DIR)" >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then \
@@ -356,8 +380,8 @@ prepare-consul-runtime-env: ## 🔧 Consul + 로컬 환경 변수 병합하여 $
 	@echo "$(YELLOW)📊 최종 환경 변수 통계:$(NC)"
 	@TOTAL_VARS=$$(grep -c '^[A-Z]' $(RESOLVED_ENV_FILE) 2>/dev/null || echo "0"); \
 	CONSUL_VARS=$$(grep -c '^[A-Z]' $(CONSUL_ENV_FILE) 2>/dev/null || echo "0"); \
-	echo "  Consul 변수     : $$CONSUL_VARS개"; \
-	echo "  전체 변수       : $$TOTAL_VARS개"
+	echo "  Consul 변수     : $$CONSUL_VARS 개"; \
+	echo "  전체 변수       : $$TOTAL_VARS 개"
 
 env-list-consul: ## 🔧 Consul 환경 변수 목록 조회 (FILTER=키워드로 필터링 가능)
 	@echo "=== Consul 환경 변수 목록 (환경: $(ENVIRONMENT)) ==="
