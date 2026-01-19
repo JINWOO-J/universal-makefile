@@ -42,7 +42,7 @@ class DockerImageManager:
         """
         try:
             # 현재 날짜 (YYYYMMDD 형식)
-            current_date = datetime.now().strftime('%Y%m%d')
+            current_date = datetime.now().strftime('%Y%m%d_%H%M%S')
             
             # 커밋 SHA가 없으면 현재 Git SHA 조회 시도
             if not commit_sha:

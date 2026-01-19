@@ -21,7 +21,7 @@ fi
 # Git 정보가 없으면 기본값 사용
 if [ ! -d "$SOURCE_DIR" ] || [ ! -d "$SOURCE_DIR/.git" ]; then
     echo "Warning: No git repository found in $SOURCE_DIR" >&2
-    echo "$IMAGE_NAME:$SERVICE_KIND-$VERSION-unknown-$(date +%Y%m%d)-unknown${TAG_SUFFIX}"
+    echo "$IMAGE_NAME:$SERVICE_KIND-$VERSION-unknown-$(date +%Y%m%d_%H%M%S)-unknown${TAG_SUFFIX}"
     exit 0
 fi
 
@@ -55,7 +55,7 @@ else
 fi
 
 # 날짜
-CURRENT_DATE=$(date +%Y%m%d)
+CURRENT_DATE=$(date +%Y%m%d_%H%M%S)
 
 # 최종 이미지 태그 생성
 IMAGE_TAG="$IMAGE_NAME:$SERVICE_KIND-$VERSION-$BRANCH_NAME-$CURRENT_DATE-$SHA8${TAG_SUFFIX}"
