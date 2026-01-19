@@ -5,7 +5,7 @@ SHELL := /bin/bash
 
 include $(MAKEFILE_DIR)/makefiles/colors.mk
 # 날짜(브랜치 태그 구성에 필요)
-DATE := $(shell date +%Y%m%d)
+DATE := $(shell date +%Y%m%d_%H%M%S)
 BUILD_TIME := $(shell date +'%Y-%m-%dT%H:%M:%SZ')
 
 # 기본 변수들 (project.mk에서 오버라이드 가능)

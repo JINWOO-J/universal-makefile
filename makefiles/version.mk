@@ -54,7 +54,7 @@ endef
 define compute_build_vars
 	COMMIT_SHA=$$(cd $(SOURCE_DIR) && git rev-parse HEAD); \
 	$(extract_branch_name_script); \
-	CURRENT_DATE=$$(date +%Y%m%d); \
+	CURRENT_DATE=$$(date +%Y%m%d_%H%M%S); \
 	SHA8=$${COMMIT_SHA:0:8}; \
 	IMAGE_TAG="$(IMAGE_NAME):$(SERVICE_KIND)-$(VERSION)-$${BRANCH_NAME}-$${CURRENT_DATE}-$${SHA8}"
 endef
