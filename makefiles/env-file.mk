@@ -23,6 +23,15 @@ CONSUL_PREFIX ?=
 # 필요시 make 실행 때 RESOLVED_ENV_FILE=$(RESOLVED_ENV_FILE) 로 변경 가능
 RESOLVED_ENV_FILE ?= .env.resolved
 
+# docker build 로 .env 를 주입하기 위한 공통 정의.
+# RESOLVED_ENV_FILE(prepare-env 가 생성하는 최종 .env)을 base64 로 인코딩해 build-arg(DOCKER_DOTENV_B64)에 싣는다.
+# Dockerfile 의 `ARG DOCKER_DOTENV_B64` + `base64 -d > .env` 규약과 짝을 이룬다.
+# = (지연) + $(shell test -f): RESOLVED_ENV_FILE 은 빌드 런타임(prepare-env)에 생성되므로 참조 시점에 평가해야 하고,
+# $(wildcard) 는 GNU make 가 결과를 캐싱해 런타임 생성 파일을 못 잡으므로 매번 셸로 확인한다.
+# runner project.mk 는 EXTRA_BUILD_ARGS 에 DOCKER_DOTENV_B64 를 추가하기만 하면 된다(개별 정의 불필요).
+DOCKER_DOTENV_B64 = $(shell test -f $(RESOLVED_ENV_FILE) && base64 < $(RESOLVED_ENV_FILE) | tr -d '\n')
+export DOCKER_DOTENV_B64
+
 # Consul 클라이언트/설정 값을 하위 프로세스(파이썬 스크립트)에서 동일하게 사용하도록 export
 export CONSUL_CLIENT CONSUL_API_URL CONSUL_API_KEY CONSUL_APP CONSUL_PREFIX
 
