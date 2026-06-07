@@ -451,8 +451,13 @@ ifneq ($(EXTRA_BUILD_ARGS),)
     BUILD_ARG_VARS += $(EXTRA_BUILD_ARGS)
 endif
 
-BUILD_ARGS_CONTENT := $(foreach var,$(BUILD_ARG_VARS),--build-arg $(var)='$($(var))'$(newline))
-DEBUG_ARGS_CONTENT := $(BUILD_ARGS_CONTENT)
+# 지연 평가(=): docker build recipe 가 $(BUILD_ARGS_CONTENT) 를 인라인 참조하는 시점은
+# 모든 prerequisite(=prepare-env 의 .env 생성 포함) 이후다. = 로 두면 그 시점에 펼쳐져,
+# .env 런타임 생성에 의존하는 동적 build-arg(예: DOCKER_DOTENV_B64)가 올바른 값으로 들어간다.
+# (:= 면 make 파싱타임에 펼쳐져 .env 미생성 상태의 빈 값으로 고정되는 버그가 있었음.
+#  정적 메타데이터(VERSION/TAGNAME 등)는 := 변수라 값이 고정되어 재평가해도 동일.)
+BUILD_ARGS_CONTENT = $(foreach var,$(BUILD_ARG_VARS),--build-arg $(var)='$($(var))'$(newline))
+DEBUG_ARGS_CONTENT = $(BUILD_ARGS_CONTENT)
 # ================================================================
 # 기본 검증 타겟들
 # ================================================================
