@@ -7,6 +7,9 @@ SHOW_PATCH ?= 0     # 1이면 unified diff까지 출력
 FAIL_ON_DIFF ?= 0   # 1이면 내용 다르면 비정상 종료(Exit 2)
 REMOTE ?= origin
 AUTO_RELEASE_ALLOWED_BRANCH ?= $(DEVELOP_BRANCH)
+# linear: ff-only or reset main to release tip, then develop = main (no merge commits)
+# merge: legacy dual --no-ff merge into main and develop
+RELEASE_MERGE_STYLE ?= linear
 
 TAG_REMOTE ?= origin
 TAG_PREFIX ?= v           # 태그 접두사 (예: v1.2.3)
@@ -78,8 +81,39 @@ define RESET_TO_REMOTE
         git checkout "$$branch"; \
     fi; \
     echo "$(BLUE)🔄 Resetting $$branch to origin/$$branch...$(RESET)"; \
-    git fetch origin "$$branch"; \
-    git reset --hard "origin/$$branch"
+    git fetch $(REMOTE) "$$branch"; \
+    git reset --hard "$(REMOTE)/$$branch"
+endef
+
+# Promote release branch to MAIN_BRANCH and sync DEVELOP_BRANCH (requires shell var RELEASE_BRANCH)
+define PROMOTE_RELEASE_LINEAR
+	RELEASE_SHA=$$(git rev-parse "$$RELEASE_BRANCH"); \
+	echo "$(BLUE)📍 Promoting $$RELEASE_BRANCH ($$(git rev-parse --short $$RELEASE_SHA)) — linear$(RESET)"; \
+	git fetch $(REMOTE) $(MAIN_BRANCH) $(DEVELOP_BRANCH); \
+	git checkout $(MAIN_BRANCH); \
+	git reset --hard $(REMOTE)/$(MAIN_BRANCH); \
+	if git merge-base --is-ancestor HEAD "$$RELEASE_SHA" 2>/dev/null; then \
+		git merge --ff-only "$$RELEASE_SHA"; \
+		echo "$(GREEN)✅ Fast-forwarded $(MAIN_BRANCH)$(RESET)"; \
+	else \
+		echo "$(YELLOW)⚠️  $(MAIN_BRANCH) diverged; resetting to release tip$(RESET)"; \
+		git reset --hard "$$RELEASE_SHA"; \
+	fi; \
+	git checkout $(DEVELOP_BRANCH); \
+	git reset --hard $(MAIN_BRANCH); \
+	echo "$(GREEN)✅ $(MAIN_BRANCH) and $(DEVELOP_BRANCH) synced at $$(git rev-parse --short HEAD)$(RESET)"
+endef
+
+# Legacy dual --no-ff merge (requires shell var RELEASE_BRANCH)
+define PROMOTE_RELEASE_LEGACY
+	echo "$(BLUE)📍 Promoting $$RELEASE_BRANCH — legacy merge$(RESET)"; \
+	git fetch $(REMOTE) $(MAIN_BRANCH) $(DEVELOP_BRANCH); \
+	$(call RESET_TO_REMOTE,$(MAIN_BRANCH)); \
+	git merge --no-ff -m "🔀 Merge release $$RELEASE_BRANCH into $(MAIN_BRANCH)" "$$RELEASE_BRANCH"; \
+	git checkout $(DEVELOP_BRANCH); \
+	$(call RESET_TO_REMOTE,$(DEVELOP_BRANCH)); \
+	git merge --no-ff -m "🔀 Merge release $$RELEASE_BRANCH into $(DEVELOP_BRANCH)" "$$RELEASE_BRANCH"; \
+	echo "$(GREEN)✅ Release merged into $(MAIN_BRANCH) and $(DEVELOP_BRANCH)$(RESET)"
 endef
 
 .PHONY: reset-branch reset-main reset-develop sync-remote-dry sync-remote _git-check
@@ -565,18 +599,15 @@ get-release-version: ## 🌿 Get release version
 create-release-branch: bump-version ensure-develop-branch get-release-version ## 🌿 Create release branch
 	@echo "$(BLUE)🌿 Creating release branch...$(RESET)"
 	@echo "$(BLUE)Using version: $(RELEASE_VERSION)$(RESET)"
-	@RELEASE_BRANCH="release/$(RELEASE_VERSION)"; \
-	if ! git checkout develop; then \
-		echo "$(RED)Error: Failed to checkout develop branch$(RESET)" >&2; \
-		exit 1; \
+	@$(call RESET_TO_REMOTE,$(DEVELOP_BRANCH)); \
+	RELEASE_BRANCH="release/$(RELEASE_VERSION)"; \
+	if git rev-parse --verify "$$RELEASE_BRANCH" >/dev/null 2>&1; then \
+		echo "$(BLUE)Release branch '$$RELEASE_BRANCH' already exists. Removing for idempotency...$(RESET)"; \
+		git branch -D "$$RELEASE_BRANCH"; \
 	fi; \
-	if git rev-parse --verify "release/$(RELEASE_VERSION)" >/dev/null 2>&1; then \
-		echo "$(BLUE)Release branch 'release/$(RELEASE_VERSION)' already exists. Removing for idempotency...$(RESET)"; \
-		git branch -D "release/$(RELEASE_VERSION)"; \
-	fi; \
-	echo "$(BLUE)Creating new release branch 'release/$(RELEASE_VERSION)' from 'develop'...$(RESET)"; \
-	if git checkout -b "release/$(RELEASE_VERSION)"; then \
-		echo "$(GREEN)✅ Successfully created and switched to 'release/$(RELEASE_VERSION)'$(RESET)"; \
+	echo "$(BLUE)Creating new release branch '$$RELEASE_BRANCH' from '$(DEVELOP_BRANCH)'...$(RESET)"; \
+	if git checkout -b "$$RELEASE_BRANCH"; then \
+		echo "$(GREEN)✅ Successfully created and switched to '$$RELEASE_BRANCH'$(RESET)"; \
 	else \
 		echo "$(RED)Error: Failed to create release branch$(RESET)" >&2; \
 		exit 1; \
@@ -602,41 +633,48 @@ push-release-branch: ## 🌿 Push current release branch to origin
 
 finish-release: ## 🚀 Complete release process (merge to main and develop, create tag)
 	@$(call colorecho, 🎉 Finishing release...)
-	@if [ ! -f .NEW_VERSION.tmp ]; then \
+	@set -Eeuo pipefail; \
+	if [ ! -f .NEW_VERSION.tmp ]; then \
 		$(call fail, No version file found. Run release process from the beginning); \
 		exit 1; \
 	fi; \
 	NEW_VERSION=$$(cat .NEW_VERSION.tmp); \
 	RELEASE_BRANCH="release/$$NEW_VERSION"; \
 	RELEASE_VERSION=$$(echo "$$RELEASE_BRANCH" | sed "s/release\///"); \
-	PREVIOUS_TAG=$$(git describe --tags `git rev-list --tags --max-count=1` 2>/dev/null); \
+	if ! git rev-parse --verify "$$RELEASE_BRANCH" >/dev/null 2>&1; then \
+		$(call fail, Release branch $$RELEASE_BRANCH not found); \
+		exit 1; \
+	fi; \
+	PREVIOUS_TAG=$$(git describe --tags $$(git rev-list --tags --max-count=1) 2>/dev/null || true); \
 	if [ -z "$$PREVIOUS_TAG" ]; then \
 		CHANGELOG=$$(git log --pretty=format:"- %s (%h)" $(DEVELOP_BRANCH)..$$RELEASE_BRANCH); \
 	else \
 		CHANGELOG=$$(git log --pretty=format:"- %s (%h)" $$PREVIOUS_TAG..$$RELEASE_BRANCH); \
 	fi; \
-	$(call colorecho, Merging $$RELEASE_BRANCH into $(MAIN_BRANCH)...); \
-	$(call colorecho, Resetting $(MAIN_BRANCH) to origin/$(MAIN_BRANCH) ...); \
-    $(call RESET_TO_REMOTE,$(MAIN_BRANCH)); \
-	git merge --no-ff -m "Merge $$RELEASE_BRANCH into $(MAIN_BRANCH)" $$RELEASE_BRANCH; \
+	if [ "$(RELEASE_MERGE_STYLE)" = "merge" ]; then \
+		$(call PROMOTE_RELEASE_LEGACY); \
+	else \
+		$(call PROMOTE_RELEASE_LINEAR); \
+	fi; \
 	$(call colorecho, Tagging release: $$RELEASE_VERSION); \
-	git tag -a $$RELEASE_VERSION -m "Release $$RELEASE_VERSION"; \
-	$(call colorecho, Merging back into $(DEVELOP_BRANCH)...); \
-	$(call colorecho, Resetting $(DEVELOP_BRANCH) to origin/$(DEVELOP_BRANCH) ...); \
-	$(call RESET_TO_REMOTE,$(DEVELOP_BRANCH)); \
-	git merge --no-ff -m "Merge $$RELEASE_BRANCH into $(DEVELOP_BRANCH)" $$RELEASE_BRANCH; \
+	git checkout $(MAIN_BRANCH); \
+	if git rev-parse -q --verify "refs/tags/$$RELEASE_VERSION" >/dev/null; then \
+		echo "$(YELLOW)Tag $$RELEASE_VERSION already exists$(RESET)"; \
+	else \
+		git tag -a "$$RELEASE_VERSION" -m "Release $$RELEASE_VERSION"; \
+	fi; \
+	git checkout $(DEVELOP_BRANCH); \
 	$(call colorecho, Pushing $(MAIN_BRANCH), $(DEVELOP_BRANCH), and tags...); \
-	git push origin $(MAIN_BRANCH); \
-	git push origin $(DEVELOP_BRANCH); \
+	git push $(REMOTE) $(MAIN_BRANCH) $(DEVELOP_BRANCH); \
 	git push --tags; \
 	if command -v gh >/dev/null 2>&1; then \
 		$(call colorecho, Creating GitHub Release...); \
-		gh release create $$RELEASE_VERSION --title "Release $$RELEASE_VERSION" --notes "$$CHANGELOG"; \
+		gh release create "$$RELEASE_VERSION" --title "Release $$RELEASE_VERSION" --notes "$$CHANGELOG"; \
 	else \
 		$(call warn, GitHub CLI not found. Skipping GitHub release creation); \
 	fi; \
 	$(call colorecho, Cleaning up local release branch...); \
-	git branch -d $$RELEASE_BRANCH; \
+	git branch -d "$$RELEASE_BRANCH"; \
 	rm -f .NEW_VERSION.tmp; \
 	$(call success, Release $$RELEASE_VERSION finished successfully!)
 
@@ -647,15 +685,15 @@ finish-release: ## 🚀 Complete release process (merge to main and develop, cre
 
 push-release: ## 📤 Push main, develop, and tags to remote
 	@echo "$(BLUE)📤 Pushing branches and tags to $(REMOTE)...$(RESET)"
-	@if ! git rev-parse --verify main >/dev/null 2>&1; then \
-		echo "$(RED)Error: main branch not found$(RESET)"; exit 1; \
+	@if ! git rev-parse --verify $(MAIN_BRANCH) >/dev/null 2>&1; then \
+		echo "$(RED)Error: $(MAIN_BRANCH) branch not found$(RESET)"; exit 1; \
 	fi
-	@if ! git rev-parse --verify develop >/dev/null 2>&1; then \
-		echo "$(RED)Error: develop branch not found$(RESET)"; exit 1; \
+	@if ! git rev-parse --verify $(DEVELOP_BRANCH) >/dev/null 2>&1; then \
+		echo "$(RED)Error: $(DEVELOP_BRANCH) branch not found$(RESET)"; exit 1; \
 	fi
-	@git push $(REMOTE) main develop
+	@git push $(REMOTE) $(MAIN_BRANCH) $(DEVELOP_BRANCH)
 	@git push --tags || true
-	@echo "$(GREEN)✅ Successfully pushed main, develop, and tags$(RESET)"
+	@echo "$(GREEN)✅ Successfully pushed $(MAIN_BRANCH), $(DEVELOP_BRANCH), and tags$(RESET)"
 
 
 push-release-clean: push-release ## 🧹 Also delete remote release/* branch (optional)
@@ -740,7 +778,7 @@ auto-release: ## 🚀 Automated release process
 		$(MAKE) version-tag TAG_VERSION="$$NEXT_VERSION"; \
 		$(MAKE) ensure-clean; \
 		$(MAKE) merge-release; \
-		$(MAKE) push-release; \
+		$(MAKE) push-release-clean; \
 		$(MAKE) github-release; \
 	else \
 		echo "$(RED)Error: Failed to determine version$(RESET)"; exit 1; \
@@ -758,31 +796,24 @@ update-and-release: ## 🚀 Update version, then run auto-release (alias: ur)
 ur: update-and-release ## 🚀 Alias for 'update-and-release'
 
 # Merge release branch
-merge-release: ensure-clean ## 🔄 Merge release branch to main branches
-	@echo "$(BLUE)🔄 Merging release branch...$(RESET)"
-	@CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+merge-release: ensure-clean ## 🔄 Promote release branch to main and develop (RELEASE_MERGE_STYLE=linear|merge)
+	@echo "$(BLUE)🔄 Promoting release branch...$(RESET)"
+	@set -Eeuo pipefail; \
+	CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	if ! echo "$$CUR_BRANCH" | grep -q "^release/"; then \
 		echo "$(RED)Error: Not on a release branch. Current branch: $$CUR_BRANCH$(RESET)" >&2; \
 		exit 1; \
 	fi; \
-	echo "$(BLUE)Merging to main...$(RESET)"; \
-    $(call RESET_TO_REMOTE,$(MAIN_BRANCH)) && \
-	if ! git merge --no-ff "$$CUR_BRANCH" -m "🔀 Merge release $$CUR_BRANCH into main"; then \
-		echo "$(RED)Error: Failed to merge into main$(RESET)" >&2; \
-		exit 1; \
+	RELEASE_BRANCH="$$CUR_BRANCH"; \
+	if [ "$(RELEASE_MERGE_STYLE)" = "merge" ]; then \
+		$(call PROMOTE_RELEASE_LEGACY); \
+	else \
+		$(call PROMOTE_RELEASE_LINEAR); \
 	fi; \
-	echo "$(BLUE)Merging to develop...$(RESET)"; \
-	if ! git checkout develop; then \
-		echo "$(RED)Error: Failed to checkout develop branch$(RESET)" >&2; \
-		exit 1; \
-	fi && \
-	if ! git merge --no-ff "$$CUR_BRANCH" -m "🔀 Merge release $$CUR_BRANCH into develop"; then \
-		echo "$(RED)Error: Failed to merge into develop$(RESET)" >&2; \
-		exit 1; \
-	fi && \
-	echo "$(BLUE)Cleaning up release branch...$(RESET)" && \
-	git branch -d "$$CUR_BRANCH" && \
-	echo "$(GREEN)✅ Release branch successfully merged and cleaned up!$(RESET)"
+	echo "$(BLUE)Cleaning up release branch...$(RESET)"; \
+	git branch -d "$$RELEASE_BRANCH"; \
+	git checkout $(DEVELOP_BRANCH); \
+	echo "$(GREEN)✅ Release branch promoted and cleaned up!$(RESET)"
 
 .PHONY: merge-release
 
