@@ -107,7 +107,7 @@ _ORIGINAL_TAGNAME := $(TAGNAME)
 ifeq ($(CURRENT_BRANCH),$(MAIN_BRANCH))
     _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION))
 else
-    SAFE_BRANCH := $(shell echo "$(CURRENT_BRANCH)" | sed 's/[^a-zA-Z0-9._-]/-/g; s/-+/-/g')
+    SAFE_BRANCH := $(shell echo "$(CURRENT_BRANCH)" | sed -E 's/[^a-zA-Z0-9._-]/-/g; s/-+/-/g')
     # 브랜치에서는 version-branch-date-sha 형태
     _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION)-$(SAFE_BRANCH)-$(DATE)-$(CURRENT_COMMIT_SHORT))
 endif
