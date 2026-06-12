@@ -215,8 +215,14 @@ build: ensure-source validate-dockerfile check-docker make-build-args _compute-b
 
 _compute-build-tag:
 	@# UMF_MODE=global일 때 스크립트로 동적 태그 계산
+	@# core.mk가 계산한 정식 값(SAFE_BRANCH/DATE/COMMIT_SHORT)을 전달해
+	@# ENV(TAGNAME 등)와 실제 이미지 태그가 항상 같은 규칙을 쓰도록 한다.
+	@# 단, make 파싱 시점에 source가 없어 unknown이면 스크립트가 직접 계산하도록 넘기지 않는다.
 	$(eval BUILD_TAG_COMPUTED := $(shell \
 		if [ "$(UMF_MODE)" = "global" ]; then \
+			$(if $(filter-out unknown,$(SAFE_BRANCH)),UMF_BRANCH="$(SAFE_BRANCH)") \
+			UMF_DATE="$(DATE)" \
+			$(if $(filter-out unknown,$(CURRENT_COMMIT_SHORT)),UMF_SHA="$(CURRENT_COMMIT_SHORT)") \
 			bash $(MAKEFILE_DIR)/scripts/compute_build_tag.sh \
 				"$(SOURCE_DIR)" \
 				"$(REF)" \
