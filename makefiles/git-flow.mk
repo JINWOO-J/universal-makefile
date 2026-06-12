@@ -10,6 +10,15 @@ AUTO_RELEASE_ALLOWED_BRANCH ?= $(DEVELOP_BRANCH)
 # linear: ff-only or reset main to release tip, then develop = main (no merge commits)
 # merge: legacy dual --no-ff merge into main and develop
 RELEASE_MERGE_STYLE ?= linear
+# true이면 RESET_TO_REMOTE가 미푸시 커밋이 있어도 강제로 reset --hard 진행
+FORCE_RESET ?= false
+# VERSION은 project.mk에서 항상 정의되므로, auto-release의 릴리스 버전으로는
+# 명령행에서 명시적으로 전달된 경우에만 사용한다 (그 외에는 최신 태그에서 자동 bump)
+ifeq ($(origin VERSION),command line)
+  AUTO_RELEASE_VERSION := $(VERSION)
+else
+  AUTO_RELEASE_VERSION :=
+endif
 
 TAG_REMOTE ?= origin
 TAG_PREFIX ?= v           # 태그 접두사 (예: v1.2.3)
@@ -81,7 +90,18 @@ define RESET_TO_REMOTE
         git checkout "$$branch"; \
     fi; \
     echo "$(BLUE)🔄 Resetting $$branch to origin/$$branch...$(RESET)"; \
-    git fetch $(REMOTE) "$$branch"; \
+    if ! git fetch $(REMOTE) "$$branch"; then \
+        echo "$(RED)Error: failed to fetch $(REMOTE)/$$branch; refusing to reset against a possibly stale ref$(RESET)" >&2; \
+        exit 1; \
+    fi; \
+    if [ "$(FORCE_RESET)" != "true" ]; then \
+        UNPUSHED=$$(git rev-list --count "$(REMOTE)/$$branch..$$branch" 2>/dev/null || echo 0); \
+        if [ "$$UNPUSHED" -gt 0 ]; then \
+            echo "$(RED)Error: '$$branch' has $$UNPUSHED commit(s) not on $(REMOTE)/$$branch; reset --hard would destroy them.$(RESET)" >&2; \
+            echo "$(YELLOW)Push them first, or rerun with FORCE_RESET=true to discard them.$(RESET)" >&2; \
+            exit 1; \
+        fi; \
+    fi; \
     git reset --hard "$(REMOTE)/$$branch"
 endef
 
@@ -96,8 +116,9 @@ define PROMOTE_RELEASE_LINEAR
 		git merge --ff-only "$$RELEASE_SHA"; \
 		echo "$(GREEN)✅ Fast-forwarded $(MAIN_BRANCH)$(RESET)"; \
 	else \
-		echo "$(YELLOW)⚠️  $(MAIN_BRANCH) diverged; resetting to release tip$(RESET)"; \
-		git reset --hard "$$RELEASE_SHA"; \
+		echo "$(RED)Error: $(MAIN_BRANCH) is not an ancestor of the release tip; linear promote would require a force push (push-release does not force).$(RESET)" >&2; \
+		echo "$(YELLOW)This repo's history uses merge commits — use RELEASE_MERGE_STYLE=merge instead.$(RESET)" >&2; \
+		exit 1; \
 	fi; \
 	git checkout $(DEVELOP_BRANCH); \
 	git reset --hard $(MAIN_BRANCH); \
@@ -406,9 +427,18 @@ clean-remote-branches: ## 🧹 Delete merged remote release branches (VERY CAREF
 # 버전 관리
 # ================================================================
 
+# 버전 파일만 커밋 (무관한 작업 트리 변경이 릴리스 커밋에 섞이지 않도록)
+# VERSION_POST_UPDATE_HOOK 등이 추가 파일을 갱신하면 RELEASE_COMMIT_EXTRA_FILES로 지정
+RELEASE_COMMIT_EXTRA_FILES ?=
 commit-version-bump: ## ✅ Commit version bump on release branch
-	@V=$$(cat .NEW_VERSION.tmp); \
-	git add -A; \
+	@V="$(or $(NEW_VERSION),$(shell cat .NEW_VERSION.tmp 2>/dev/null))"; \
+	if [ -z "$$V" ]; then \
+		echo "$(RED)Error: no version found (NEW_VERSION unset and .NEW_VERSION.tmp missing)$(RESET)" >&2; \
+		exit 1; \
+	fi; \
+	for f in $(VERSION_FILES) $(RELEASE_COMMIT_EXTRA_FILES); do \
+		[ -f "$$f" ] && git add "$$f" || true; \
+	done; \
 	if ! git diff --cached --quiet; then \
 		git commit -m "chore(release): bump version to $$V"; \
 		echo "$(GREEN)✅ Committed version bump to $$V$(RESET)"; \
@@ -704,7 +734,7 @@ push-release-clean: push-release ## 🧹 Also delete remote release/* branch (op
 	else \
 		if [ -f .NEW_VERSION.tmp ]; then \
 			V=$$(cat .NEW_VERSION.tmp); RB="release/$$V"; \
-			if git ls-remote --heads $(REMOTE) "$$RB" >/dev/null 2>&1; then \
+			if [ -n "$$(git ls-remote --heads $(REMOTE) "$$RB" 2>/dev/null)" ]; then \
 				echo "$(BLUE)🧹 Deleting remote $$RB on $(REMOTE)...$(RESET)"; \
 				git push $(REMOTE) --delete "$$RB" || true; \
 			fi; \
@@ -731,10 +761,15 @@ push-release-clean: push-release ## 🧹 Also delete remote release/* branch (op
 
 
 github-release: ## 🚀 Create GitHub release from version tag
-	@TAG=$$(cat .NEW_VERSION.tmp); \
+	@TAG="$(or $(NEW_VERSION),$(shell cat .NEW_VERSION.tmp 2>/dev/null))"; \
+	if [ -z "$$TAG" ]; then \
+		echo "$(RED)Error: no version found (NEW_VERSION unset and .NEW_VERSION.tmp missing)$(RESET)" >&2; \
+		exit 1; \
+	fi; \
 	echo "$(GREEN)🚀 Starting GitHub Release for $$TAG$(RESET)"; \
 	set -euo pipefail; \
-	TOKEN="$${GITHUB_TOKEN:-$$GH_TOKEN}"; \
+	ERRLOG=$$(mktemp /tmp/gh-release-err.XXXXXX); \
+	TOKEN="$${GITHUB_TOKEN:-$${GH_TOKEN:-}}"; \
 	if [ -n "$$TOKEN" ]; then \
 	  LEN=$$(printf %s "$$TOKEN" | wc -c); \
 	  if printf %s "$$TOKEN" | grep -q '^github_pat_'; then TYPE=fine-grained; else TYPE=classic; fi; \
@@ -744,14 +779,18 @@ github-release: ## 🚀 Create GitHub release from version tag
 	  curl -sI -H "Authorization: token $$TOKEN" https://api.github.com/user \
 	    | grep -i 'x-oauth-scopes\|x-accepted-oauth-scopes' || true; \
 	fi; \
-	if ! gh release create "$$TAG" --title "Release $$TAG" --generate-notes 2>err.log; then \
-	  if grep -q "HTTP 403" err.log; then \
+	if ! gh release create "$$TAG" --title "Release $$TAG" --generate-notes 2>"$$ERRLOG"; then \
+	  if grep -q "already exists" "$$ERRLOG"; then \
+	    echo "$(YELLOW)⚠️  Release $$TAG already exists (e.g. created by CI). Skipping.$(RESET)"; \
+	    rm -f "$$ERRLOG"; exit 0; \
+	  fi; \
+	  if grep -q "HTTP 403" "$$ERRLOG"; then \
 	    echo "$(RED)403: Token lacks release permission.$(RESET)"; \
 	    echo "Needs: classic 'repo' or fine-grained 'Contents: write' (+ SSO if org)."; \
 	  fi; \
-	  cat err.log >&2; rm -f err.log; exit 1; \
+	  cat "$$ERRLOG" >&2; rm -f "$$ERRLOG"; exit 1; \
 	fi; \
-	rm -f err.log; \
+	rm -f "$$ERRLOG"; \
 	echo "$(GREEN)✅ Release $$TAG created$(RESET)"
 
 
@@ -759,27 +798,46 @@ github-release: ## 🚀 Create GitHub release from version tag
 auto-release: ## 🚀 Automated release process
 	@set -Eeuo pipefail; \
 	START_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-	CUR_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-	if [ "$$CUR_BRANCH" != "$(AUTO_RELEASE_ALLOWED_BRANCH)" ]; then \
-		echo "$(RED)Error: auto-release is allowed only on '$(AUTO_RELEASE_ALLOWED_BRANCH)'. Current: $$CUR_BRANCH$(RESET)"; \
+	if [ "$$START_BRANCH" != "$(AUTO_RELEASE_ALLOWED_BRANCH)" ]; then \
+		echo "$(RED)Error: auto-release is allowed only on '$(AUTO_RELEASE_ALLOWED_BRANCH)'. Current: $$START_BRANCH$(RESET)"; \
 		exit 1; \
 	fi; \
-	rollback(){ echo "$(YELLOW)↩️  Error occurred. Returning to '$$START_BRANCH'...$(RESET)"; git checkout -q "$$START_BRANCH" || true; }; \
+	MAIN_SHA=$$(git rev-parse -q --verify "$(MAIN_BRANCH)" || echo ""); \
+	DEVELOP_SHA=$$(git rev-parse -q --verify "$(DEVELOP_BRANCH)" || echo ""); \
+	PUSHED=0; \
+	rollback(){ \
+		echo "$(YELLOW)↩️  Error occurred. Returning to '$$START_BRANCH'...$(RESET)"; \
+		git checkout -q "$$START_BRANCH" 2>/dev/null || true; \
+		if [ "$$PUSHED" = "1" ]; then \
+			echo "$(YELLOW)Release was already pushed to $(REMOTE); keeping local refs as-is.$(RESET)"; \
+			return; \
+		fi; \
+		CUR=$$(git rev-parse --abbrev-ref HEAD); \
+		if [ -n "$$MAIN_SHA" ]; then \
+			if [ "$$CUR" = "$(MAIN_BRANCH)" ]; then git reset --hard "$$MAIN_SHA"; else git branch -f "$(MAIN_BRANCH)" "$$MAIN_SHA" 2>/dev/null || true; fi; \
+		fi; \
+		if [ -n "$$DEVELOP_SHA" ]; then \
+			if [ "$$CUR" = "$(DEVELOP_BRANCH)" ]; then git reset --hard "$$DEVELOP_SHA"; else git branch -f "$(DEVELOP_BRANCH)" "$$DEVELOP_SHA" 2>/dev/null || true; fi; \
+		fi; \
+		echo "$(YELLOW)Restored local $(MAIN_BRANCH)/$(DEVELOP_BRANCH) to pre-release state.$(RESET)"; \
+	}; \
 	trap rollback ERR; \
 	echo "$(BLUE)🚀 [auto-release] Starting automated release...$(RESET)"; \
-	[ -n "$(VERSION)" ] && export NEW_VERSION="$(VERSION)" || true; \
+	export NEW_VERSION="$(AUTO_RELEASE_VERSION)"; \
 	$(MAKE) bump-version NEW_VERSION="$$NEW_VERSION"; \
 	if [ -f .NEW_VERSION.tmp ]; then \
 		NEXT_VERSION=$$(cat .NEW_VERSION.tmp); \
 		echo "$(BLUE)Using version: $$NEXT_VERSION$(RESET)"; \
 		$(MAKE) create-release-branch NEW_VERSION="$$NEXT_VERSION"; \
 		$(MAKE) update-version-file NEW_VERSION="$$NEXT_VERSION"; \
-		$(MAKE) commit-version-bump; \
+		$(MAKE) commit-version-bump NEW_VERSION="$$NEXT_VERSION"; \
 		$(MAKE) version-tag TAG_VERSION="$$NEXT_VERSION"; \
 		$(MAKE) ensure-clean; \
 		$(MAKE) merge-release; \
 		$(MAKE) push-release-clean; \
-		$(MAKE) github-release; \
+		PUSHED=1; \
+		$(MAKE) github-release NEW_VERSION="$$NEXT_VERSION" || \
+			echo "$(YELLOW)⚠️  GitHub release creation failed; tag and branches are already pushed (CI may create the release).$(RESET)"; \
 	else \
 		echo "$(RED)Error: Failed to determine version$(RESET)"; exit 1; \
 	fi; \

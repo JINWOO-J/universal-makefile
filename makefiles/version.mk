@@ -369,10 +369,10 @@ endif
 version-tag: ## 🔧 Create version tag without release
 	@$(eval TAG_VERSION := $(or $(TAG_VERSION),$(VERSION)))
 	@echo "$(BLUE)🏷️  Creating version tag: $(TAG_VERSION)$(RESET)"
-	@if git tag -l | grep -q "^$(TAG_VERSION)$$"; then \
+	@if [ -n "$$(git tag -l "$(TAG_VERSION)")" ]; then \
 		echo "$(YELLOW)⚠️  Tag $(TAG_VERSION) already exists$(RESET)"; \
 	else \
-		if git tag -a $(TAG_VERSION) -m "Version $(TAG_VERSION)"; then \
+		if git tag -a "$(TAG_VERSION)" -m "Version $(TAG_VERSION)"; then \
 			echo "$(GREEN)✅ Tag $(TAG_VERSION) created$(RESET)"; \
 		else \
 			echo "$(RED)❌ Failed to create tag$(RESET)" >&2; \

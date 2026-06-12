@@ -3,3 +3,5 @@ logs/**
 .task_first_run.json
 .git-info.json
 .omc/**
+.NEW_VERSION.tmp
+.context/
