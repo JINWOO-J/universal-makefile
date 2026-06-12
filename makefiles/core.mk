@@ -104,10 +104,12 @@ endif
 
 _ORIGINAL_TAGNAME := $(TAGNAME)
 
+# 브랜치명 정규화 (compute_build_tag.sh와 동일 규칙 — 변경 시 양쪽 함께 수정)
+SAFE_BRANCH := $(shell echo "$(CURRENT_BRANCH)" | sed -E 's/[^a-zA-Z0-9._-]/-/g; s/-+/-/g')
+
 ifeq ($(CURRENT_BRANCH),$(MAIN_BRANCH))
     _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION))
 else
-    SAFE_BRANCH := $(shell echo "$(CURRENT_BRANCH)" | sed -E 's/[^a-zA-Z0-9._-]/-/g; s/-+/-/g')
     # 브랜치에서는 version-branch-date-sha 형태
     _SOURCE_FOR_SANITIZE = $(or $(_ORIGINAL_TAGNAME), $(VERSION)-$(SAFE_BRANCH)-$(DATE)-$(CURRENT_COMMIT_SHORT))
 endif
